@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/changesets.json",
+  "changelog": [
+    "@changesets/cli/changelog",
+    {
+      "repo": "crx-96/axutils"
+    }
+  ],
+  "commit": false,
+  "fixed": [],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": []
+}

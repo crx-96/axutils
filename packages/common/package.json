@@ -1,0 +1,68 @@
+{
+  "name": "@axutils/common",
+  "version": "0.0.0",
+  "description": "axutils 的公共工具子包",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./check/type": {
+      "import": {
+        "types": "./dist/check/type.d.ts",
+        "default": "./dist/check/type.js"
+      },
+      "require": {
+        "types": "./dist/check/type.d.cts",
+        "default": "./dist/check/type.cjs"
+      }
+    },
+    "./check/reg": {
+      "import": {
+        "types": "./dist/check/reg.d.ts",
+        "default": "./dist/check/reg.js"
+      },
+      "require": {
+        "types": "./dist/check/reg.d.cts",
+        "default": "./dist/check/reg.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=14.18.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crx-96/axutils.git",
+    "directory": "packages/common"
+  },
+  "bugs": {
+    "url": "https://github.com/crx-96/axutils/issues"
+  },
+  "homepage": "https://github.com/crx-96/axutils/tree/main/packages/common#readme",
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "publint": "publint run . --pack npm",
+    "test": "vitest run",
+    "test:dist": "node ./scripts/build.mjs && node ./scripts/smoke-esm.mjs && node ./scripts/smoke-cjs.cjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
