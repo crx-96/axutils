@@ -48,7 +48,7 @@ console.log(isEmail("user@example.com"));
 - `isArray(value)`：判断是否为数组
 - `isObject(value)`：判断是否为普通对象语义下的对象值，不包含 `null` 和数组
 - `isPhoneCn(value)`：判断是否为中国大陆 11 位手机号，不支持 `+86`、空格或分隔符
-- `isEmail(value)`：判断是否为常见邮箱格式，`@` 前后必须有内容、不允许空白字符、域名至少含一个 `.`，且点不能出现在首尾或连续出现
+- `isEmail(value)`：判断是否为国际通用邮箱格式，`@` 前后必须有内容、不允许空白字符、域名至少含一个 `.`，且点不能出现在首尾或连续出现，支持任意 Unicode 字符
 
 ## common 包命令
 

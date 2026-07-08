@@ -15,7 +15,7 @@ export const isPhoneCn = (value: unknown): value is string =>
   typeof value === "string" && /^1[3-9]\d{9}$/u.test(value);
 
 /**
- * 判断传入值是否符合常见邮箱地址格式。
+ * 判断传入值是否符合国际通用邮箱地址格式。
  *
  * 这里采用的是轻量级正则，规则如下：
  * - `@` 前后都必须有内容
