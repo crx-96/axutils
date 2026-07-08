@@ -2,12 +2,28 @@ import { describe, expect, it } from "vitest";
 
 import {
   isArray as isArrayFromType,
+  isAsyncFunction as isAsyncFunctionFromType,
   isBoolean as isBooleanFromType,
+  isDate as isDateFromType,
+  isFunction as isFunctionFromType,
+  isNil as isNilFromType,
   isNumber as isNumberFromType,
   isObject as isObjectFromType,
+  isPlainObject as isPlainObjectFromType,
   isString as isStringFromType,
 } from "../../src/check/type";
-import { isArray, isBoolean, isNumber, isObject, isString } from "../../src/index";
+import {
+  isArray,
+  isAsyncFunction,
+  isBoolean,
+  isDate,
+  isFunction,
+  isNil,
+  isNumber,
+  isObject,
+  isPlainObject,
+  isString,
+} from "../../src/index";
 
 describe("type", () => {
   it("判断数字", () => {
@@ -55,11 +71,91 @@ describe("type", () => {
     expect(isObject(Object.create(null))).toBe(true);
   });
 
+  it("判断 null 或 undefined", () => {
+    expect(isNil(null)).toBe(true);
+    expect(isNil(undefined)).toBe(true);
+    // 0、空串、false 等“假值”不视为 nil
+    expect(isNil(0)).toBe(false);
+    expect(isNil("")).toBe(false);
+    expect(isNil(false)).toBe(false);
+    expect(isNil(NaN)).toBe(false);
+    expect(isNil({})).toBe(false);
+  });
+
+  it("判断函数", () => {
+    expect(isFunction(() => {})).toBe(true);
+    // class 声明的 typeof 结果也是 "function"
+    expect(isFunction(class {})).toBe(true);
+    // async 函数
+    expect(isFunction(async () => {})).toBe(true);
+    // 生成器函数
+    expect(isFunction(function* () {})).toBe(true);
+    // 非函数
+    expect(isFunction({})).toBe(false);
+    expect(isFunction(null)).toBe(false);
+    expect(isFunction("() => {}")).toBe(false);
+  });
+
+  it("判断异步函数", () => {
+    // async 箭头函数和 async 声明函数都视为 async 函数
+    expect(isAsyncFunction(async () => {})).toBe(true);
+    // biome-ignore lint/complexity/useArrowFunction: 刻意使用 async function 声明语法覆盖该写法
+    expect(isAsyncFunction(async function () {})).toBe(true);
+    // 普通函数、生成器函数、class 都不是 async 函数
+    expect(isAsyncFunction(() => {})).toBe(false);
+    expect(isAsyncFunction(function* () {})).toBe(false);
+    expect(isAsyncFunction(class {})).toBe(false);
+    // 异步生成器函数返回 AsyncGenerator 而非 Promise，不视为 async 函数
+    expect(isAsyncFunction(async function* () {})).toBe(false);
+    // Promise 对象本身不是 async 函数
+    expect(isAsyncFunction(Promise.resolve())).toBe(false);
+    // bound 后的 async 函数仍能被正确识别（原型链继承 AsyncFunction.prototype 的 Symbol.toStringTag）
+    expect(isAsyncFunction((async () => {}).bind(null))).toBe(true);
+    // 非函数
+    expect(isAsyncFunction({})).toBe(false);
+    expect(isAsyncFunction(null)).toBe(false);
+    expect(isAsyncFunction("async () => {}")).toBe(false);
+  });
+
+  it("判断有效日期", () => {
+    expect(isDate(new Date())).toBe(true);
+    expect(isDate(new Date("2024-01-01"))).toBe(true);
+    // Invalid Date 虽为 Date 实例但时间戳为 NaN
+    expect(isDate(new Date("invalid"))).toBe(false);
+    // 日期字符串和时间戳不是 Date 实例
+    expect(isDate("2024-01-01")).toBe(false);
+    expect(isDate(Date.now())).toBe(false);
+    expect(isDate(null)).toBe(false);
+  });
+
+  it("判断字面量对象", () => {
+    expect(isPlainObject({})).toBe(true);
+    expect(isPlainObject({ a: 1 })).toBe(true);
+    // Object.create(null) 原型为 null，视为字面量对象
+    expect(isPlainObject(Object.create(null))).toBe(true);
+    // 数组、null、原始值
+    expect(isPlainObject([])).toBe(false);
+    expect(isPlainObject(null)).toBe(false);
+    expect(isPlainObject("x")).toBe(false);
+    // 包装对象、内置对象、class 实例均不通过
+    expect(isPlainObject(new String("x"))).toBe(false);
+    expect(isPlainObject(new Date())).toBe(false);
+    expect(isPlainObject(new Map())).toBe(false);
+    expect(isPlainObject(/x/)).toBe(false);
+    // 自定义 class 实例
+    expect(isPlainObject(new (class {})())).toBe(false);
+  });
+
   it("主入口导出与子模块导出保持一致", () => {
     expect(isNumber).toBe(isNumberFromType);
     expect(isString).toBe(isStringFromType);
     expect(isBoolean).toBe(isBooleanFromType);
     expect(isArray).toBe(isArrayFromType);
     expect(isObject).toBe(isObjectFromType);
+    expect(isNil).toBe(isNilFromType);
+    expect(isFunction).toBe(isFunctionFromType);
+    expect(isAsyncFunction).toBe(isAsyncFunctionFromType);
+    expect(isDate).toBe(isDateFromType);
+    expect(isPlainObject).toBe(isPlainObjectFromType);
   });
 });
