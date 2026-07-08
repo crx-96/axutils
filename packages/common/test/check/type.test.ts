@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   isArray as isArrayFromType,
+  isArrowFunction as isArrowFunctionFromType,
+  isAsyncArrowFunction as isAsyncArrowFunctionFromType,
   isAsyncFunction as isAsyncFunctionFromType,
   isBoolean as isBooleanFromType,
   isDate as isDateFromType,
   isFunction as isFunctionFromType,
   isNil as isNilFromType,
+  isNormalFunction as isNormalFunctionFromType,
   isNumber as isNumberFromType,
   isObject as isObjectFromType,
   isPlainObject as isPlainObjectFromType,
@@ -14,11 +17,14 @@ import {
 } from "../../src/check/type";
 import {
   isArray,
+  isArrowFunction,
+  isAsyncArrowFunction,
   isAsyncFunction,
   isBoolean,
   isDate,
   isFunction,
   isNil,
+  isNormalFunction,
   isNumber,
   isObject,
   isPlainObject,
@@ -117,6 +123,82 @@ describe("type", () => {
     expect(isAsyncFunction("async () => {}")).toBe(false);
   });
 
+  it("判断普通函数", () => {
+    // function 声明与表达式都视为普通函数
+    // biome-ignore lint/complexity/useArrowFunction: 刻意使用 function 声明语法覆盖该写法
+    expect(isNormalFunction(function () {})).toBe(true);
+    // 具名函数表达式同样视为普通函数
+    expect(isNormalFunction(function named() {})).toBe(true);
+    // 对象方法简写源码形如 f() {}，既非 class 也非箭头，视为普通函数
+    expect(isNormalFunction({ f() {} }.f)).toBe(true);
+    // 箭头函数、async 函数、生成器函数、class 均不是普通函数
+    expect(isNormalFunction(() => {})).toBe(false);
+    expect(isNormalFunction(async () => {})).toBe(false);
+    // biome-ignore lint/complexity/useArrowFunction: 刻意使用 async function 声明语法
+    expect(isNormalFunction(async function () {})).toBe(false);
+    expect(isNormalFunction(function* () {})).toBe(false);
+    expect(isNormalFunction(async function* () {})).toBe(false);
+    expect(isNormalFunction(class {})).toBe(false);
+    // bound 包装后 toString 返回 [native code]，源码特征丢失，无法识别
+    // biome-ignore lint/complexity/useArrowFunction: 刻意使用 function 声明语法以测试 bound 后的行为
+    expect(isNormalFunction(function () {}.bind(null))).toBe(false);
+    // native 函数同样无法识别
+    expect(isNormalFunction(parseInt)).toBe(false);
+    // 非函数
+    expect(isNormalFunction({})).toBe(false);
+    expect(isNormalFunction(null)).toBe(false);
+    expect(isNormalFunction("function () {}")).toBe(false);
+  });
+
+  it("判断箭头函数", () => {
+    // 同步箭头与 async 箭头都视为箭头函数
+    expect(isArrowFunction(() => {})).toBe(true);
+    expect(isArrowFunction(async () => {})).toBe(true);
+    // 带参数、带默认值、解构参数的箭头函数
+    expect(isArrowFunction((a: number) => a)).toBe(true);
+    expect(isArrowFunction((a = 1) => a)).toBe(true);
+    expect(isArrowFunction((a = (() => 1)()) => a)).toBe(true);
+    expect(isArrowFunction(({ a }: { a: number }) => a)).toBe(true);
+    expect(isArrowFunction(({ a = Math.max(1, 2) }: { a?: number }) => a)).toBe(true);
+    // 普通函数、生成器函数、class 均不是箭头函数
+    // biome-ignore lint/complexity/useArrowFunction: 刻意使用 function 声明语法
+    expect(isArrowFunction(function () {})).toBe(false);
+    expect(isArrowFunction(function* () {})).toBe(false);
+    expect(isArrowFunction(class {})).toBe(false);
+    // biome-ignore lint/complexity/useArrowFunction: 刻意使用 async function 声明语法
+    expect(isArrowFunction(async function () {})).toBe(false);
+    // bound 包装后 toString 返回 [native code]，不匹配箭头语法
+    expect(isArrowFunction((() => {}).bind(null))).toBe(false);
+    // native 函数
+    expect(isArrowFunction(parseInt)).toBe(false);
+    // 非函数
+    expect(isArrowFunction({})).toBe(false);
+    expect(isArrowFunction(null)).toBe(false);
+    expect(isArrowFunction("() => {}")).toBe(false);
+  });
+
+  it("判断异步箭头函数", () => {
+    // async 箭头函数
+    expect(isAsyncArrowFunction(async () => {})).toBe(true);
+    expect(isAsyncArrowFunction(async (a: number) => a)).toBe(true);
+    // async function 声明不是 async 箭头
+    // biome-ignore lint/complexity/useArrowFunction: 刻意使用 async function 声明语法
+    expect(isAsyncArrowFunction(async function () {})).toBe(false);
+    // 同步箭头、普通函数、生成器函数、class 均不是 async 箭头
+    expect(isAsyncArrowFunction(() => {})).toBe(false);
+    // biome-ignore lint/complexity/useArrowFunction: 刻意使用 function 声明语法
+    expect(isAsyncArrowFunction(function () {})).toBe(false);
+    expect(isAsyncArrowFunction(function* () {})).toBe(false);
+    expect(isAsyncArrowFunction(async function* () {})).toBe(false);
+    expect(isAsyncArrowFunction(class {})).toBe(false);
+    // bound 包装后 toString 返回 [native code]，无法识别
+    expect(isAsyncArrowFunction((async () => {}).bind(null))).toBe(false);
+    // 非函数
+    expect(isAsyncArrowFunction({})).toBe(false);
+    expect(isAsyncArrowFunction(null)).toBe(false);
+    expect(isAsyncArrowFunction("async () => {}")).toBe(false);
+  });
+
   it("判断有效日期", () => {
     expect(isDate(new Date())).toBe(true);
     expect(isDate(new Date("2024-01-01"))).toBe(true);
@@ -155,6 +237,9 @@ describe("type", () => {
     expect(isNil).toBe(isNilFromType);
     expect(isFunction).toBe(isFunctionFromType);
     expect(isAsyncFunction).toBe(isAsyncFunctionFromType);
+    expect(isNormalFunction).toBe(isNormalFunctionFromType);
+    expect(isArrowFunction).toBe(isArrowFunctionFromType);
+    expect(isAsyncArrowFunction).toBe(isAsyncArrowFunctionFromType);
     expect(isDate).toBe(isDateFromType);
     expect(isPlainObject).toBe(isPlainObjectFromType);
   });

@@ -20,6 +20,8 @@ pnpm add @axutils/common
 ```ts
 import {
   isBoolean,
+  isArrowFunction,
+  isAsyncArrowFunction,
   isAsyncFunction,
   isBrowser,
   isBrowserLike,
@@ -34,6 +36,7 @@ import {
   isIpv4,
   isNil,
   isNode,
+  isNormalFunction,
   isNumber,
   isObject,
   isPhoneCn,
@@ -48,7 +51,10 @@ console.log(isString("common"));
 console.log(isBoolean(true));
 console.log(isNil(null));
 console.log(isFunction(() => {}));
+console.log(isNormalFunction(function () {}));
+console.log(isArrowFunction(() => {}));
 console.log(isAsyncFunction(async () => {}));
+console.log(isAsyncArrowFunction(async () => {}));
 console.log(isDate(new Date()));
 console.log(isObject({ name: "common" }));
 console.log(isPlainObject({}));
@@ -68,10 +74,13 @@ console.log(isServer());
 ```ts
 import {
   isBoolean,
+  isArrowFunction,
+  isAsyncArrowFunction,
   isAsyncFunction,
   isDate,
   isFunction,
   isNil,
+  isNormalFunction,
   isNumber,
   isObject,
   isPlainObject,
@@ -104,7 +113,10 @@ console.log(isServer());
 - `isObject(value)`：判断是否为普通对象语义下的对象值，不包含 `null` 和数组，但不严格区分字面量对象与 `Date`、`RegExp`、包装对象等
 - `isNil(value)`：判断是否为 `null` 或 `undefined`，`0`、`""`、`false` 等“假值”不视为 nil
 - `isFunction(value)`：判断是否为函数，覆盖普通函数、箭头函数、`async` 函数、生成器函数和 `class` 声明
+- `isNormalFunction(value)`：判断是否为常规非箭头函数形态，覆盖 `function` 声明/表达式及对象方法简写；轻量校验，bound 包装后或 native 函数无法识别
+- `isArrowFunction(value)`：判断是否为箭头函数（含 `async` 箭头函数）；轻量校验，依赖函数源码扫描，bound 包装后或 native 函数无法识别
 - `isAsyncFunction(value)`：判断是否为 `async` 函数（含 `async` 箭头函数），普通函数、生成器函数和 `class` 声明返回 `false`
+- `isAsyncArrowFunction(value)`：判断是否为 `async` 箭头函数，对 `async function` 声明和同步箭头返回 `false`；轻量校验，依赖函数源码扫描，bound 包装后或 native 函数无法识别
 - `isDate(value)`：判断是否为有效的 `Date` 实例，`Invalid Date` 返回 `false`
 - `isPlainObject(value)`：判断是否为字面量对象（plain object），严格区分 `Date`、`RegExp`、`Map`、`Set`、包装对象和 `class` 实例，`Object.create(null)` 视为字面量对象
 

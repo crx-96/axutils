@@ -109,6 +109,239 @@ export const isAsyncFunction = (value: unknown): value is (...args: never[]) => 
   typeof value === "function" && Object.prototype.toString.call(value) === "[object AsyncFunction]";
 
 /**
+ * 跳过源码中的空白和注释，返回下一个有效字符下标。
+ *
+ * 这里只处理箭头函数声明头部常见的空白、块注释和行注释，
+ * 供后续的轻量源码扫描使用，不尝试实现完整的 JavaScript 词法分析。
+ */
+const skipWhitespaceAndComments = (source: string, start: number): number => {
+  let index = start;
+
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+
+    if (char === undefined) {
+      return index;
+    }
+
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      index += 2;
+
+      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) {
+        index += 1;
+      }
+
+      if (index >= source.length) {
+        return index;
+      }
+
+      index += 2;
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      index += 2;
+
+      while (index < source.length && source[index] !== "\n") {
+        index += 1;
+      }
+
+      continue;
+    }
+
+    break;
+  }
+
+  return index;
+};
+
+/**
+ * 判断字符是否可作为 JavaScript 标识符的起始字符。
+ *
+ * 这里刻意只覆盖 ASCII 范围的常见标识符，足以支持本仓库当前测试与文档中的函数写法。
+ * 如果后续要支持 Unicode 标识符，需要升级为更完整的词法判断。
+ */
+const isIdentifierStart = (char: string | undefined): boolean =>
+  char !== undefined && /[$A-Z_a-z]/.test(char);
+
+/**
+ * 判断字符是否可作为 JavaScript 标识符的后续字符。
+ */
+const isIdentifierPart = (char: string | undefined): boolean =>
+  char !== undefined && /[$0-9A-Z_a-z]/.test(char);
+
+/**
+ * 检测函数源码文本是否以箭头函数语法开头。
+ *
+ * 这是判断箭头函数的核心依据：箭头函数在 JavaScript 运行时没有专属的
+ * `Symbol.toStringTag`（`Object.prototype.toString` 对箭头函数和普通 `function` 声明
+ * 都返回 `"[object Function]"`），也没有独有属性或内部槽，
+ * 唯一能区分箭头函数与普通 `function` 声明的手段是读取其源码文本、检测箭头语法 `=>`。
+ *
+ * 这里不再依赖单个大正则，而是按以下步骤做轻量源码扫描：
+ * 1. 跳过源码开头的空白和注释
+ * 2. 识别可选的 `async` 前缀
+ * 3. 读取单标识符参数，或扫描括号包裹的参数列表
+ * 4. 只把参数列表之后出现的 `=>` 视为箭头语法
+ *
+ * 这种方式能覆盖注释、默认值、解构参数和参数中的嵌套圆括号，
+ * 但仍不是完整语法解析器。bound/native 函数等源码特征缺失的场景依旧无法识别。
+ *
+ * 这是文件内部辅助函数，不对外导出。
+ */
+const isArrowSource = (source: string): boolean => {
+  let index = skipWhitespaceAndComments(source, 0);
+
+  if (source.startsWith("async", index)) {
+    const afterAsync = index + 5;
+
+    if (!isIdentifierPart(source[afterAsync])) {
+      index = skipWhitespaceAndComments(source, afterAsync);
+    }
+  }
+
+  if (source[index] === "(") {
+    let depth = 0;
+
+    while (index < source.length) {
+      const char = source[index];
+      const next = source[index + 1];
+
+      if (char === "/" && (next === "*" || next === "/")) {
+        index = skipWhitespaceAndComments(source, index);
+        continue;
+      }
+
+      if (char === "(") {
+        depth += 1;
+      } else if (char === ")") {
+        depth -= 1;
+
+        if (depth === 0) {
+          index += 1;
+          break;
+        }
+      }
+
+      index += 1;
+    }
+
+    if (depth !== 0) {
+      return false;
+    }
+
+    index = skipWhitespaceAndComments(source, index);
+    return source[index] === "=" && source[index + 1] === ">";
+  }
+
+  if (!isIdentifierStart(source[index])) {
+    return false;
+  }
+
+  index += 1;
+
+  while (isIdentifierPart(source[index])) {
+    index += 1;
+  }
+
+  index = skipWhitespaceAndComments(source, index);
+  return source[index] === "=" && source[index + 1] === ">";
+};
+
+/**
+ * 判断传入值是否为常规非箭头函数形态。
+ *
+ * 这里会把 `function` 声明、函数表达式，以及对象方法简写这类
+ * 非箭头、非 `async`、非生成器的函数形态视为 `true`，
+ * 并显式排除箭头函数、`async` 函数、生成器函数和 `class` 声明。
+ *
+ * 实现上先用 `Object.prototype.toString` 排除 `async` 函数和生成器函数
+ * （它们的 `toStringTag` 分别是 `"[object AsyncFunction]"`、`"[object GeneratorFunction]"`、
+ * `"[object AsyncGeneratorFunction]"`），
+ * 再读取函数源码排除 `class` 声明（源码以 `class` 关键字开头）
+ * 和箭头函数（源码匹配箭头语法头部，见内部辅助 {@link isArrowSource}）。
+ *
+ * 注意：这是轻量校验，依赖 `Function.prototype.toString` 读取源码文本，存在以下能力边界：
+ * - 经过 `Function.prototype.bind` 包装后，`toString` 返回 `function () { [native code] }`，
+ *   源码特征丢失，会返回 `false`（无法识别 bound 后的普通函数）。
+ * - native 函数（如 `parseInt`）同样返回 `[native code]`，返回 `false`。
+ * - 对象方法简写 `{ f() {} }` 和 `class` 方法 `class A { f() {} }` 的源码形如 `f() {}`，
+ *   既不以 `class` 开头也不含 `=>`，会被视为普通函数返回 `true`。
+ *   如需严格区分 `function` 关键字定义与方法简写，本方法不支持。
+ *
+ * 类型层面：收窄后的类型为 `(...args: never[]) => unknown`，调用约束同 {@link isFunction}。
+ */
+export const isNormalFunction = (value: unknown): value is (...args: never[]) => unknown => {
+  if (typeof value !== "function") return false;
+  // 排除 async 函数和生成器函数（含异步生成器）
+  if (Object.prototype.toString.call(value) !== "[object Function]") return false;
+  const source = Function.prototype.toString.call(value);
+  // bound 包装或 native 函数的源码为 "function ... { [native code] }"，无源码特征，无法识别
+  if (source.includes("[native code]")) return false;
+  // 排除 class 声明（源码以 class 关键字开头）和箭头函数（源码匹配箭头语法头部）
+  return !source.trimStart().startsWith("class") && !isArrowSource(source);
+};
+
+/**
+ * 判断传入值是否为箭头函数（含 `async` 箭头函数）。
+ *
+ * 箭头函数在 JavaScript 运行时没有专属的 `Symbol.toStringTag`，
+ * `Object.prototype.toString` 对箭头函数和普通 `function` 声明都返回 `"[object Function]"`，
+ * 也无独有属性或内部槽，因此唯一能识别箭头函数的手段是读取其源码文本、检测箭头语法 `=>`。
+ *
+ * 这里通过 `Function.prototype.toString.call(value)` 取得函数源码后，
+ * 用内部辅助函数扫描箭头函数声明头部，而不是直接依赖单个正则。
+ *
+ * 注意：这是轻量校验，存在以下能力边界：
+ * - 经过 `Function.prototype.bind` 包装或 native 函数，
+ *   `toString` 返回 `function () { [native code] }`，不匹配箭头语法，返回 `false`。
+ *   这是 ECMAScript 规范层面的硬限制——bound 函数的原始源码不在 bound 函数对象上，
+ *   任何方案都无法恢复。
+ * - 这里只扫描源码头部，不尝试解析完整函数体，因此目标是轻量分类而非完整语法识别。
+ * - 本方法只匹配参数列表之后的 `=>`，函数体内的 `=>`（如字符串字面量）不会干扰判断。
+ *
+ * 本方法对 `async` 箭头函数（`async () => {}`）也返回 `true`，
+ * 即与 {@link isAsyncFunction} 存在交集；
+ * 如需单独识别 `async` 箭头函数，请使用 {@link isAsyncArrowFunction}。
+ *
+ * 类型层面：收窄后的类型为 `(...args: never[]) => unknown`，调用约束同 {@link isFunction}。
+ */
+export const isArrowFunction = (value: unknown): value is (...args: never[]) => unknown =>
+  typeof value === "function" && isArrowSource(Function.prototype.toString.call(value));
+
+/**
+ * 判断传入值是否为 `async` 箭头函数。
+ *
+ * 这里先用 `Object.prototype.toString` 确认是 `async` 函数
+ * （`"[object AsyncFunction]"`，排除同步函数和生成器函数），
+ * 再读取函数源码确认其声明形式为箭头语法（`async (参数) =>` 或 `async 标识符 =>`）。
+ *
+ * 与 {@link isAsyncFunction} 的区别：后者对所有 `async` 函数（含 `async function` 声明
+ * 和 `async` 箭头）都返回 `true`；本方法仅对 `async` 箭头函数返回 `true`，
+ * 对 `async function` 声明返回 `false`。
+ * 与 {@link isArrowFunction} 的区别：后者对所有箭头函数（含同步箭头和 `async` 箭头）返回 `true`；
+ * 本方法仅对 `async` 箭头返回 `true`，对同步箭头返回 `false`。
+ *
+ * 注意：这里同样依赖 `Function.prototype.toString` 读取源码，能力边界同 {@link isArrowFunction}：
+ * - bound 包装后或 native 函数无法识别，返回 `false`。
+ * - 本方法是轻量扫描，不承诺覆盖所有极端或被转译器改写过的源码格式。
+ *
+ * 类型层面：收窄后的类型为 `(...args: never[]) => Promise<unknown>`，调用约束同 {@link isAsyncFunction}。
+ */
+export const isAsyncArrowFunction = (
+  value: unknown,
+): value is (...args: never[]) => Promise<unknown> =>
+  typeof value === "function" &&
+  Object.prototype.toString.call(value) === "[object AsyncFunction]" &&
+  isArrowSource(Function.prototype.toString.call(value));
+
+/**
  * 判断传入值是否为有效的 `Date` 实例。
  *
  * 这里除了要求 `value instanceof Date` 之外，还会额外检查 `getTime()` 是否为 `NaN`。
