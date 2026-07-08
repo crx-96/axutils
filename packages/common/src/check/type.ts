@@ -37,7 +37,7 @@ export const isBoolean = (value: unknown): value is boolean => typeof value === 
 export const isArray = <T = unknown>(value: unknown): value is T[] => Array.isArray(value);
 
 /**
- * 判断传入值是否为“普通对象”语义下的对象。
+ * 判断传入值是否为“普通对象”语义下的对象值。
  *
  * JavaScript 中数组和 `null` 的 `typeof` 结果都比较容易误导：
  * - `typeof null === "object"`
@@ -45,6 +45,11 @@ export const isArray = <T = unknown>(value: unknown): value is T[] => Array.isAr
  *
  * 因此这里会显式排除 `null` 和数组，只保留最常见的键值对象场景，
  * 便于后续把结果当作 `Record<string, unknown>` 使用。
+ *
+ * 能力边界：这里只做 `typeof` 层面的判断，返回 `true` 的值并不一定都是字面量对象。
+ * `new String()`、`new Number()` 等包装对象，以及 `Date`、`RegExp`、`Map`、`Set`、
+ * `class` 实例、`Object.create(null)` 等都会返回 `true`。
+ * 如果需要严格区分字面量对象（plain object）与其他对象类型，请另行实现。
  */
 export const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
