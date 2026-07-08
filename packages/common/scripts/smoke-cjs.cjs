@@ -4,6 +4,10 @@ const {
   isPhoneCn: isPhoneCnFromReg,
 } = require("@axutils/common/check/reg");
 const {
+  isBrowser: isBrowserFromPlatform,
+  isNode: isNodeFromPlatform,
+} = require("@axutils/common/check/platform");
+const {
   isArray: isArrayFromType,
   isBoolean: isBooleanFromType,
 } = require("@axutils/common/check/type");
@@ -22,4 +26,14 @@ if (!isArrayFromType(["cjs"]) || !isBooleanFromType(true)) {
 
 if (!isPhoneCnFromReg("13800138000") || !isEmailFromReg("reg@example.com")) {
   throw new Error("CJS reg 子路径导入验证失败。");
+}
+
+if (typeof isBrowserFromPlatform !== "function" || typeof isNodeFromPlatform !== "function") {
+  throw new Error("CJS platform 子路径导入验证失败。");
+}
+if (!isNodeFromPlatform()) {
+  throw new Error("CJS platform 子路径 Node 环境判断验证失败。");
+}
+if (isBrowserFromPlatform()) {
+  throw new Error("CJS platform 子路径浏览器环境判断验证失败。");
 }

@@ -7,3 +7,4 @@ coverage/
 .DS_Store
 Thumbs.db
 pnpm-debug.log*
+.zcode/plans/

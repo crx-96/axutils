@@ -6,6 +6,7 @@ export default defineConfig({
     lib: {
       entry: {
         index: "./src/index.ts",
+        "check/platform": "./src/check/platform.ts",
         "check/reg": "./src/check/reg.ts",
         "check/type": "./src/check/type.ts",
       },

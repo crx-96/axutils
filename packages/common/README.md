@@ -1,6 +1,6 @@
 # @axutils/common
 
-`@axutils/common` 是 `axutils` monorepo 中的公共工具子包，当前提供一组常用类型判断和格式校验方法，作为后续公共工具集合的基础能力。
+`@axutils/common` 是 `axutils` monorepo 中的公共工具子包，当前提供一组常用类型判断、格式校验和运行时平台判断方法，作为后续公共工具集合的基础能力。
 
 ## 兼容性
 
@@ -21,7 +21,11 @@ pnpm add @axutils/common
 import {
   isBoolean,
   isAsyncFunction,
+  isBrowser,
+  isBrowserLike,
+  isBun,
   isDate,
+  isDeno,
   isEmail,
   isFunction,
   isHexColor,
@@ -29,11 +33,14 @@ import {
   isIdCardCn,
   isIpv4,
   isNil,
+  isNode,
   isNumber,
   isObject,
   isPhoneCn,
   isPlainObject,
+  isServer,
   isString,
+  isWebWorker,
 } from "@axutils/common";
 
 console.log(isNumber(1));
@@ -51,6 +58,9 @@ console.log(isHttpUrl("https://example.com"));
 console.log(isIpv4("192.168.1.1"));
 console.log(isIdCardCn("11010519491231002X"));
 console.log(isHexColor("#ffffff"));
+console.log(isBrowser());
+console.log(isNode());
+console.log(isServer());
 ```
 
 从子路径导入：
@@ -68,6 +78,7 @@ import {
   isString,
 } from "@axutils/common/check/type";
 import { isEmail, isHexColor, isHttpUrl, isIdCardCn, isIpv4, isPhoneCn } from "@axutils/common/check/reg";
+import { isBrowser, isBrowserLike, isBun, isDeno, isNode, isServer, isWebWorker } from "@axutils/common/check/platform";
 
 console.log(isBoolean(true));
 console.log(isObject({ source: "subpath" }));
@@ -77,6 +88,9 @@ console.log(isHttpUrl("https://example.com"));
 console.log(isIpv4("192.168.1.1"));
 console.log(isIdCardCn("11010519491231002X"));
 console.log(isHexColor("#ffffff"));
+console.log(isBrowser());
+console.log(isNode());
+console.log(isServer());
 ```
 
 ## 方法说明
@@ -103,10 +117,12 @@ console.log(isHexColor("#ffffff"));
 - `isIdCardCn(value)`：判断是否为合法的中国大陆 18 位居民身份证号，校验末位校验码（GB 11643-1999），不校验出生日期真实性和地区码
 - `isHexColor(value)`：判断是否为十六进制颜色值，支持 `#fff`（3 位）和 `#ffffff`（6 位），不支持 alpha 通道
 
-## common 包命令
+### 平台判断（`@axutils/common/check/platform`）
 
-- `corepack pnpm --filter @axutils/common build`：先删除 `dist` 再重新构建当前包
-- `corepack pnpm --filter @axutils/common typecheck`：检查当前包的 TypeScript 类型
-- `corepack pnpm --filter @axutils/common test`：运行当前包的 Vitest 用例
-- `corepack pnpm --filter @axutils/common test:dist`：验证构建产物的主入口、`check/type`、`check/reg` 在 ESM/CJS 下都能正常导入
-- `corepack pnpm --filter @axutils/common publint`：检查发布产物与导出声明是否一致
+- `isBrowser()`：判断当前运行时是否为浏览器主线程，同时要求存在 `window`/`document` 且 `window === globalThis`，jsdom 等模拟环境可能误判
+- `isNode()`：判断当前运行时是否为 Node.js，校验 `process.versions.node` 为字符串，Electron 主进程也返回 `true`
+- `isWebWorker()`：判断当前运行时是否为 Web Worker，要求存在 `self` 和 `importScripts` 且 `self.window` 不存在，不覆盖 Service Worker
+- `isBrowserLike()`：判断当前运行时是否为类浏览器环境，仅校验 `window` 存在，语义宽松，适合「能否使用浏览器 API」的快速预判
+- `isServer()`：判断当前运行时是否为服务端环境，即 `isBrowser()` 取反，包含 Node.js/Deno/Bun/Worker 等非浏览器主线程环境
+- `isDeno()`：判断当前运行时是否为 Deno，校验全局 `Deno` 对象和 `Deno.version.deno`
+- `isBun()`：判断当前运行时是否为 Bun，校验全局 `Bun` 对象和 `Bun.version`

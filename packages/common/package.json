@@ -37,6 +37,16 @@
         "types": "./dist/check/reg.d.cts",
         "default": "./dist/check/reg.cjs"
       }
+    },
+    "./check/platform": {
+      "import": {
+        "types": "./dist/check/platform.d.ts",
+        "default": "./dist/check/platform.js"
+      },
+      "require": {
+        "types": "./dist/check/platform.d.cts",
+        "default": "./dist/check/platform.cjs"
+      }
     }
   },
   "files": [

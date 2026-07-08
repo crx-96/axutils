@@ -1,5 +1,9 @@
 import { isEmail as isEmailFromEntry, isNumber as isNumberFromEntry } from "@axutils/common";
 import {
+  isBrowser as isBrowserFromPlatform,
+  isNode as isNodeFromPlatform,
+} from "@axutils/common/check/platform";
+import {
   isEmail as isEmailFromReg,
   isPhoneCn as isPhoneCnFromReg,
 } from "@axutils/common/check/reg";
@@ -22,4 +26,14 @@ if (!isArrayFromType(["esm"]) || !isBooleanFromType(true)) {
 
 if (!isPhoneCnFromReg("13800138000") || !isEmailFromReg("reg@example.com")) {
   throw new Error("ESM reg 子路径导入验证失败。");
+}
+
+if (typeof isBrowserFromPlatform !== "function" || typeof isNodeFromPlatform !== "function") {
+  throw new Error("ESM platform 子路径导入验证失败。");
+}
+if (!isNodeFromPlatform()) {
+  throw new Error("ESM platform 子路径 Node 环境判断验证失败。");
+}
+if (isBrowserFromPlatform()) {
+  throw new Error("ESM platform 子路径浏览器环境判断验证失败。");
 }
