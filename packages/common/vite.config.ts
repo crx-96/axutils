@@ -9,6 +9,11 @@ export default defineConfig({
         "check/platform": "./src/check/platform.ts",
         "check/reg": "./src/check/reg.ts",
         "check/type": "./src/check/type.ts",
+        "crypto/convert": "./src/crypto/convert.ts",
+        "crypto/md5": "./src/crypto/md5.ts",
+        "node/crypto/convert": "./src/node/crypto/convert.ts",
+        "node/crypto/md5": "./src/node/crypto/md5.ts",
+        "node/index": "./src/node/index.ts",
         "object/json": "./src/object/json.ts",
       },
       fileName: (format: string, entryName: string) => {

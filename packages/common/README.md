@@ -1,6 +1,6 @@
 # @axutils/common
 
-`@axutils/common` 是 `axutils` monorepo 中的公共工具子包，当前提供一组常用类型判断、格式校验、运行时平台判断和 JSON 序列化方法，作为后续公共工具集合的基础能力。
+`@axutils/common` 是 `axutils` monorepo 中的公共工具子包，当前提供一组常用类型判断、格式校验、运行时平台判断、JSON 序列化与 MD5 工具方法，作为后续公共工具集合的基础能力。
 
 ## 兼容性
 
@@ -12,6 +12,11 @@
 ```bash
 pnpm add @axutils/common
 ```
+
+如果需要使用可选子路径依赖，请额外安装对应 peer 依赖：
+
+- `@axutils/common/object/json`：`pnpm add safe-stable-stringify`
+- `@axutils/common/crypto/md5`：`pnpm add spark-md5`
 
 ## 使用方式
 
@@ -88,6 +93,10 @@ import {
 } from "@axutils/common/check/type";
 import { isEmail, isHexColor, isHttpUrl, isIdCardCn, isIpv4, isPhoneCn } from "@axutils/common/check/reg";
 import { isBrowser, isBrowserLike, isBun, isDeno, isNode, isServer, isWebWorker } from "@axutils/common/check/platform";
+import { Md5 } from "@axutils/common/crypto/md5";
+import { bytesToBase64, bytesToHex } from "@axutils/common/crypto/convert";
+import { Md5 as NodeMd5 } from "@axutils/common/node/crypto/md5";
+import { decodeBase64, decodeHex, normalizeMd5Input } from "@axutils/common/node/crypto/convert";
 import { jsonParse, jsonParseSafe, jsonStringify, jsonStringifySafe } from "@axutils/common/object/json";
 
 console.log(isBoolean(true));
@@ -103,19 +112,31 @@ console.log(isNode());
 console.log(isServer());
 console.log(jsonStringify({ b: 2, a: 1 }, { sortKeys: true }));
 console.log(jsonParse('{"a":1}'));
+console.log(new Md5().update("hello").toHex());
+console.log(bytesToHex([93, 65, 64, 42, 188, 75, 42, 118, 185, 113, 157, 145, 16, 23, 197, 146]));
+console.log(bytesToBase64([93, 65, 64, 42, 188, 75, 42, 118, 185, 113, 157, 145, 16, 23, 197, 146]));
+console.log(new NodeMd5().update("hello").toBase64());
+console.log(decodeHex("68656c6c6f"));
+console.log(decodeBase64("aGVsbG8="));
+console.log(normalizeMd5Input("hello"));
 ```
 
-浏览器端也可通过 UMD 全量包直接引入主入口工具（无需模块系统）：
+浏览器端也可通过 UMD 全量包直接引入所有浏览器侧工具（无需模块系统）：
 
 ```html
 <script src="https://unpkg.com/@axutils/common/dist/index.umd.cjs"></script>
 <script>
   console.log(AxutilsCommon.isNumber(1));
   console.log(AxutilsCommon.isEmail("user@example.com"));
+  console.log(AxutilsCommon.jsonStringify({ b: 2, a: 1 }, { sortKeys: true }));
+  console.log(new AxutilsCommon.Md5().update("hello").toHex());
 </script>
 ```
 
-> **注意**：UMD 全量包会内联 `safe-stable-stringify` 等第三方依赖，体积大于 ESM/CJS 产物。若仅需主入口工具且对体积敏感，建议使用 ESM 按需导入。
+> **注意**：
+> - ESM/CJS 主入口 `@axutils/common` 只暴露主入口工具，不包含 `object/json`、`crypto/md5` 和 `crypto/convert`
+> - `object/json`、`crypto/md5`、`crypto/convert` 需要走子路径按需导入
+> - UMD 全量包会内联 `safe-stable-stringify`、`spark-md5` 等第三方依赖，体积大于 ESM/CJS 产物。若仅需局部能力且对体积敏感，建议使用 ESM 按需导入
 
 ## 方法说明
 
@@ -173,3 +194,35 @@ console.log(jsonParse('{"a":1}'));
 - `JsonCircularReferenceError`：循环引用错误类，当 `onCycle` 为 `"throw"`（默认）且显式传入配置时抛出；无配置时走 FastPath 抛原生 `TypeError`
 - `jsonStringifySafe(value, options?)`：安全版 `jsonStringify`，参数和行为完全一致，区别是任何异常（循环引用、`TypeError` 等）都不抛出，直接返回 `null`。返回类型 `string | null | undefined`，适用于日志、缓存写入等容错场景。如需区分错误类型请使用 `jsonStringify`
 - `jsonParseSafe(text, options?)`：安全版 `jsonParse`，参数和行为完全一致，区别是任何异常（如 `SyntaxError`）都不抛出，直接返回 `null`。返回类型 `T | null`，适用于解析不可信外部输入的容错场景。注意：合法 JSON 文本 `"null"` 解析结果也是 `null`，调用方无法仅凭返回值区分"解析失败"与"原文就是 null"
+
+### MD5（`@axutils/common/crypto/md5` / `@axutils/common/node/crypto/md5`）
+
+提供一套增量 MD5 工具类，浏览器/通用侧基于 `spark-md5`，Node 侧基于 `node:crypto`，两边 API 和行为保持一致。
+
+> **依赖提示**：
+> - 使用 `@axutils/common/crypto/md5` 需要安装 peer 依赖 `spark-md5`（`pnpm add spark-md5`）
+> - 使用 `@axutils/common/node/crypto/md5` 不需要额外运行时依赖
+
+- `new Md5()`：创建一个可增量 `update()` 的 MD5 实例
+- `update(input, encoding?)`：追加待摘要内容，支持 `string`、`number[]`、`Uint8Array`
+  - 字符串默认按 `utf8` 处理
+  - 也支持显式指定 `hex`、`base64`
+  - 返回实例自身，便于链式调用
+- `toBytes()`：返回摘要对应的 16 字节数组
+- `toHex()`：返回 32 位小写十六进制字符串
+- `toBase64()`：返回标准 base64 字符串
+
+### 转换工具（`@axutils/common/crypto/convert` / `@axutils/common/node/crypto/convert`）
+- `toByteArray(input)`：把 `number[]` 或 `Uint8Array` 归一化为新的 `Uint8Array`
+- `normalizeMd5Input(input, encoding?)`：按 `utf8` / `hex` / `base64` 统一解码 MD5 输入
+- `decodeHex(value)`：把十六进制字符串解码为字节数组
+- `decodeBase64(value)`：把标准 base64 字符串解码为字节数组
+- `binaryStringToBytes(value)`：把二进制字符串拆成字节数组，主要用于 raw 摘要适配
+- `bytesToHex(bytes)`：把字节数组转成小写十六进制字符串
+- `bytesToBase64(bytes)`：把字节数组转成标准 base64 字符串
+
+行为边界：
+
+- 非法字节值（非整数、负数、超过 `255`）会抛错
+- `toBytes()` / `toHex()` / `toBase64()` 首次调用后会固定摘要结果
+- 摘要生成后不可继续 `update()`

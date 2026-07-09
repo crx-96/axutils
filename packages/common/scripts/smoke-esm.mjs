@@ -12,6 +12,25 @@ import {
   isBoolean as isBooleanFromType,
 } from "@axutils/common/check/type";
 import {
+  binaryStringToBytes as binaryStringToBytesFromCryptoConvert,
+  bytesToBase64 as bytesToBase64FromCryptoConvert,
+  bytesToHex as bytesToHexFromCryptoConvert,
+  decodeBase64 as decodeBase64FromCryptoConvert,
+  decodeHex as decodeHexFromCryptoConvert,
+  normalizeMd5Input as normalizeMd5InputFromCryptoConvert,
+} from "@axutils/common/crypto/convert";
+import { Md5 as Md5FromCryptoPath } from "@axutils/common/crypto/md5";
+import { Md5 as Md5FromNodeEntry } from "@axutils/common/node";
+import {
+  binaryStringToBytes as binaryStringToBytesFromNodeCryptoConvert,
+  bytesToBase64 as bytesToBase64FromNodeCryptoConvert,
+  bytesToHex as bytesToHexFromNodeCryptoConvert,
+  decodeBase64 as decodeBase64FromNodeCryptoConvert,
+  decodeHex as decodeHexFromNodeCryptoConvert,
+  normalizeMd5Input as normalizeMd5InputFromNodeCryptoConvert,
+} from "@axutils/common/node/crypto/convert";
+import { Md5 as Md5FromNodeCryptoPath } from "@axutils/common/node/crypto/md5";
+import {
   jsonParse as jsonParseFromObjectJson,
   jsonParseSafe as jsonParseSafeFromObjectJson,
   jsonStringify as jsonStringifyFromObjectJson,
@@ -67,4 +86,72 @@ if (jsonParseSafeFromObjectJson('{"a":1}').a !== 1) {
 }
 if (jsonParseSafeFromObjectJson("{invalid}") !== null) {
   throw new Error("ESM object/json 子路径 jsonParseSafe 非法输入返回非 null 预期失败。");
+}
+
+if ("Md5" in (await import("@axutils/common"))) {
+  throw new Error("ESM 主入口不应导出 Md5。");
+}
+
+const bytes = new Uint8Array([
+  93, 65, 64, 42, 188, 75, 42, 118, 185, 113, 157, 145, 16, 23, 197, 146,
+]);
+
+if (new Md5FromCryptoPath().update("hello").toHex() !== "5d41402abc4b2a76b9719d911017c592") {
+  throw new Error("ESM crypto/md5 子路径 MD5 摘要验证失败。");
+}
+
+if (bytesToHexFromCryptoConvert(bytes) !== "5d41402abc4b2a76b9719d911017c592") {
+  throw new Error("ESM crypto/convert bytesToHex 验证失败。");
+}
+
+if (bytesToBase64FromCryptoConvert(bytes) !== "XUFAKrxLKna5cZ2REBfFkg==") {
+  throw new Error("ESM crypto/convert bytesToBase64 验证失败。");
+}
+
+if (binaryStringToBytesFromCryptoConvert("\x5dA").join(",") !== "93,65") {
+  throw new Error("ESM crypto/convert binaryStringToBytes 验证失败。");
+}
+
+if (decodeHexFromCryptoConvert("68656c6c6f").join(",") !== "104,101,108,108,111") {
+  throw new Error("ESM crypto/convert decodeHex 验证失败。");
+}
+
+if (decodeBase64FromCryptoConvert("aGVsbG8=").join(",") !== "104,101,108,108,111") {
+  throw new Error("ESM crypto/convert decodeBase64 验证失败。");
+}
+
+if (normalizeMd5InputFromCryptoConvert("hello").join(",") !== "104,101,108,108,111") {
+  throw new Error("ESM crypto/convert normalizeMd5Input 验证失败。");
+}
+
+if (new Md5FromNodeEntry().update("hello").toBase64() !== "XUFAKrxLKna5cZ2REBfFkg==") {
+  throw new Error("ESM node 子路径聚合导出验证失败。");
+}
+
+if (new Md5FromNodeCryptoPath().update("hello").toHex() !== "5d41402abc4b2a76b9719d911017c592") {
+  throw new Error("ESM node/crypto/md5 子路径验证失败。");
+}
+
+if (bytesToHexFromNodeCryptoConvert(bytes) !== "5d41402abc4b2a76b9719d911017c592") {
+  throw new Error("ESM node/crypto/convert bytesToHex 验证失败。");
+}
+
+if (bytesToBase64FromNodeCryptoConvert(bytes) !== "XUFAKrxLKna5cZ2REBfFkg==") {
+  throw new Error("ESM node/crypto/convert bytesToBase64 验证失败。");
+}
+
+if (binaryStringToBytesFromNodeCryptoConvert("\x5dA").join(",") !== "93,65") {
+  throw new Error("ESM node/crypto/convert binaryStringToBytes 验证失败。");
+}
+
+if (decodeHexFromNodeCryptoConvert("68656c6c6f").join(",") !== "104,101,108,108,111") {
+  throw new Error("ESM node/crypto/convert decodeHex 验证失败。");
+}
+
+if (decodeBase64FromNodeCryptoConvert("aGVsbG8=").join(",") !== "104,101,108,108,111") {
+  throw new Error("ESM node/crypto/convert decodeBase64 验证失败。");
+}
+
+if (normalizeMd5InputFromNodeCryptoConvert("hello").join(",") !== "104,101,108,108,111") {
+  throw new Error("ESM node/crypto/convert normalizeMd5Input 验证失败。");
 }

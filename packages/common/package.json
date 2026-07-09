@@ -59,6 +59,56 @@
         "types": "./dist/object/json.d.cts",
         "default": "./dist/object/json.cjs"
       }
+    },
+    "./crypto/md5": {
+      "import": {
+        "types": "./dist/crypto/md5.d.ts",
+        "default": "./dist/crypto/md5.js"
+      },
+      "require": {
+        "types": "./dist/crypto/md5.d.cts",
+        "default": "./dist/crypto/md5.cjs"
+      }
+    },
+    "./crypto/convert": {
+      "import": {
+        "types": "./dist/crypto/convert.d.ts",
+        "default": "./dist/crypto/convert.js"
+      },
+      "require": {
+        "types": "./dist/crypto/convert.d.cts",
+        "default": "./dist/crypto/convert.cjs"
+      }
+    },
+    "./node": {
+      "import": {
+        "types": "./dist/node/index.d.ts",
+        "default": "./dist/node/index.js"
+      },
+      "require": {
+        "types": "./dist/node/index.d.cts",
+        "default": "./dist/node/index.cjs"
+      }
+    },
+    "./node/crypto/md5": {
+      "import": {
+        "types": "./dist/node/crypto/md5.d.ts",
+        "default": "./dist/node/crypto/md5.js"
+      },
+      "require": {
+        "types": "./dist/node/crypto/md5.d.cts",
+        "default": "./dist/node/crypto/md5.cjs"
+      }
+    },
+    "./node/crypto/convert": {
+      "import": {
+        "types": "./dist/node/crypto/convert.d.ts",
+        "default": "./dist/node/crypto/convert.js"
+      },
+      "require": {
+        "types": "./dist/node/crypto/convert.d.cts",
+        "default": "./dist/node/crypto/convert.cjs"
+      }
     }
   },
   "files": [
@@ -72,10 +122,14 @@
     "access": "public"
   },
   "peerDependencies": {
-    "safe-stable-stringify": "^2.4.0"
+    "safe-stable-stringify": "^2.4.0",
+    "spark-md5": "^3.0.2"
   },
   "peerDependenciesMeta": {
     "safe-stable-stringify": {
+      "optional": true
+    },
+    "spark-md5": {
       "optional": true
     }
   },
@@ -94,5 +148,8 @@
     "test": "vitest run",
     "test:dist": "node ./scripts/build.mjs && node ./scripts/smoke-esm.mjs && node ./scripts/smoke-cjs.cjs && node ./scripts/smoke-umd.cjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "spark-md5": "^3.0.2"
   }
 }

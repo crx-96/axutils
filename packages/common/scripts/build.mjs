@@ -49,7 +49,7 @@ export default defineConfig({
   build: {
     emptyOutDir: false,
     lib: {
-      entry: "./src/index.ts",
+      entry: "./src/umd.ts",
       fileName: () => "index.umd.cjs",
       formats: ["umd"],
       name: "AxutilsCommon",
