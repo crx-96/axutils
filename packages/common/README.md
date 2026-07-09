@@ -1,6 +1,6 @@
 # @axutils/common
 
-`@axutils/common` 是 `axutils` monorepo 中的公共工具子包，当前提供一组常用类型判断、格式校验和运行时平台判断方法，作为后续公共工具集合的基础能力。
+`@axutils/common` 是 `axutils` monorepo 中的公共工具子包，当前提供一组常用类型判断、格式校验、运行时平台判断和 JSON 序列化方法，作为后续公共工具集合的基础能力。
 
 ## 兼容性
 
@@ -88,6 +88,7 @@ import {
 } from "@axutils/common/check/type";
 import { isEmail, isHexColor, isHttpUrl, isIdCardCn, isIpv4, isPhoneCn } from "@axutils/common/check/reg";
 import { isBrowser, isBrowserLike, isBun, isDeno, isNode, isServer, isWebWorker } from "@axutils/common/check/platform";
+import { jsonParse, jsonParseSafe, jsonStringify, jsonStringifySafe } from "@axutils/common/object/json";
 
 console.log(isBoolean(true));
 console.log(isObject({ source: "subpath" }));
@@ -100,7 +101,21 @@ console.log(isHexColor("#ffffff"));
 console.log(isBrowser());
 console.log(isNode());
 console.log(isServer());
+console.log(jsonStringify({ b: 2, a: 1 }, { sortKeys: true }));
+console.log(jsonParse('{"a":1}'));
 ```
+
+浏览器端也可通过 UMD 全量包直接引入主入口工具（无需模块系统）：
+
+```html
+<script src="https://unpkg.com/@axutils/common/dist/index.umd.cjs"></script>
+<script>
+  console.log(AxutilsCommon.isNumber(1));
+  console.log(AxutilsCommon.isEmail("user@example.com"));
+</script>
+```
+
+> **注意**：UMD 全量包会内联 `safe-stable-stringify` 等第三方依赖，体积大于 ESM/CJS 产物。若仅需主入口工具且对体积敏感，建议使用 ESM 按需导入。
 
 ## 方法说明
 
@@ -138,3 +153,23 @@ console.log(isServer());
 - `isServer()`：判断当前运行时是否为服务端环境，即 `isBrowser()` 取反，包含 Node.js/Deno/Bun/Worker 等非浏览器主线程环境
 - `isDeno()`：判断当前运行时是否为 Deno，校验全局 `Deno` 对象和 `Deno.version.deno`
 - `isBun()`：判断当前运行时是否为 Bun，校验全局 `Bun` 对象和 `Bun.version`
+
+### JSON 序列化（`@axutils/common/object/json`）
+
+在原生 `JSON.stringify` / `JSON.parse` 基础上增加可配置项，未传入配置时走 FastPath 直接调用原生方法，性能与原生一致。配置化路径底层使用 [safe-stable-stringify](https://www.npmjs.com/package/safe-stable-stringify)（已知最快的稳定序列化实现）。
+
+> **依赖提示**：使用 `@axutils/common/object/json` 子路径需要安装 peer 依赖 `safe-stable-stringify`（`npm i safe-stable-stringify`）。不使用 JSON 序列化功能的用户无需安装。`jsonParse` 不依赖任何第三方库。
+
+- `jsonStringify(value, options?)`：序列化值为 JSON 字符串；当根值为 `undefined`、函数或 `Symbol` 时，与原生一致返回 `undefined`；支持以下配置：
+  - `sortKeys`：对象 key 排序，`true`/`"asc"` 升序、`"desc"` 降序、或自定义比较函数，不影响数组元素顺序
+  - `filterNullish`：过滤值为 `null`/`undefined` 的对象字段（不影响数组元素，也不影响根值）
+  - `space`：缩进配置，`number` 为空格数、`string` 为缩进字符串
+  - `onCycle`：循环引用处理，`"throw"` 抛错（默认）、`"skip"` 将循环引用值替换为 `null`
+
+  > **BigInt 行为差异**：FastPath（无配置或仅传 `space`）走原生 `JSON.stringify`，遇到 `BigInt` 会抛 `TypeError`；配置化路径（传入 `sortKeys`/`filterNullish`/`onCycle` 等触发配置化的选项）底层 `safe-stable-stringify` 会将 `BigInt` 序列化为数字。如需序列化 `BigInt`，请显式传入这些配置项。
+- `jsonParse(text, options?)`：反序列化 JSON 文本，支持以下配置：
+  - `sortKeys`：对结果对象的 key 排序，语义同序列化
+  - `filterNullish`：过滤值为 `null` 的字段（JSON 文本中不存在 `undefined`）
+- `JsonCircularReferenceError`：循环引用错误类，当 `onCycle` 为 `"throw"`（默认）且显式传入配置时抛出；无配置时走 FastPath 抛原生 `TypeError`
+- `jsonStringifySafe(value, options?)`：安全版 `jsonStringify`，参数和行为完全一致，区别是任何异常（循环引用、`TypeError` 等）都不抛出，直接返回 `null`。返回类型 `string | null | undefined`，适用于日志、缓存写入等容错场景。如需区分错误类型请使用 `jsonStringify`
+- `jsonParseSafe(text, options?)`：安全版 `jsonParse`，参数和行为完全一致，区别是任何异常（如 `SyntaxError`）都不抛出，直接返回 `null`。返回类型 `T | null`，适用于解析不可信外部输入的容错场景。注意：合法 JSON 文本 `"null"` 解析结果也是 `null`，调用方无法仅凭返回值区分"解析失败"与"原文就是 null"

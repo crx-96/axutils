@@ -23,9 +23,11 @@
 - 默认使用命名导出，避免默认导出。
 - 公共 API 必须通过 `package.json` 的 `exports` 显式声明，禁止依赖未声明的深层内部路径。
 - 代码应保持 tree-shaking 友好：避免包级副作用，优先纯函数和按模块导出。
-- `packages/common` 当前源码结构是 `src/index.ts + src/check/*`；测试目录应镜像源码分组，保持 `test/check/*` 与之对应。
+- `packages/common` 当前源码结构是 `src/index.ts + src/check/* + src/object/*`；测试目录应镜像源码分组，保持 `test/check/*`、`test/object/*` 与之对应。
 - `packages/common/scripts/build.mjs` 会先删除 `dist` 再重建；不要绕过这个脚本手写构建流程。
-- `packages/common/scripts/smoke-esm.mjs` 和 `smoke-cjs.cjs` 是发布产物验证的一部分，除非同步替换 `test:dist`、根 `check` 和 CI，否则不要删除。
+- `packages/common/scripts/smoke-esm.mjs`、`smoke-cjs.cjs`、`smoke-umd.cjs` 是发布产物验证的一部分，除非同步替换 `test:dist`、根 `check` 和 CI，否则不要删除。
+- `packages/common` 产出三种格式：ESM（`.js`）、CJS（`.cjs`）、UMD（`index.umd.cjs`）。UMD 全量包将第三方依赖打包进去供浏览器 `<script>` 直接引入；ESM/CJS 产物将第三方依赖 external 化。
+- 当功能依赖第三方库时，优先声明为 `peerDependencies` + `peerDependenciesMeta.optional: true`，实现按需安装，不影响不使用该功能的用户。
 
 ## 实现注释规则
 

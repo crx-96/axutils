@@ -24,17 +24,39 @@ corepack pnpm install
 
 ```text
 .
+├─ .changeset/
+│  └─ config.json
+├─ .github/
+│  └─ workflows/
+│     └─ ci.yml
+├─ .npmrc
 ├─ docs/
 │  ├─ development.md
 │  └─ skills/
 ├─ packages/
 │  └─ common/
 ├─ AGENTS.md
+├─ LICENSE
+├─ README.md
 ├─ biome.jsonc
 ├─ package.json
 ├─ pnpm-workspace.yaml
-└─ tsconfig.base.json
+├─ tsconfig.base.json
+└─ tsconfig.json
 ```
+
+> `tsconfig.json`（根）是项目引用入口，其 `references` 指向各子包；`tsconfig.base.json` 是共享编译选项。新增 `packages/*` 子包时，必须在根 `tsconfig.json` 的 `references` 中添加该包。
+
+## CI 环境说明
+
+CI（`.github/workflows/ci.yml`）运行在 `ubuntu-latest`，使用 pnpm `10.34.4` 和 Node.js `24`。由于 CI 已通过 `pnpm/action-setup` 固定 pnpm 版本，CI 中的命令不带 `corepack` 前缀（如 `pnpm lint` 而非 `corepack pnpm lint`）。本地开发时仍需使用 `corepack pnpm` 前缀，除非已全局安装对应版本的 pnpm。
+
+CI 的验证步骤与根 `check` 脚本对齐：`lint` → `typecheck` → `test` → `build` → `@axutils/common test:dist` → `@axutils/common publint`。
+
+关于 Node.js 版本口径：
+- **CI 运行版本**：Node.js `24`（CI 实际执行环境）
+- **仓库开发要求**：`Node.js >= 20.19.0`（根 `package.json` 的 `engines.node`，本地开发最低版本）
+- **消费方运行时兼容**：各子包 `package.json` 的 `engines.node`（如 `@axutils/common` 声明 `>= 14.18.0`），面向包使用者，与仓库开发要求不同
 
 ## 根目录命令
 

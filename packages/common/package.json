@@ -7,6 +7,8 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "unpkg": "./dist/index.umd.cjs",
+  "jsdelivr": "./dist/index.umd.cjs",
   "exports": {
     ".": {
       "import": {
@@ -47,6 +49,16 @@
         "types": "./dist/check/platform.d.cts",
         "default": "./dist/check/platform.cjs"
       }
+    },
+    "./object/json": {
+      "import": {
+        "types": "./dist/object/json.d.ts",
+        "default": "./dist/object/json.js"
+      },
+      "require": {
+        "types": "./dist/object/json.d.cts",
+        "default": "./dist/object/json.cjs"
+      }
     }
   },
   "files": [
@@ -58,6 +70,14 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "peerDependencies": {
+    "safe-stable-stringify": "^2.4.0"
+  },
+  "peerDependenciesMeta": {
+    "safe-stable-stringify": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",
@@ -72,7 +92,7 @@
     "build": "node ./scripts/build.mjs",
     "publint": "publint run . --pack npm",
     "test": "vitest run",
-    "test:dist": "node ./scripts/build.mjs && node ./scripts/smoke-esm.mjs && node ./scripts/smoke-cjs.cjs",
+    "test:dist": "node ./scripts/build.mjs && node ./scripts/smoke-esm.mjs && node ./scripts/smoke-cjs.cjs && node ./scripts/smoke-umd.cjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }

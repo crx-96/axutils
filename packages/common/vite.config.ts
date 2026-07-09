@@ -9,12 +9,17 @@ export default defineConfig({
         "check/platform": "./src/check/platform.ts",
         "check/reg": "./src/check/reg.ts",
         "check/type": "./src/check/type.ts",
+        "object/json": "./src/object/json.ts",
       },
-      fileName: (format, entryName) => {
+      fileName: (format: string, entryName: string) => {
         const extension = format === "es" ? "js" : "cjs";
         return `${entryName}.${extension}`;
       },
       formats: ["es", "cjs"],
+    },
+    // ESM/CJS 产物：第三方包和 Node 内置模块不打包（external）
+    rollupOptions: {
+      external: (id: string) => !id.startsWith(".") && !id.startsWith("/"),
     },
     sourcemap: true,
     target: "es2015",
