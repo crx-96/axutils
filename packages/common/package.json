@@ -60,6 +60,16 @@
         "default": "./dist/object/json.cjs"
       }
     },
+    "./object/url": {
+      "import": {
+        "types": "./dist/object/url.d.ts",
+        "default": "./dist/object/url.js"
+      },
+      "require": {
+        "types": "./dist/object/url.d.cts",
+        "default": "./dist/object/url.cjs"
+      }
+    },
     "./crypto/md5": {
       "import": {
         "types": "./dist/crypto/md5.d.ts",

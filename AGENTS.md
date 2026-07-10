@@ -23,6 +23,7 @@
 - 默认使用命名导出，避免默认导出。
 - 公共 API 必须通过 `package.json` 的 `exports` 显式声明，禁止依赖未声明的深层内部路径。
 - 代码应保持 tree-shaking 友好：避免包级副作用，优先纯函数和按模块导出。
+- 无第三方运行时依赖、且同时兼容浏览器与 Node.js 的公共工具，除提供子路径导出外，还必须从包主入口提供命名导出。仅当该工具会引入可选依赖、依赖 Node 专属能力，或明显增加主入口负担时，才允许仅提供子路径导出。
 - `packages/common` 当前源码结构是 `src/index.ts + src/check/* + src/object/*`；测试目录应镜像源码分组，保持 `test/check/*`、`test/object/*` 与之对应。
 - `packages/common/scripts/build.mjs` 会先删除 `dist` 再重建；不要绕过这个脚本手写构建流程。
 - `packages/common/scripts/smoke-esm.mjs`、`smoke-cjs.cjs`、`smoke-umd.cjs` 是发布产物验证的一部分，除非同步替换 `test:dist`、根 `check` 和 CI，否则不要删除。
@@ -40,8 +41,8 @@
 
 - 新增公共导出时，必须同时补测试和对应 README 示例。
 - 修改发布面、目录结构或构建策略时，必须同步更新相关文档。
-- 根 README 面向仓库使用者；子包 README 面向包使用者。
-- 子包 README 必须至少覆盖安装方式、公开导出示例，以及该子包需要直接暴露给协作者的命令说明。
+- 根 README 面向仓库使用者；子包 README 面向 npm 包使用者。
+- 子包 README 只能包含安装方式、运行时兼容性、可选依赖、公开导出和使用示例等包使用信息；不得写入仓库开发、构建、测试、发布、CI 或协作者流程等任何开发者信息。
 - 修改子包公开 API、子路径导出或构建脚本时，必须同步更新 `package.json` 的 `exports`、README 示例和测试。
 - 改动 `docs/skills/*` 下的 skill 时，必须同步更新对应 `AGENTS.md` 中引用的约束或说明；如果某个仓库约定已经沉淀为 skill，后续变更不能只改代码不改 skill。
 

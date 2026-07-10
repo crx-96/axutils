@@ -1,4 +1,9 @@
-const { isEmail: isEmailFromEntry, isNumber: isNumberFromEntry } = require("@axutils/common");
+const {
+  isEmail: isEmailFromEntry,
+  isNumber: isNumberFromEntry,
+  objectToQuery: objectToQueryFromEntry,
+  queryToObject: queryToObjectFromEntry,
+} = require("@axutils/common");
 const {
   isEmail: isEmailFromReg,
   isPhoneCn: isPhoneCnFromReg,
@@ -36,6 +41,7 @@ const {
   jsonStringify: jsonStringifyFromObjectJson,
   jsonStringifySafe: jsonStringifySafeFromObjectJson,
 } = require("@axutils/common/object/json");
+const { objectToQuery, queryToObject } = require("@axutils/common/object/url");
 
 if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {
   throw new Error("CJS 主入口类型判断验证失败。");
@@ -43,6 +49,12 @@ if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {
 
 if (!isEmailFromEntry("cjs@example.com")) {
   throw new Error("CJS 主入口正则判断验证失败。");
+}
+if (objectToQueryFromEntry({ tag: ["cjs", "entry"] }) !== "tag=cjs&tag=entry") {
+  throw new Error("CJS 主入口 URL 查询序列化验证失败。");
+}
+if (JSON.stringify(queryToObjectFromEntry("?tag=cjs&tag=entry")) !== '{"tag":["cjs","entry"]}') {
+  throw new Error("CJS 主入口 URL 查询解析验证失败。");
 }
 
 if (!isArrayFromType(["cjs"]) || !isBooleanFromType(true)) {
@@ -86,6 +98,15 @@ if (jsonParseSafeFromObjectJson('{"a":1}').a !== 1) {
 }
 if (jsonParseSafeFromObjectJson("{invalid}") !== null) {
   throw new Error("CJS object/json 子路径 jsonParseSafe 非法输入返回非 null 预期失败。");
+}
+
+if (objectToQuery({ tag: ["cjs", "url"], empty: null }) !== "tag=cjs&tag=url") {
+  throw new Error("CJS object/url 子路径序列化验证失败。");
+}
+if (
+  JSON.stringify(queryToObject("https://example.com/?tag=cjs&tag=url")) !== '{"tag":["cjs","url"]}'
+) {
+  throw new Error("CJS object/url 子路径解析验证失败。");
 }
 
 if ("Md5" in require("@axutils/common")) {

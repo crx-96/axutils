@@ -7,7 +7,7 @@ const vm = require("node:vm");
 const AxutilsCommon = require(join(__dirname, "..", "dist", "index.umd.cjs"));
 
 // 不注入 module 或 require，确保 UMD 走浏览器全局分支而非 CommonJS 分支。
-const browserContext = vm.createContext({ TextEncoder, Uint8Array });
+const browserContext = vm.createContext({ TextEncoder, Uint8Array, URLSearchParams });
 const bundlePath = join(__dirname, "..", "dist", "index.umd.cjs");
 vm.runInContext(readFileSync(bundlePath, "utf8"), browserContext, { filename: bundlePath });
 const BrowserAxutilsCommon = browserContext.AxutilsCommon;
@@ -26,6 +26,15 @@ if (BrowserAxutilsCommon.jsonStringify({ b: 2, a: 1 }, { sortKeys: true }) !== '
 }
 if (new BrowserAxutilsCommon.Md5().update("hello").toHex() !== "5d41402abc4b2a76b9719d911017c592") {
   throw new Error("UMD 浏览器全局分支 Md5 验证失败。");
+}
+if (BrowserAxutilsCommon.objectToQuery({ tag: ["umd", "browser"] }) !== "tag=umd&tag=browser") {
+  throw new Error("UMD 浏览器全局分支 objectToQuery 验证失败。");
+}
+if (
+  JSON.stringify(BrowserAxutilsCommon.queryToObject("?tag=umd&tag=browser")) !==
+  '{"tag":["umd","browser"]}'
+) {
+  throw new Error("UMD 浏览器全局分支 queryToObject 验证失败。");
 }
 
 if (typeof AxutilsCommon.isNumber !== "function") {
@@ -46,6 +55,12 @@ if (typeof AxutilsCommon.bytesToHex !== "function") {
 if (typeof AxutilsCommon.bytesToBase64 !== "function") {
   throw new Error("UMD 产物缺失 bytesToBase64 导出。");
 }
+if (
+  typeof AxutilsCommon.objectToQuery !== "function" ||
+  typeof AxutilsCommon.queryToObject !== "function"
+) {
+  throw new Error("UMD 产物缺失 URL 查询工具导出。");
+}
 
 if (!AxutilsCommon.isNumber(1) || AxutilsCommon.isNumber(NaN)) {
   throw new Error("UMD 产物 isNumber 验证失败。");
@@ -58,6 +73,12 @@ if (AxutilsCommon.jsonStringify({ b: 2, a: 1 }, { sortKeys: true }) !== '{"a":1,
 }
 if (new AxutilsCommon.Md5().update("hello").toHex() !== "5d41402abc4b2a76b9719d911017c592") {
   throw new Error("UMD 产物 Md5 验证失败。");
+}
+if (AxutilsCommon.objectToQuery({ tag: ["umd", "node"] }) !== "tag=umd&tag=node") {
+  throw new Error("UMD 产物 objectToQuery 验证失败。");
+}
+if (JSON.stringify(AxutilsCommon.queryToObject("?tag=umd&tag=node")) !== '{"tag":["umd","node"]}') {
+  throw new Error("UMD 产物 queryToObject 验证失败。");
 }
 if (
   AxutilsCommon.bytesToHex(

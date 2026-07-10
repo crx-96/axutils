@@ -1,4 +1,9 @@
-import { isEmail as isEmailFromEntry, isNumber as isNumberFromEntry } from "@axutils/common";
+import {
+  isEmail as isEmailFromEntry,
+  isNumber as isNumberFromEntry,
+  objectToQuery as objectToQueryFromEntry,
+  queryToObject as queryToObjectFromEntry,
+} from "@axutils/common";
 import {
   isBrowser as isBrowserFromPlatform,
   isNode as isNodeFromPlatform,
@@ -36,6 +41,7 @@ import {
   jsonStringify as jsonStringifyFromObjectJson,
   jsonStringifySafe as jsonStringifySafeFromObjectJson,
 } from "@axutils/common/object/json";
+import { objectToQuery, queryToObject } from "@axutils/common/object/url";
 
 if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {
   throw new Error("ESM 主入口类型判断验证失败。");
@@ -43,6 +49,12 @@ if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {
 
 if (!isEmailFromEntry("esm@example.com")) {
   throw new Error("ESM 主入口正则判断验证失败。");
+}
+if (objectToQueryFromEntry({ tag: ["esm", "entry"] }) !== "tag=esm&tag=entry") {
+  throw new Error("ESM 主入口 URL 查询序列化验证失败。");
+}
+if (JSON.stringify(queryToObjectFromEntry("?tag=esm&tag=entry")) !== '{"tag":["esm","entry"]}') {
+  throw new Error("ESM 主入口 URL 查询解析验证失败。");
 }
 
 if (!isArrayFromType(["esm"]) || !isBooleanFromType(true)) {
@@ -86,6 +98,15 @@ if (jsonParseSafeFromObjectJson('{"a":1}').a !== 1) {
 }
 if (jsonParseSafeFromObjectJson("{invalid}") !== null) {
   throw new Error("ESM object/json 子路径 jsonParseSafe 非法输入返回非 null 预期失败。");
+}
+
+if (objectToQuery({ tag: ["esm", "url"], empty: null }) !== "tag=esm&tag=url") {
+  throw new Error("ESM object/url 子路径序列化验证失败。");
+}
+if (
+  JSON.stringify(queryToObject("https://example.com/?tag=esm&tag=url")) !== '{"tag":["esm","url"]}'
+) {
+  throw new Error("ESM object/url 子路径解析验证失败。");
 }
 
 if ("Md5" in (await import("@axutils/common"))) {

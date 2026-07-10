@@ -23,3 +23,4 @@ export {
   isPlainObject,
   isString,
 } from "./check/type";
+export { objectToQuery, queryToObject } from "./object/url";

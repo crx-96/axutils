@@ -5,7 +5,6 @@
 ## 兼容性
 
 - 包消费运行时：`Node.js >= 14.18.0`
-- 仓库开发与构建：请以仓库 [开发总览](../../docs/development.md) 为准，当前仍要求更高版本 Node.js
 
 ## 安装
 
@@ -24,31 +23,33 @@ pnpm add @axutils/common
 
 ```ts
 import {
-  isBoolean,
-  isArrowFunction,
-  isAsyncArrowFunction,
-  isAsyncFunction,
-  isBrowser,
-  isBrowserLike,
-  isBun,
-  isDate,
-  isDeno,
-  isEmail,
-  isFunction,
-  isHexColor,
-  isHttpUrl,
-  isIdCardCn,
-  isIpv4,
-  isNil,
-  isNode,
-  isNormalFunction,
+    isBoolean,
+    isArrowFunction,
+    isAsyncArrowFunction,
+    isAsyncFunction,
+    isBrowser,
+    isBrowserLike,
+    isBun,
+    isDate,
+    isDeno,
+    isEmail,
+    isFunction,
+    isHexColor,
+    isHttpUrl,
+    isIdCardCn,
+    isIpv4,
+    isNil,
+    isNode,
+    isNormalFunction,
   isNumber,
   isObject,
   isPhoneCn,
   isPlainObject,
+  objectToQuery,
+  queryToObject,
   isServer,
-  isString,
-  isWebWorker,
+    isString,
+    isWebWorker,
 } from "@axutils/common";
 
 console.log(isNumber(1));
@@ -63,6 +64,8 @@ console.log(isAsyncArrowFunction(async () => {}));
 console.log(isDate(new Date()));
 console.log(isObject({ name: "common" }));
 console.log(isPlainObject({}));
+console.log(objectToQuery({ page: 1, tag: ["typescript", "utils"] }));
+console.log(queryToObject("?tag=typescript&tag=utils"));
 console.log(isPhoneCn("13800138000"));
 console.log(isEmail("user@example.com"));
 console.log(isHttpUrl("https://example.com"));
@@ -78,26 +81,51 @@ console.log(isServer());
 
 ```ts
 import {
-  isBoolean,
-  isArrowFunction,
-  isAsyncArrowFunction,
-  isAsyncFunction,
-  isDate,
-  isFunction,
-  isNil,
-  isNormalFunction,
-  isNumber,
-  isObject,
-  isPlainObject,
-  isString,
+    isBoolean,
+    isArrowFunction,
+    isAsyncArrowFunction,
+    isAsyncFunction,
+    isDate,
+    isFunction,
+    isNil,
+    isNormalFunction,
+    isNumber,
+    isObject,
+    isPlainObject,
+    isString,
 } from "@axutils/common/check/type";
-import { isEmail, isHexColor, isHttpUrl, isIdCardCn, isIpv4, isPhoneCn } from "@axutils/common/check/reg";
-import { isBrowser, isBrowserLike, isBun, isDeno, isNode, isServer, isWebWorker } from "@axutils/common/check/platform";
+import {
+    isEmail,
+    isHexColor,
+    isHttpUrl,
+    isIdCardCn,
+    isIpv4,
+    isPhoneCn,
+} from "@axutils/common/check/reg";
+import {
+    isBrowser,
+    isBrowserLike,
+    isBun,
+    isDeno,
+    isNode,
+    isServer,
+    isWebWorker,
+} from "@axutils/common/check/platform";
 import { Md5 } from "@axutils/common/crypto/md5";
 import { bytesToBase64, bytesToHex } from "@axutils/common/crypto/convert";
 import { Md5 as NodeMd5 } from "@axutils/common/node/crypto/md5";
-import { decodeBase64, decodeHex, normalizeMd5Input } from "@axutils/common/node/crypto/convert";
-import { jsonParse, jsonParseSafe, jsonStringify, jsonStringifySafe } from "@axutils/common/object/json";
+import {
+    decodeBase64,
+    decodeHex,
+    normalizeMd5Input,
+} from "@axutils/common/node/crypto/convert";
+import {
+    jsonParse,
+    jsonParseSafe,
+    jsonStringify,
+    jsonStringifySafe,
+} from "@axutils/common/object/json";
+import { objectToQuery, queryToObject } from "@axutils/common/object/url";
 
 console.log(isBoolean(true));
 console.log(isObject({ source: "subpath" }));
@@ -112,9 +140,19 @@ console.log(isNode());
 console.log(isServer());
 console.log(jsonStringify({ b: 2, a: 1 }, { sortKeys: true }));
 console.log(jsonParse('{"a":1}'));
+console.log(objectToQuery({ page: 1, tag: ["typescript", "utils"] }));
+console.log(queryToObject("https://example.com/?tag=typescript&tag=utils"));
 console.log(new Md5().update("hello").toHex());
-console.log(bytesToHex([93, 65, 64, 42, 188, 75, 42, 118, 185, 113, 157, 145, 16, 23, 197, 146]));
-console.log(bytesToBase64([93, 65, 64, 42, 188, 75, 42, 118, 185, 113, 157, 145, 16, 23, 197, 146]));
+console.log(
+    bytesToHex([
+        93, 65, 64, 42, 188, 75, 42, 118, 185, 113, 157, 145, 16, 23, 197, 146,
+    ]),
+);
+console.log(
+    bytesToBase64([
+        93, 65, 64, 42, 188, 75, 42, 118, 185, 113, 157, 145, 16, 23, 197, 146,
+    ]),
+);
 console.log(new NodeMd5().update("hello").toBase64());
 console.log(decodeHex("68656c6c6f"));
 console.log(decodeBase64("aGVsbG8="));
@@ -126,15 +164,21 @@ console.log(normalizeMd5Input("hello"));
 ```html
 <script src="https://unpkg.com/@axutils/common/dist/index.umd.cjs"></script>
 <script>
-  console.log(AxutilsCommon.isNumber(1));
-  console.log(AxutilsCommon.isEmail("user@example.com"));
-  console.log(AxutilsCommon.jsonStringify({ b: 2, a: 1 }, { sortKeys: true }));
-  console.log(new AxutilsCommon.Md5().update("hello").toHex());
+    console.log(AxutilsCommon.isNumber(1));
+    console.log(AxutilsCommon.isEmail("user@example.com"));
+    console.log(
+        AxutilsCommon.jsonStringify({ b: 2, a: 1 }, { sortKeys: true }),
+    );
+    console.log(
+        AxutilsCommon.objectToQuery({ page: 1, tag: ["typescript", "utils"] }),
+    );
+    console.log(new AxutilsCommon.Md5().update("hello").toHex());
 </script>
 ```
 
 > **注意**：
-> - ESM/CJS 主入口 `@axutils/common` 只暴露主入口工具，不包含 `object/json`、`crypto/md5` 和 `crypto/convert`
+>
+> - ESM/CJS 主入口 `@axutils/common` 不包含 `object/json`、`crypto/md5` 和 `crypto/convert`
 > - `object/json`、`crypto/md5`、`crypto/convert` 需要走子路径按需导入
 > - UMD 全量包会内联 `safe-stable-stringify`、`spark-md5` 等第三方依赖，体积大于 ESM/CJS 产物。若仅需局部能力且对体积敏感，建议使用 ESM 按需导入
 
@@ -182,37 +226,47 @@ console.log(normalizeMd5Input("hello"));
 > **依赖提示**：使用 `@axutils/common/object/json` 子路径需要安装 peer 依赖 `safe-stable-stringify`（`npm i safe-stable-stringify`）。不使用 JSON 序列化功能的用户无需安装。`jsonParse` 不依赖任何第三方库。
 
 - `jsonStringify(value, options?)`：序列化值为 JSON 字符串；当根值为 `undefined`、函数或 `Symbol` 时，与原生一致返回 `undefined`；支持以下配置：
-  - `sortKeys`：对象 key 排序，`true`/`"asc"` 升序、`"desc"` 降序、或自定义比较函数，不影响数组元素顺序
-  - `filterNullish`：过滤值为 `null`/`undefined` 的对象字段（不影响数组元素，也不影响根值）
-  - `space`：缩进配置，`number` 为空格数、`string` 为缩进字符串
-  - `onCycle`：循环引用处理，`"throw"` 抛错（默认）、`"skip"` 将循环引用值替换为 `null`
+    - `sortKeys`：对象 key 排序，`true`/`"asc"` 升序、`"desc"` 降序、或自定义比较函数，不影响数组元素顺序
+    - `filterNullish`：过滤值为 `null`/`undefined` 的对象字段（不影响数组元素，也不影响根值）
+    - `space`：缩进配置，`number` 为空格数、`string` 为缩进字符串
+    - `onCycle`：循环引用处理，`"throw"` 抛错（默认）、`"skip"` 将循环引用值替换为 `null`
 
-  > **BigInt 行为差异**：FastPath（无配置或仅传 `space`）走原生 `JSON.stringify`，遇到 `BigInt` 会抛 `TypeError`；配置化路径（传入 `sortKeys`/`filterNullish`/`onCycle` 等触发配置化的选项）底层 `safe-stable-stringify` 会将 `BigInt` 序列化为数字。如需序列化 `BigInt`，请显式传入这些配置项。
+    > **BigInt 行为差异**：FastPath（无配置或仅传 `space`）走原生 `JSON.stringify`，遇到 `BigInt` 会抛 `TypeError`；配置化路径（传入 `sortKeys`/`filterNullish`/`onCycle` 等触发配置化的选项）底层 `safe-stable-stringify` 会将 `BigInt` 序列化为数字。如需序列化 `BigInt`，请显式传入这些配置项。
+
 - `jsonParse(text, options?)`：反序列化 JSON 文本，支持以下配置：
-  - `sortKeys`：对结果对象的 key 排序，语义同序列化
-  - `filterNullish`：过滤值为 `null` 的字段（JSON 文本中不存在 `undefined`）
+    - `sortKeys`：对结果对象的 key 排序，语义同序列化
+    - `filterNullish`：过滤值为 `null` 的字段（JSON 文本中不存在 `undefined`）
 - `JsonCircularReferenceError`：循环引用错误类，当 `onCycle` 为 `"throw"`（默认）且显式传入配置时抛出；无配置时走 FastPath 抛原生 `TypeError`
 - `jsonStringifySafe(value, options?)`：安全版 `jsonStringify`，参数和行为完全一致，区别是任何异常（循环引用、`TypeError` 等）都不抛出，直接返回 `null`。返回类型 `string | null | undefined`，适用于日志、缓存写入等容错场景。如需区分错误类型请使用 `jsonStringify`
 - `jsonParseSafe(text, options?)`：安全版 `jsonParse`，参数和行为完全一致，区别是任何异常（如 `SyntaxError`）都不抛出，直接返回 `null`。返回类型 `T | null`，适用于解析不可信外部输入的容错场景。注意：合法 JSON 文本 `"null"` 解析结果也是 `null`，调用方无法仅凭返回值区分"解析失败"与"原文就是 null"
+
+### URL 查询工具（`@axutils/common` / `@axutils/common/object/url`）
+
+- `objectToQuery(value, options?)`：将对象序列化为不带前导问号的 query 字符串。默认过滤 `null` 和 `undefined`（包括数组元素）；数组会按原有元素顺序展开为重复 key。值使用标准 `URLSearchParams` 编码。
+    - `filterNullish`：设为 `false` 时保留 `null` / `undefined`，并分别转换为字符串。
+    - `sortKeys`：控制 key 排序；`false` 或不传时保留对象键顺序，`true` / `"asc"` 按 Unicode 代码点升序，`"desc"` 降序，也可传入自定义比较函数。同一 key 的数组元素顺序始终不变。
+- `queryToObject(value)`：解析裸 query、带 query 的相对/绝对路径或完整 HTTP(S) URL；忽略 hash，重复 key 按出现顺序转换为字符串数组。没有 query 的 HTTP(S) URL 或绝对路径返回空对象。未带前导斜杠的相对路径与裸 query 存在歧义：问号前含 `=` 或 `&` 时按裸 query 处理；若裸 query 的 key 本身包含未编码问号，可加前导 `?` 明确按裸 query 解析。
 
 ### MD5（`@axutils/common/crypto/md5` / `@axutils/common/node/crypto/md5`）
 
 提供一套增量 MD5 工具类，浏览器/通用侧基于 `spark-md5`，Node 侧基于 `node:crypto`，两边 API 和行为保持一致。
 
 > **依赖提示**：
+>
 > - 使用 `@axutils/common/crypto/md5` 需要安装 peer 依赖 `spark-md5`（`pnpm add spark-md5`）
 > - 使用 `@axutils/common/node/crypto/md5` 不需要额外运行时依赖
 
 - `new Md5()`：创建一个可增量 `update()` 的 MD5 实例
 - `update(input, encoding?)`：追加待摘要内容，支持 `string`、`number[]`、`Uint8Array`
-  - 字符串默认按 `utf8` 处理
-  - 也支持显式指定 `hex`、`base64`
-  - 返回实例自身，便于链式调用
+    - 字符串默认按 `utf8` 处理
+    - 也支持显式指定 `hex`、`base64`
+    - 返回实例自身，便于链式调用
 - `toBytes()`：返回摘要对应的 16 字节数组
 - `toHex()`：返回 32 位小写十六进制字符串
 - `toBase64()`：返回标准 base64 字符串
 
 ### 转换工具（`@axutils/common/crypto/convert` / `@axutils/common/node/crypto/convert`）
+
 - `toByteArray(input)`：把 `number[]` 或 `Uint8Array` 归一化为新的 `Uint8Array`
 - `normalizeMd5Input(input, encoding?)`：按 `utf8` / `hex` / `base64` 统一解码 MD5 输入
 - `decodeHex(value)`：把十六进制字符串解码为字节数组
