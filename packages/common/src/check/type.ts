@@ -95,7 +95,8 @@ export const isFunction = (value: unknown): value is (...args: never[]) => unkno
  *
  * 这种方式比 `value.constructor.name === "AsyncFunction"` 或 `instanceof AsyncFunction` 更稳妥，
  * 前者依赖 `constructor` 属性可被改写、后者在跨 realm 时会失效，
- * 而 `Object.prototype.toString` 是规范定义的内置行为，不受原型链篡改影响。
+ * `Object.prototype.toString` 能跨 realm 工作，但会读取 `Symbol.toStringTag`；
+ * 因此实现会拒绝函数自身伪造的标签，同时保留 bound async 函数从原型链继承标签的兼容性。
  *
  * 注意：
  * - 传入非函数值一律返回 `false`，不会抛异常。
@@ -104,9 +105,20 @@ export const isFunction = (value: unknown): value is (...args: never[]) => unkno
  *   后者调用后返回 `AsyncGenerator` 而非 `Promise`，类型上也不应断言为返回 `Promise`。
  * - 经过 `Function.prototype.bind` 绑定后的 `async` 函数仍能被正确识别，
  *   因为 bound function 的原型链会继承 `AsyncFunction.prototype` 上的 `Symbol.toStringTag`。
+ * - 这是防御性类型守卫而非安全边界：若调用方主动伪造原型链，结果仍不应作为安全决策依据。
  */
+const hasAsyncFunctionTag = (value: object): boolean => {
+  // 保留 bound async 函数从 AsyncFunction.prototype 继承标签的兼容性，
+  // 但不信任函数自身可被任意伪造的 Symbol.toStringTag。
+  if (Object.getOwnPropertyDescriptor(value, Symbol.toStringTag) !== undefined) {
+    return false;
+  }
+
+  return Object.prototype.toString.call(value) === "[object AsyncFunction]";
+};
+
 export const isAsyncFunction = (value: unknown): value is (...args: never[]) => Promise<unknown> =>
-  typeof value === "function" && Object.prototype.toString.call(value) === "[object AsyncFunction]";
+  typeof value === "function" && hasAsyncFunctionTag(value);
 
 /**
  * 跳过源码中的空白和注释，返回下一个有效字符下标。
@@ -177,6 +189,159 @@ const isIdentifierPart = (char: string | undefined): boolean =>
   char !== undefined && /[$0-9A-Z_a-z]/.test(char);
 
 /**
+ * 跳过单引号或双引号字符串，转义字符不会结束当前字面量。
+ */
+const skipQuotedLiteral = (source: string, start: number): number => {
+  const quote = source[start];
+  let index = start + 1;
+
+  while (index < source.length) {
+    if (source[index] === "\\") {
+      index += 2;
+      continue;
+    }
+    if (source[index] === quote) {
+      return index + 1;
+    }
+    index += 1;
+  }
+
+  return index;
+};
+
+/**
+ * 判断当前位置的斜杠是否可作为正则字面量起始符。
+ * 覆盖参数默认值中常见的标点与关键字表达式起始位置，避免把除法误当作正则。
+ */
+const isRegularExpressionStart = (source: string, start: number): boolean => {
+  let index = start - 1;
+
+  while (index >= 0 && /\s/.test(source[index] ?? "")) {
+    index -= 1;
+  }
+
+  const previous = source[index];
+  if (previous === undefined || "=([{,:;!&|?~*%^<>".includes(previous)) {
+    return true;
+  }
+
+  let wordStart = index;
+  while (wordStart >= 0 && isIdentifierPart(source[wordStart])) {
+    wordStart -= 1;
+  }
+
+  const previousWord = source.slice(wordStart + 1, index + 1);
+  return (
+    previousWord === "return" ||
+    previousWord === "throw" ||
+    previousWord === "case" ||
+    previousWord === "delete" ||
+    previousWord === "void" ||
+    previousWord === "typeof" ||
+    previousWord === "yield" ||
+    previousWord === "await"
+  );
+};
+
+/**
+ * 跳过正则字面量及其字符类；调用方先保证当前位置确实是正则起始斜杠。
+ */
+const skipRegularExpressionLiteral = (source: string, start: number): number => {
+  let index = start + 1;
+  let inCharacterClass = false;
+
+  while (index < source.length) {
+    const char = source[index];
+
+    if (char === "\\") {
+      index += 2;
+      continue;
+    }
+    if (char === "[") {
+      inCharacterClass = true;
+    } else if (char === "]") {
+      inCharacterClass = false;
+    } else if (char === "/" && !inCharacterClass) {
+      index += 1;
+      while (/[A-Za-z]/.test(source[index] ?? "")) {
+        index += 1;
+      }
+      return index;
+    }
+    index += 1;
+  }
+
+  return index;
+};
+
+/**
+ * 跳过模板插值表达式。这里只需识别其边界，插值内部的圆括号不应影响外层参数列表深度。
+ */
+const skipTemplateExpression = (source: string, start: number): number => {
+  let index = start;
+  let depth = 1;
+
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+
+    if (char === "'" || char === '"') {
+      index = skipQuotedLiteral(source, index);
+      continue;
+    }
+    if (char === "`") {
+      index = skipTemplateLiteral(source, index);
+      continue;
+    }
+    if (char === "/" && (next === "*" || next === "/")) {
+      index = skipWhitespaceAndComments(source, index);
+      continue;
+    }
+    if (char === "/" && isRegularExpressionStart(source, index)) {
+      index = skipRegularExpressionLiteral(source, index);
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+    index += 1;
+  }
+
+  return index;
+};
+
+/**
+ * 跳过模板字面量及其插值；模板中的字符不会参与外层参数括号计数。
+ */
+const skipTemplateLiteral = (source: string, start: number): number => {
+  let index = start + 1;
+
+  while (index < source.length) {
+    const char = source[index];
+
+    if (char === "\\") {
+      index += 2;
+      continue;
+    }
+    if (char === "`") {
+      return index + 1;
+    }
+    if (char === "$" && source[index + 1] === "{") {
+      index = skipTemplateExpression(source, index + 2);
+      continue;
+    }
+    index += 1;
+  }
+
+  return index;
+};
+
+/**
  * 检测函数源码文本是否以箭头函数语法开头。
  *
  * 这是判断箭头函数的核心依据：箭头函数在 JavaScript 运行时没有专属的
@@ -215,6 +380,21 @@ const isArrowSource = (source: string): boolean => {
 
       if (char === "/" && (next === "*" || next === "/")) {
         index = skipWhitespaceAndComments(source, index);
+        continue;
+      }
+
+      if (char === "'" || char === '"') {
+        index = skipQuotedLiteral(source, index);
+        continue;
+      }
+
+      if (char === "`") {
+        index = skipTemplateLiteral(source, index);
+        continue;
+      }
+
+      if (char === "/" && isRegularExpressionStart(source, index)) {
+        index = skipRegularExpressionLiteral(source, index);
         continue;
       }
 
@@ -338,7 +518,7 @@ export const isAsyncArrowFunction = (
   value: unknown,
 ): value is (...args: never[]) => Promise<unknown> =>
   typeof value === "function" &&
-  Object.prototype.toString.call(value) === "[object AsyncFunction]" &&
+  hasAsyncFunctionTag(value) &&
   isArrowSource(Function.prototype.toString.call(value));
 
 /**

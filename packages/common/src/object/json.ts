@@ -161,7 +161,8 @@ const createFilterReplacer = () => {
 /**
  * 检测对象图中是否存在循环引用。
  *
- * 用 `WeakSet` 跟踪已访问的对象，深度优先遍历整个对象图。
+ * 用 `WeakSet` 跟踪当前递归祖先链，深度优先遍历整个对象图。
+ * 同一对象可在不同分支中复用；只有再次访问当前祖先链中的对象才是循环引用。
  * 仅做检测，不修改原值，也不调用 `toJSON`。
  * 这是文件内部辅助函数，不对外导出。
  *
@@ -173,33 +174,37 @@ const detectCircular = (value: unknown): boolean => {
     return false;
   }
 
-  const seen = new WeakSet<object>();
+  const ancestors = new WeakSet<object>();
 
   const hasCycle = (current: unknown): boolean => {
     if (typeof current !== "object" || current === null) {
       return false;
     }
 
-    if (seen.has(current)) {
+    if (ancestors.has(current)) {
       return true;
     }
-    seen.add(current);
+    ancestors.add(current);
 
-    if (Array.isArray(current)) {
-      for (const item of current) {
-        if (hasCycle(item)) {
-          return true;
+    try {
+      if (Array.isArray(current)) {
+        for (const item of current) {
+          if (hasCycle(item)) {
+            return true;
+          }
+        }
+      } else {
+        for (const key of Object.keys(current)) {
+          if (hasCycle((current as Record<string, unknown>)[key])) {
+            return true;
+          }
         }
       }
-    } else {
-      for (const key of Object.keys(current)) {
-        if (hasCycle((current as Record<string, unknown>)[key])) {
-          return true;
-        }
-      }
+
+      return false;
+    } finally {
+      ancestors.delete(current);
     }
-
-    return false;
   };
 
   return hasCycle(value);
@@ -317,7 +322,13 @@ const postProcess = <T>(
 
   const result: Record<string, unknown> = {};
   for (const key of keys) {
-    result[key] = postProcess(obj[key], comparator, filterNullish);
+    // 使用数据属性定义，避免 `__proto__` 触发 Object.prototype 上的访问器并改变结果原型。
+    Object.defineProperty(result, key, {
+      value: postProcess(obj[key], comparator, filterNullish),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
   return result as T;
 };

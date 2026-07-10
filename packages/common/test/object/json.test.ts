@@ -128,6 +128,24 @@ describe("object/json", () => {
     expect(jsonStringify(data)).toBe('{"a":{"x":1},"b":{"x":1}}');
   });
 
+  it("配置化路径下的共享对象引用不视为循环", () => {
+    const shared = { x: 1 };
+    const data = { b: shared, a: shared };
+    expect(jsonStringify(data, { sortKeys: true })).toBe('{"a":{"x":1},"b":{"x":1}}');
+  });
+
+  it("配置化路径识别对象与数组中的真实循环引用", () => {
+    const objectCycle: Record<string, unknown> = {};
+    objectCycle.self = objectCycle;
+    const arrayCycle: unknown[] = [];
+    arrayCycle.push(arrayCycle);
+
+    expect(() => jsonStringify(objectCycle, { sortKeys: true })).toThrow(
+      JsonCircularReferenceError,
+    );
+    expect(() => jsonStringify(arrayCycle, { sortKeys: true })).toThrow(JsonCircularReferenceError);
+  });
+
   it("基本反序列化", () => {
     expect(jsonParse('{"a":1,"b":"x"}')).toEqual({ a: 1, b: "x" });
     expect(jsonParse("[1,2,3]")).toEqual([1, 2, 3]);
@@ -160,6 +178,28 @@ describe("object/json", () => {
     const text = '{"a":1,"b":null,"c":"x"}';
     const result = jsonParse<Record<string, unknown>>(text, { filterNullish: true });
     expect(result).toEqual({ a: 1, c: "x" });
+  });
+
+  it("反序列化排序时将根级 __proto__ 保留为自有数据属性", () => {
+    const result = jsonParse<Record<string, unknown>>('{"__proto__":{"polluted":true},"safe":1}', {
+      sortKeys: true,
+    });
+
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(result.polluted).toBeUndefined();
+    expect(Object.getOwnPropertyDescriptor(result, "__proto__")?.value).toEqual({ polluted: true });
+  });
+
+  it("反序列化过滤时将嵌套 __proto__ 保留为自有数据属性", () => {
+    const result = jsonParse<{ nested: Record<string, unknown> }>(
+      '{"nested":{"__proto__":{"polluted":true},"safe":1}}',
+      { filterNullish: true },
+    );
+    const nested = result.nested;
+
+    expect(Object.getPrototypeOf(nested)).toBe(Object.prototype);
+    expect(nested.polluted).toBeUndefined();
+    expect(Object.getOwnPropertyDescriptor(nested, "__proto__")?.value).toEqual({ polluted: true });
   });
 
   it("反序列化不合法 JSON 抛 SyntaxError", () => {

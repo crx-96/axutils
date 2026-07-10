@@ -89,6 +89,22 @@ describe("crypto/md5", () => {
     expect(bytesToBase64FromNode(bytes)).toBe("XUFAKrxLKna5cZ2REBfFkg==");
   });
 
+  it("直接编码时会拒绝范围外或非整数的字节", () => {
+    const invalidBytes = [[-1], [256], [1.5], [Number.NaN], [Number.POSITIVE_INFINITY]];
+    const encoders = [
+      bytesToHexFromBrowser,
+      bytesToBase64FromBrowser,
+      bytesToHexFromNode,
+      bytesToBase64FromNode,
+    ];
+
+    for (const encoder of encoders) {
+      for (const bytes of invalidBytes) {
+        expect(() => encoder(bytes)).toThrow(TypeError);
+      }
+    }
+  });
+
   it("Node 实现与浏览器实现对同一输入结果一致", () => {
     const browserMd5 = new BrowserMd5().update("你好");
     const nodeMd5 = new NodeMd5().update("你好");
@@ -121,6 +137,19 @@ describe("crypto/md5", () => {
     expect(() => decodeHexFromNode("zz")).toThrow(/hex/i);
     expect(() => decodeBase64FromBrowser("abc")).toThrow(/base64/i);
     expect(() => decodeBase64FromNode("ab=c")).toThrow(/base64|padding/i);
+  });
+
+  it("base64 解码允许空白，但拒绝非末组填充、尾随数据和非规范未使用位", () => {
+    const decoders = [decodeBase64FromBrowser, decodeBase64FromNode];
+    const invalidBase64 = ["TQ==TQ==", "TQ==AAAA", "TR==", "TWF="];
+
+    for (const decode of decoders) {
+      expect([...decode("\n TWE= \t")]).toEqual([77, 97]);
+
+      for (const value of invalidBase64) {
+        expect(() => decode(value)).toThrow(TypeError);
+      }
+    }
   });
 
   it("主入口不导出 md5 API，保持按需安装模式", () => {

@@ -117,6 +117,10 @@ describe("type", () => {
     expect(isAsyncFunction(Promise.resolve())).toBe(false);
     // bound 后的 async 函数仍能被正确识别（原型链继承 AsyncFunction.prototype 的 Symbol.toStringTag）
     expect(isAsyncFunction((async () => {}).bind(null))).toBe(true);
+    // 函数自身伪造的 Symbol.toStringTag 不能被误判为 async 函数
+    const fakeAsync = () => 1;
+    Object.defineProperty(fakeAsync, Symbol.toStringTag, { value: "AsyncFunction" });
+    expect(isAsyncFunction(fakeAsync)).toBe(false);
     // 非函数
     expect(isAsyncFunction({})).toBe(false);
     expect(isAsyncFunction(null)).toBe(false);
@@ -158,6 +162,20 @@ describe("type", () => {
     expect(isArrowFunction((a: number) => a)).toBe(true);
     expect(isArrowFunction((a = 1) => a)).toBe(true);
     expect(isArrowFunction((a = (() => 1)()) => a)).toBe(true);
+    // 默认值中的括号位于字面量内，不能提前结束参数列表扫描
+    expect(isArrowFunction((value = ")") => value)).toBe(true);
+    expect(isArrowFunction((value = `)`) => value)).toBe(true);
+    expect(isArrowFunction((value = /\)/u) => value)).toBe(true);
+    expect(
+      isArrowFunction(
+        (
+          // biome-ignore lint/complexity/useArrowFunction: 覆盖 return 后紧跟正则字面量的源码扫描位置
+          value = (function () {
+            return /\)/u;
+          })(),
+        ) => value,
+      ),
+    ).toBe(true);
     expect(isArrowFunction(({ a }: { a: number }) => a)).toBe(true);
     expect(isArrowFunction(({ a = Math.max(1, 2) }: { a?: number }) => a)).toBe(true);
     // 普通函数、生成器函数、class 均不是箭头函数
@@ -181,6 +199,7 @@ describe("type", () => {
     // async 箭头函数
     expect(isAsyncArrowFunction(async () => {})).toBe(true);
     expect(isAsyncArrowFunction(async (a: number) => a)).toBe(true);
+    expect(isAsyncArrowFunction(async (value = ")") => value)).toBe(true);
     // async function 声明不是 async 箭头
     // biome-ignore lint/complexity/useArrowFunction: 刻意使用 async function 声明语法
     expect(isAsyncArrowFunction(async function () {})).toBe(false);
@@ -193,6 +212,10 @@ describe("type", () => {
     expect(isAsyncArrowFunction(class {})).toBe(false);
     // bound 包装后 toString 返回 [native code]，无法识别
     expect(isAsyncArrowFunction((async () => {}).bind(null))).toBe(false);
+    // 同一伪造标签也不能令同步箭头函数通过 async 箭头守卫
+    const fakeAsyncArrow = () => 1;
+    Object.defineProperty(fakeAsyncArrow, Symbol.toStringTag, { value: "AsyncFunction" });
+    expect(isAsyncArrowFunction(fakeAsyncArrow)).toBe(false);
     // 非函数
     expect(isAsyncArrowFunction({})).toBe(false);
     expect(isAsyncArrowFunction(null)).toBe(false);

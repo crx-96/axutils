@@ -97,6 +97,10 @@ export const decodeBase64 = (value: string): Uint8Array => {
 
   for (let index = 0; index < sanitized.length; index += 4) {
     const chars = sanitized.slice(index, index + 4);
+    if (chars.includes("=") && index + 4 !== sanitized.length) {
+      throw new TypeError("base64 字符串 padding 只能出现在末个分组。");
+    }
+
     const values = [...chars].map((char, charIndex) => {
       if (char === "=") {
         if (
@@ -130,6 +134,12 @@ export const decodeBase64 = (value: string): Uint8Array => {
     ) {
       throw new TypeError("base64 字符串分组非法。");
     }
+    if (chars[2] === "=" && (second & 0b1111) !== 0) {
+      throw new TypeError("base64 字符串包含非规范未使用位。");
+    }
+    if (chars[3] === "=" && chars[2] !== "=" && (third & 0b11) !== 0) {
+      throw new TypeError("base64 字符串包含非规范未使用位。");
+    }
 
     const chunk = (first << 18) | (second << 12) | (third << 6) | fourth;
 
@@ -149,9 +159,11 @@ export const decodeBase64 = (value: string): Uint8Array => {
  * 把字节数组编码为小写十六进制字符串。
  */
 export const bytesToHex = (bytes: readonly number[] | Uint8Array): string => {
+  // 直接调用转换函数也必须遵循 MD5 输入的统一字节范围约束。
+  const normalizedBytes = toByteArray(bytes);
   let result = "";
 
-  for (const byte of bytes) {
+  for (const byte of normalizedBytes) {
     result += byte.toString(16).padStart(2, "0");
   }
 
@@ -162,13 +174,15 @@ export const bytesToHex = (bytes: readonly number[] | Uint8Array): string => {
  * 把字节数组编码为标准 base64 字符串。
  */
 export const bytesToBase64 = (bytes: readonly number[] | Uint8Array): string => {
+  // 直接调用转换函数也必须遵循 MD5 输入的统一字节范围约束。
+  const normalizedBytes = toByteArray(bytes);
   let result = "";
   let index = 0;
 
-  while (index < bytes.length) {
-    const first = bytes[index];
-    const second = bytes[index + 1];
-    const third = bytes[index + 2];
+  while (index < normalizedBytes.length) {
+    const first = normalizedBytes[index];
+    const second = normalizedBytes[index + 1];
+    const third = normalizedBytes[index + 2];
 
     if (first === undefined) {
       break;
