@@ -14,8 +14,12 @@ pnpm add @axutils/common
 
 如果需要使用可选子路径依赖，请额外安装对应 peer 依赖：
 
-- `@axutils/common/object/json`：`pnpm add safe-stable-stringify`
-- `@axutils/common/crypto/md5`：`pnpm add spark-md5`
+| 子路径 | 需要安装的方法 | peer 依赖 | 安装命令 |
+| --- | --- | --- | --- |
+| `@axutils/common/object/json` | `jsonStringify`、`jsonStringifySafe` | `safe-stable-stringify` | `pnpm add safe-stable-stringify` |
+| `@axutils/common/crypto/md5` | `Md5` | `spark-md5` | `pnpm add spark-md5` |
+
+> `jsonParse`、`jsonParseSafe` 不依赖第三方库；Node 侧 `@axutils/common/node/crypto/md5` 基于 `node:crypto`，均无需额外安装。
 
 ## 使用方式
 

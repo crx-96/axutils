@@ -14,6 +14,10 @@ import {
  *
  * 底层基于 spark-md5 的 ArrayBuffer 实现，避免把输入先转成“二进制字符串”再参与计算，
  * 这样更适合处理 `Uint8Array`、hex/base64 解码后的原始字节，以及 UTF-8 文本输入。
+ *
+ * 依赖说明：使用本类需要安装 peer 依赖 `spark-md5`（`npm i spark-md5`）。
+ * 不使用 `@axutils/common/crypto/md5` 子路径的用户无需安装。
+ * Node 侧可使用 `@axutils/common/node/crypto/md5`，基于 `node:crypto`，无需额外依赖。
  */
 export class Md5 {
   private declare readonly instance: InstanceType<typeof SparkMD5.ArrayBuffer>;

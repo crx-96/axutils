@@ -399,6 +399,8 @@ export const jsonParse = <T = unknown>(text: string, options?: JsonParseOptions)
  * 例如日志输出、缓存写入、不可信数据的兜底处理。
  * 如需区分错误类型或获取错误信息，请使用会抛异常的 {@link jsonStringify}。
  *
+ * 依赖说明：内部调用 {@link jsonStringify}，同样需要安装 peer 依赖 `safe-stable-stringify`。
+ *
  * @param value 待序列化的值
  * @param options 序列化配置，见 {@link JsonStringifyOptions}
  * @returns 成功时返回 JSON 字符串；根值不可序列化时返回 `undefined`；任何异常时返回 `null`
