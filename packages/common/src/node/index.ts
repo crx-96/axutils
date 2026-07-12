@@ -9,3 +9,5 @@ export {
 } from "./crypto/convert.js";
 export type { Md5Input, Md5StringEncoding } from "./crypto/md5.js";
 export { Md5 } from "./crypto/md5.js";
+export type { StorageKeyHandler, StorageOptions } from "./object/storage.js";
+export { StorageUtils } from "./object/storage.js";

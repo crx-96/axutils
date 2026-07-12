@@ -21,6 +21,52 @@ pnpm add @axutils/common
 
 > `jsonParse`、`jsonParseSafe` 不依赖第三方库；Node 侧 `@axutils/common/node/crypto/md5` 基于 `node:crypto`，均无需额外安装。
 
+## 缓存
+
+通用缓存从主入口或 `@axutils/common/object/storage` 导入。浏览器中默认使用 `localStorage`，传入 `type: "session"` 时使用 `sessionStorage`；实例创建时会用临时 key 探测目标 Web Storage 是否真正可读写，在 Node 或探测失败时固定降级为对应类型的进程内 Map。
+
+```ts
+import { StorageUtils } from "@axutils/common/object/storage";
+
+const storage = new StorageUtils({
+  prefix: "app:",
+  expired: 300, // 默认 300 秒；小于等于 0 表示不过期
+  type: "local",
+});
+
+storage.set("user", { id: 1 });
+console.log(storage.get<{ id: number }>("user"));
+storage.remove("user");
+storage.clear(); // 只清理 prefix 为 "app:" 的缓存
+```
+
+通用缓存值通过 JSON 编解码，不支持循环引用、`BigInt`、`undefined`、函数和 `Symbol`。其中 `undefined`、函数和 `Symbol` 即使位于对象字段或数组元素中也会被拒绝：`set` 抛出 `TypeError`，`setSafe` 返回 `false` 且不会写入数据。`Date`、`NaN`、`Infinity` 和返回可序列化值的自定义 `toJSON()` 保持原生 `JSON.stringify` 语义；`Map`、`Set`、Symbol 属性键等其他类型仍按原生 JSON 规则转换或忽略。
+
+过期时间单位为秒，小于等于 `0` 表示不过期；非有限数字会抛出 `TypeError`，计算后的绝对时间超出 JavaScript 安全整数范围时会抛出 `RangeError`。对应的 `setSafe` 会吞掉异常并返回 `false`。
+
+配置 `key` 处理函数时，函数接收已经拼接 `prefix` 的 key；例如使用 MD5 时可以这样写（需要先安装 `spark-md5`）：
+
+```ts
+import { Md5 } from "@axutils/common/crypto/md5";
+import { StorageUtils } from "@axutils/common/object/storage";
+
+const storage = new StorageUtils({
+  prefix: "app:",
+  key: (key) => new Md5().update(key).toHex(),
+});
+```
+
+Node 端如需明确使用高性能 Map 实现，可从 `@axutils/common/node/object/storage` 导入。它不做 JSON 编解码，直接保存值引用；缓存仅在当前 Node 进程内有效，不跨进程或重启持久化。
+
+```ts
+import { StorageUtils } from "@axutils/common/node/object/storage";
+
+const storage = new StorageUtils({ prefix: "worker:" });
+storage.set("job", { id: 1 });
+```
+
+两套实现都提供 `get`、`set`、`remove`、`clear` 以及对应的 `getSafe`、`setSafe`、`removeSafe`、`clearSafe`。safe 方法不会抛错：`getSafe` 失败返回 `null`，其他 safe 方法失败返回 `false`，成功返回 `true`。
+
 ## 使用方式
 
 从包主入口导入：

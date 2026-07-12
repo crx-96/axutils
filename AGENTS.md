@@ -30,6 +30,7 @@
 - `packages/common/scripts/smoke-esm.mjs`、`smoke-cjs.cjs`、`smoke-umd.cjs` 是发布产物验证的一部分，除非同步替换 `test:dist`、根 `check` 和 CI，否则不要删除。
 - `packages/common` 产出三种格式：ESM（`.js`）、CJS（`.cjs`）、UMD（`index.umd.cjs`）。UMD 全量包将第三方依赖打包进去供浏览器 `<script>` 直接引入；ESM/CJS 产物将第三方依赖 external 化。
 - 当功能依赖第三方库时，优先声明为 `peerDependencies` + `peerDependenciesMeta.optional: true`，实现按需安装，不影响不使用该功能的用户。
+- 可选 peer 依赖对应的 `devDependencies`（用于本地开发与测试）应放在声明该 peer 的子包 `package.json` 中，不要放到根目录；根目录 `devDependencies` 只保留全 workspace 共享的工具链依赖。
 
 ## 实现注释规则
 

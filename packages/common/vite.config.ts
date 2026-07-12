@@ -15,7 +15,9 @@ export default defineConfig({
         "node/crypto/md5": "./src/node/crypto/md5.ts",
         "node/index": "./src/node/index.ts",
         "object/json": "./src/object/json.ts",
+        "object/storage": "./src/object/storage.ts",
         "object/url": "./src/object/url.ts",
+        "node/object/storage": "./src/node/object/storage.ts",
       },
       fileName: (format: string, entryName: string) => {
         const extension = format === "es" ? "js" : "cjs";

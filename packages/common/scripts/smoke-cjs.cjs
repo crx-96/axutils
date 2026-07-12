@@ -3,6 +3,7 @@ const {
   isNumber: isNumberFromEntry,
   objectToQuery: objectToQueryFromEntry,
   queryToObject: queryToObjectFromEntry,
+  StorageUtils: CommonStorageUtils,
 } = require("@axutils/common");
 const {
   isEmail: isEmailFromReg,
@@ -41,6 +42,8 @@ const {
   jsonStringify: jsonStringifyFromObjectJson,
   jsonStringifySafe: jsonStringifySafeFromObjectJson,
 } = require("@axutils/common/object/json");
+const { StorageUtils: BrowserStorageUtils } = require("@axutils/common/object/storage");
+const { StorageUtils: NodeStorageUtils } = require("@axutils/common/node/object/storage");
 const { objectToQuery, queryToObject } = require("@axutils/common/object/url");
 
 if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {
@@ -107,6 +110,24 @@ if (
   JSON.stringify(queryToObject("https://example.com/?tag=cjs&tag=url")) !== '{"tag":["cjs","url"]}'
 ) {
   throw new Error("CJS object/url 子路径解析验证失败。");
+}
+
+const browserStorage = new BrowserStorageUtils({ prefix: "smoke-cjs-" });
+browserStorage.set("key", "value");
+if (browserStorage.get("key") !== "value") {
+  throw new Error("CJS object/storage 子路径读写验证失败。");
+}
+
+const commonStorage = new CommonStorageUtils({ prefix: "smoke-cjs-common-" });
+commonStorage.set("key", "value");
+if (commonStorage.get("key") !== "value") {
+  throw new Error("CJS 主入口 storage 读写验证失败。");
+}
+
+const nodeStorage = new NodeStorageUtils({ prefix: "smoke-cjs-node-" });
+nodeStorage.set("key", "value");
+if (nodeStorage.get("key") !== "value") {
+  throw new Error("CJS node/object/storage 子路径读写验证失败。");
 }
 
 if ("Md5" in require("@axutils/common")) {

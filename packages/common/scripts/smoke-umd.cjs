@@ -36,6 +36,14 @@ if (
 ) {
   throw new Error("UMD 浏览器全局分支 queryToObject 验证失败。");
 }
+if (typeof BrowserAxutilsCommon.StorageUtils !== "function") {
+  throw new Error("UMD 浏览器全局分支缺失 StorageUtils 导出。");
+}
+const browserStorage = new BrowserAxutilsCommon.StorageUtils({ prefix: "smoke-umd-" });
+browserStorage.set("key", "value");
+if (browserStorage.get("key") !== "value") {
+  throw new Error("UMD 浏览器全局分支 storage 读写验证失败。");
+}
 
 if (typeof AxutilsCommon.isNumber !== "function") {
   throw new Error("UMD 产物缺失 isNumber 导出。");
@@ -60,6 +68,9 @@ if (
   typeof AxutilsCommon.queryToObject !== "function"
 ) {
   throw new Error("UMD 产物缺失 URL 查询工具导出。");
+}
+if (typeof AxutilsCommon.StorageUtils !== "function") {
+  throw new Error("UMD 产物缺失 StorageUtils 导出。");
 }
 
 if (!AxutilsCommon.isNumber(1) || AxutilsCommon.isNumber(NaN)) {

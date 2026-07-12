@@ -60,6 +60,16 @@
         "default": "./dist/object/json.cjs"
       }
     },
+    "./object/storage": {
+      "import": {
+        "types": "./dist/object/storage.d.ts",
+        "default": "./dist/object/storage.js"
+      },
+      "require": {
+        "types": "./dist/object/storage.d.cts",
+        "default": "./dist/object/storage.cjs"
+      }
+    },
     "./object/url": {
       "import": {
         "types": "./dist/object/url.d.ts",
@@ -119,6 +129,16 @@
         "types": "./dist/node/crypto/convert.d.cts",
         "default": "./dist/node/crypto/convert.cjs"
       }
+    },
+    "./node/object/storage": {
+      "import": {
+        "types": "./dist/node/object/storage.d.ts",
+        "default": "./dist/node/object/storage.js"
+      },
+      "require": {
+        "types": "./dist/node/object/storage.d.cts",
+        "default": "./dist/node/object/storage.cjs"
+      }
     }
   },
   "files": [
@@ -160,6 +180,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "safe-stable-stringify": "^2.5.0",
     "spark-md5": "^3.0.2"
   }
 }

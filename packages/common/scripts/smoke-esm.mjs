@@ -1,4 +1,5 @@
 import {
+  StorageUtils as CommonStorageUtils,
   isEmail as isEmailFromEntry,
   isNumber as isNumberFromEntry,
   objectToQuery as objectToQueryFromEntry,
@@ -35,12 +36,14 @@ import {
   normalizeMd5Input as normalizeMd5InputFromNodeCryptoConvert,
 } from "@axutils/common/node/crypto/convert";
 import { Md5 as Md5FromNodeCryptoPath } from "@axutils/common/node/crypto/md5";
+import { StorageUtils as NodeStorageUtils } from "@axutils/common/node/object/storage";
 import {
   jsonParse as jsonParseFromObjectJson,
   jsonParseSafe as jsonParseSafeFromObjectJson,
   jsonStringify as jsonStringifyFromObjectJson,
   jsonStringifySafe as jsonStringifySafeFromObjectJson,
 } from "@axutils/common/object/json";
+import { StorageUtils as BrowserStorageUtils } from "@axutils/common/object/storage";
 import { objectToQuery, queryToObject } from "@axutils/common/object/url";
 
 if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {
@@ -107,6 +110,24 @@ if (
   JSON.stringify(queryToObject("https://example.com/?tag=esm&tag=url")) !== '{"tag":["esm","url"]}'
 ) {
   throw new Error("ESM object/url 子路径解析验证失败。");
+}
+
+const browserStorage = new BrowserStorageUtils({ prefix: "smoke-esm-" });
+browserStorage.set("key", "value");
+if (browserStorage.get("key") !== "value") {
+  throw new Error("ESM object/storage 子路径读写验证失败。");
+}
+
+const commonStorage = new CommonStorageUtils({ prefix: "smoke-esm-common-" });
+commonStorage.set("key", "value");
+if (commonStorage.get("key") !== "value") {
+  throw new Error("ESM 主入口 storage 读写验证失败。");
+}
+
+const nodeStorage = new NodeStorageUtils({ prefix: "smoke-esm-node-" });
+nodeStorage.set("key", "value");
+if (nodeStorage.get("key") !== "value") {
+  throw new Error("ESM node/object/storage 子路径读写验证失败。");
 }
 
 if ("Md5" in (await import("@axutils/common"))) {
