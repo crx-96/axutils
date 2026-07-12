@@ -40,8 +40,8 @@ export class Md5 {
     }
 
     const bytes = normalizeMd5Input(input, encoding);
-    const buffer = Uint8Array.from(bytes).buffer as ArrayBuffer;
-    this.instance.append(buffer);
+    // normalizeMd5Input 始终返回覆盖完整底层 buffer 的新 Uint8Array，因此这里无需再次复制。
+    this.instance.append(bytes.buffer as ArrayBuffer);
     return this;
   }
 

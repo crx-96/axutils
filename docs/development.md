@@ -56,7 +56,7 @@ CI 的验证步骤与根 `check` 脚本对齐：`lint` → `typecheck` → `test
 关于 Node.js 版本口径：
 - **CI 运行版本**：Node.js `24`（CI 实际执行环境）
 - **仓库开发要求**：`Node.js >= 20.19.0`（根 `package.json` 的 `engines.node`，本地开发最低版本）
-- **消费方运行时兼容**：各子包 `package.json` 的 `engines.node`（如 `@axutils/common` 声明 `>= 14.18.0`），面向包使用者，与仓库开发要求不同
+- **消费方运行时兼容**：各子包 `package.json` 的 `engines.node`（当前 `@axutils/common` 声明 `>= 14.18.0`），面向包使用者，与仓库开发要求不同
 
 ## 根目录命令
 

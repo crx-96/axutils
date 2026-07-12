@@ -37,15 +37,18 @@ export const normalizeMd5Input = (
  * 这里只做字节范围与整数性校验，不负责更高层输入语义。
  */
 export const toByteArray = (input: readonly number[] | Uint8Array): Uint8Array => {
-  const array = input instanceof Uint8Array ? Array.from(input) : [...input];
+  if (input instanceof Uint8Array) {
+    // Uint8Array 的元素天然是 0-255 整数；slice 仍返回独立副本，避免暴露调用方存储。
+    return input.slice();
+  }
 
-  for (const byte of array) {
+  for (const byte of input) {
     if (!Number.isInteger(byte) || byte < 0 || byte > 255) {
       throw new TypeError("MD5 update 只接受 0-255 的字节值。");
     }
   }
 
-  return Uint8Array.from(array);
+  return Uint8Array.from(input);
 };
 
 /**

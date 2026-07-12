@@ -55,7 +55,7 @@ export default defineConfig({
       name: "AxutilsCommon",
     },
     sourcemap: true,
-    target: "es2015",
+    target: "es2020",
   },
 });
 `;

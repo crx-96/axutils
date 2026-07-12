@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   binaryStringToBytes as binaryStringToBytesFromBrowser,
   bytesToBase64 as bytesToBase64FromBrowser,
@@ -6,6 +6,7 @@ import {
   decodeBase64 as decodeBase64FromBrowser,
   decodeHex as decodeHexFromBrowser,
   normalizeMd5Input as normalizeMd5InputFromBrowser,
+  toByteArray as toByteArrayFromBrowser,
 } from "../../src/crypto/convert";
 import { Md5 as BrowserMd5 } from "../../src/crypto/md5";
 import * as CommonEntry from "../../src/index";
@@ -16,6 +17,7 @@ import {
   decodeBase64 as decodeBase64FromNode,
   decodeHex as decodeHexFromNode,
   normalizeMd5Input as normalizeMd5InputFromNode,
+  toByteArray as toByteArrayFromNode,
 } from "../../src/node/crypto/convert";
 import { Md5 as NodeMd5 } from "../../src/node/crypto/md5";
 
@@ -40,6 +42,53 @@ describe("crypto/md5", () => {
     expect(new BrowserMd5().update(new Uint8Array(bytes)).toHex()).toBe(
       "5d41402abc4b2a76b9719d911017c592",
     );
+  });
+
+  it("Uint8Array 归一化不经过普通数组中转", () => {
+    const arrayFrom = vi.spyOn(Array, "from");
+
+    try {
+      const browserResult = toByteArrayFromBrowser(new Uint8Array([1, 2, 3]));
+      const nodeResult = toByteArrayFromNode(new Uint8Array([1, 2, 3]));
+      const calls = arrayFrom.mock.calls.slice();
+
+      expect([...browserResult]).toEqual([1, 2, 3]);
+      expect([...nodeResult]).toEqual([1, 2, 3]);
+      expect(calls).toHaveLength(0);
+    } finally {
+      arrayFrom.mockRestore();
+    }
+  });
+
+  it("浏览器 MD5 的 Uint8Array 更新不再重复构造字节数组", () => {
+    const uint8ArrayFrom = vi.spyOn(Uint8Array, "from");
+
+    try {
+      const md5 = new BrowserMd5();
+      md5.update(new Uint8Array([1, 2, 3]));
+      const calls = uint8ArrayFrom.mock.calls.slice();
+
+      expect(calls).toHaveLength(0);
+    } finally {
+      uint8ArrayFrom.mockRestore();
+    }
+  });
+
+  it("不会读取 update 之后对 Uint8Array 原输入的修改", () => {
+    const input = new Uint8Array([0x61, 0x62, 0x63]);
+    const browserMd5 = new BrowserMd5().update(input);
+    const nodeMd5 = new NodeMd5().update(input);
+
+    input[0] = 0x7a;
+
+    expect(browserMd5.toHex()).toBe("900150983cd24fb0d6963f7d28e17f72");
+    expect(nodeMd5.toHex()).toBe("900150983cd24fb0d6963f7d28e17f72");
+  });
+
+  it("大 Uint8Array 输入在浏览器和 Node 实现中保持一致", () => {
+    const input = Uint8Array.from({ length: 1024 * 1024 }, (_, index) => index % 256);
+
+    expect(new BrowserMd5().update(input).toHex()).toBe(new NodeMd5().update(input).toHex());
   });
 
   it("支持 utf8、hex、base64 字符串输入编码", () => {

@@ -28,7 +28,7 @@ export default defineConfig({
       external: (id: string) => !id.startsWith(".") && !id.startsWith("/"),
     },
     sourcemap: true,
-    target: "es2015",
+    target: "es2020",
   },
   test: {
     coverage: {

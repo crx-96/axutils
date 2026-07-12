@@ -277,7 +277,7 @@ export const jsonStringify = (
 
   // onCycle === "skip" 时 circularValue 设为 null（循环引用值替换为 null），
   // 否则设为 Error（理论上不会触达，循环引用已被预检测拦截，仅作兜底）
-  // 注意：不用展开运算符 ...，避免 es2015 target 下 esbuild 注入 @oxc-project/runtime 辅助
+  // 注意：采用显式属性写法，避免构建器为对象展开运算符注入额外辅助代码，保持产物轻量
   const config = {
     deterministic: resolveDeterministic(options?.sortKeys),
     bigint: true,

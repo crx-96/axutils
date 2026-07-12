@@ -25,6 +25,7 @@
 - 代码应保持 tree-shaking 友好：避免包级副作用，优先纯函数和按模块导出。
 - 无第三方运行时依赖、且同时兼容浏览器与 Node.js 的公共工具，除提供子路径导出外，还必须从包主入口提供命名导出。仅当该工具会引入可选依赖、依赖 Node 专属能力，或明显增加主入口负担时，才允许仅提供子路径导出。
 - `packages/common` 当前源码结构是 `src/index.ts + src/check/* + src/object/*`；测试目录应镜像源码分组，保持 `test/check/*`、`test/object/*` 与之对应。
+- 本项目打包产物的目标 JavaScript 版本为 ES2020；新增或修改代码时应尽量使用 ES2020 兼容的语法与运行时能力，避免依赖 ES2021 及更高版本的特性。面向用户发布的 Node.js 包最低运行时版本保持为 `>=14.18.0`；仓库本地开发环境仍按根 `package.json` 的要求使用更高版本。
 - `packages/common/scripts/build.mjs` 会先删除 `dist` 再重建；不要绕过这个脚本手写构建流程。
 - `packages/common/scripts/smoke-esm.mjs`、`smoke-cjs.cjs`、`smoke-umd.cjs` 是发布产物验证的一部分，除非同步替换 `test:dist`、根 `check` 和 CI，否则不要删除。
 - `packages/common` 产出三种格式：ESM（`.js`）、CJS（`.cjs`）、UMD（`index.umd.cjs`）。UMD 全量包将第三方依赖打包进去供浏览器 `<script>` 直接引入；ESM/CJS 产物将第三方依赖 external 化。
