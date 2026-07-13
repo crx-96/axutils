@@ -1,8 +1,8 @@
-# axutils 项目指令
+# axutils 项目 CLAUDE.md
 
-本文件是 `axutils` 仓库级补充规则，和用户级 `AGENTS.md` 叠加生效。
+本文件是 `axutils` 仓库级 Claude 补充规则，和用户级 `~/.claude/CLAUDE.md` 叠加生效。
 
-> **同步约定**：本文件与项目根目录的 `CLAUDE.md` 共同构成项目级 AI 规范。修改任一文件时，必须同步检查另一个文件是否需要对应更新，确保 Codex/ZCode 侧的 `AGENTS.md` 和 Claude 侧的 `CLAUDE.md` 在项目约定上保持一致。工具特有能力的部分（如子代理类型、skill 引用语法）按各自工具实际能力独立维护，但项目专属规则（目录结构、包管理、构建流程、文档测试要求）必须双向同步。
+> **同步约定**：本文件与项目根目录的 `AGENTS.md` 共同构成项目级 AI 规范。修改任一文件时，必须同步检查另一个文件是否需要对应更新，确保 Claude 侧的 `CLAUDE.md` 和 Codex/ZCode 侧的 `AGENTS.md` 在项目约定上保持一致。工具特有能力的部分（如子代理类型、skill 引用语法）按各自工具实际能力独立维护，但项目专属规则（目录结构、包管理、构建流程、文档测试要求）必须双向同步。
 
 ## 项目目标
 
@@ -37,7 +37,7 @@
 ## 包管理器与依赖安装
 
 - 根目录 `package.json` 中的 `packageManager` 是唯一包管理器版本来源；当前固定使用 `pnpm@10.34.4`，涉及安装、测试、构建和检查时统一通过 `corepack pnpm` 执行。
-- 不要使用 Codex 自带、全局或其他版本的 `pnpm` 重建 `node_modules`。不同 pnpm 版本可能生成不兼容的依赖链接布局，导致 `corepack pnpm check` 或 UMD 构建出现依赖解析错误；如果依赖目录需要重建，应使用 `corepack pnpm install --frozen-lockfile`。
+- 不要使用 Claude 自带、全局或其他版本的 `pnpm` 重建 `node_modules`。不同 pnpm 版本可能生成不兼容的依赖链接布局，导致 `corepack pnpm check` 或 UMD 构建出现依赖解析错误；如果依赖目录需要重建，应使用 `corepack pnpm install --frozen-lockfile`。
 - 如果当前环境没有可用的 `corepack`，不要静默改用其他 pnpm 安装依赖；应先说明环境阻塞，或让用户在本机使用项目要求的 `corepack pnpm install`，再继续验证。
 
 ## 实现注释规则
@@ -45,7 +45,7 @@
 - 工具库中的公开方法和关键实现逻辑必须写中文注释，不能只保留无说明的裸实现。
 - 注释应优先解释实现意图、适用范围、边界条件和已知限制，而不是简单把代码逐句翻译成自然语言。
 - 类型守卫、正则校验、复杂条件判断、边界值处理这类实现，注释需要比普通工具函数更详细，说明为什么这样判断，以及刻意排除了哪些情况。
-- 如果某个实现属于“轻量校验”而不是完整规范实现，必须在注释里明确写出，避免调用方误判能力边界。
+- 如果某个实现属于"轻量校验"而不是完整规范实现，必须在注释里明确写出，避免调用方误判能力边界。
 
 ## 文档与测试规则
 
@@ -54,12 +54,39 @@
 - 根 README 面向仓库使用者；子包 README 面向 npm 包使用者。
 - 子包 README 只能包含安装方式、运行时兼容性、可选依赖、公开导出和使用示例等包使用信息；不得写入仓库开发、构建、测试、发布、CI 或协作者流程等任何开发者信息。
 - 修改子包公开 API、子路径导出或构建脚本时，必须同步更新 `package.json` 的 `exports`、README 示例和测试。
-- 改动 `docs/skills/*` 下的 skill 时，必须同步更新对应 `AGENTS.md` 中引用的约束或说明；如果某个仓库约定已经沉淀为 skill，后续变更不能只改代码不改 skill。
+- 改动 `docs/skills/*` 下的 skill 时，必须同步更新对应 `CLAUDE.md` 中引用的约束或说明；如果某个仓库约定已经沉淀为 skill，后续变更不能只改代码不改 skill。
 - 子包方法用到第三方 peer 依赖时，必须在子包 README（安装章节或方法说明处）和源码方法注释中同时说明：需要安装哪个包、安装命令、哪些方法受影响。避免使用者只看 README 或只看代码注释时遗漏依赖信息。
 
-## 项目内 skills
+## 项目内 Skills
 
 以下 skill 文档为仓库内操作规范，AI 在对应场景下应优先读取：
 
 - 新增子包流程：[docs/skills/add-axutils-package/SKILL.md](./docs/skills/add-axutils-package/SKILL.md)
 - 项目审查流程：[docs/skills/review-axutils-project/SKILL.md](./docs/skills/review-axutils-project/SKILL.md)
+
+## Claude 专项约定
+
+### 代码修改流程
+
+1. 修改前先确认影响范围：读取相关文件，确认 `exports`、测试和 README 是否需要同步更新。
+2. 修改完成后，按以下顺序验证：
+   - 运行 `corepack pnpm check` 确保 lint + 格式 + 测试 + 构建全部通过。
+   - 如果改了公共 API，确认 `exports` 和 README 已同步更新。
+   - 提交前使用 `/verify` 做端到端验证。
+
+### 子代理使用
+
+- 本仓库的代码探索和审查（跨包追踪、依赖分析、API 面审查）可委托 `Explore` 子代理。
+- 具体实现和测试补充可委托 `general-purpose` 子代理。
+- 新增子包这类涉及多文件、多步骤的任务，优先使用 `EnterPlanMode` 规划后再执行。
+
+### 常用命令
+
+| 场景               | 命令                                   |
+| ------------------ | -------------------------------------- |
+| 完整检查           | `corepack pnpm check`                  |
+| 仅类型检查         | `corepack pnpm check:types`            |
+| 仅 lint            | `corepack pnpm check:lint`             |
+| 仅测试             | `corepack pnpm test`                   |
+| 构建单个包         | `cd packages/common && node scripts/build.mjs` |
+| 安装依赖           | `corepack pnpm install --frozen-lockfile` |
