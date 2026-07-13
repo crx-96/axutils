@@ -6,3 +6,4 @@ export * from "./object/object.js";
 export * from "./object/storage.js";
 export * from "./object/timing.js";
 export * from "./object/url.js";
+export * from "./rxjs/http.js";

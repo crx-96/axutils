@@ -120,6 +120,16 @@
         "default": "./dist/crypto/convert.cjs"
       }
     },
+    "./rxjs/http": {
+      "import": {
+        "types": "./dist/rxjs/http.d.ts",
+        "default": "./dist/rxjs/http.js"
+      },
+      "require": {
+        "types": "./dist/rxjs/http.d.cts",
+        "default": "./dist/rxjs/http.cjs"
+      }
+    },
     "./node": {
       "import": {
         "types": "./dist/node/index.d.ts",
@@ -172,10 +182,18 @@
     "access": "public"
   },
   "peerDependencies": {
+    "axios": "^1.18.1",
+    "rxjs": "^7.8.2",
     "safe-stable-stringify": "^2.4.0",
     "spark-md5": "^3.0.2"
   },
   "peerDependenciesMeta": {
+    "axios": {
+      "optional": true
+    },
+    "rxjs": {
+      "optional": true
+    },
     "safe-stable-stringify": {
       "optional": true
     },
@@ -200,6 +218,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "axios": "^1.18.1",
+    "rxjs": "^7.8.2",
     "safe-stable-stringify": "^2.5.0",
     "spark-md5": "^3.0.2"
   }

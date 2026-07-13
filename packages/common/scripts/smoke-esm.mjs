@@ -53,6 +53,14 @@ import {
   throttle as throttleFromPath,
 } from "@axutils/common/object/timing";
 import { objectToQuery, queryToObject } from "@axutils/common/object/url";
+import {
+  HttpRequestError as HttpRequestErrorFromRxjs,
+  RxHttpClient as RxHttpClientFromRxjs,
+} from "@axutils/common/rxjs/http";
+
+if (typeof RxHttpClientFromRxjs !== "function" || typeof HttpRequestErrorFromRxjs !== "function") {
+  throw new Error("ESM rxjs/http 子路径导出验证失败。");
+}
 
 if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {
   throw new Error("ESM 主入口类型判断验证失败。");

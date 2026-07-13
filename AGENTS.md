@@ -32,6 +32,12 @@
 - 当功能依赖第三方库时，优先声明为 `peerDependencies` + `peerDependenciesMeta.optional: true`，实现按需安装，不影响不使用该功能的用户。
 - 可选 peer 依赖对应的 `devDependencies`（用于本地开发与测试）应放在声明该 peer 的子包 `package.json` 中，不要放到根目录；根目录 `devDependencies` 只保留全 workspace 共享的工具链依赖。
 
+## 包管理器与依赖安装
+
+- 根目录 `package.json` 中的 `packageManager` 是唯一包管理器版本来源；当前固定使用 `pnpm@10.34.4`，涉及安装、测试、构建和检查时统一通过 `corepack pnpm` 执行。
+- 不要使用 Codex 自带、全局或其他版本的 `pnpm` 重建 `node_modules`。不同 pnpm 版本可能生成不兼容的依赖链接布局，导致 `corepack pnpm check` 或 UMD 构建出现依赖解析错误；如果依赖目录需要重建，应使用 `corepack pnpm install --frozen-lockfile`。
+- 如果当前环境没有可用的 `corepack`，不要静默改用其他 pnpm 安装依赖；应先说明环境阻塞，或让用户在本机使用项目要求的 `corepack pnpm install`，再继续验证。
+
 ## 实现注释规则
 
 - 工具库中的公开方法和关键实现逻辑必须写中文注释，不能只保留无说明的裸实现。

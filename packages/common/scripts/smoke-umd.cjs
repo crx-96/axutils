@@ -15,6 +15,12 @@ const BrowserAxutilsCommon = browserContext.AxutilsCommon;
 if (typeof BrowserAxutilsCommon?.isNumber !== "function") {
   throw new Error("UMD 浏览器全局分支缺失 AxutilsCommon.isNumber 导出。");
 }
+if (
+  typeof BrowserAxutilsCommon.RxHttpClient !== "function" ||
+  typeof BrowserAxutilsCommon.HttpRequestError !== "function"
+) {
+  throw new Error("UMD 浏览器全局分支缺失 RxJS HTTP 导出。");
+}
 if (!BrowserAxutilsCommon.isNumber(1) || BrowserAxutilsCommon.isNumber(NaN)) {
   throw new Error("UMD 浏览器全局分支 isNumber 验证失败。");
 }
@@ -91,6 +97,12 @@ if (
 
 if (typeof AxutilsCommon.isNumber !== "function") {
   throw new Error("UMD 产物缺失 isNumber 导出。");
+}
+if (
+  typeof AxutilsCommon.RxHttpClient !== "function" ||
+  typeof AxutilsCommon.HttpRequestError !== "function"
+) {
+  throw new Error("UMD 产物缺失 RxJS HTTP 导出。");
 }
 if (typeof AxutilsCommon.isEmail !== "function") {
   throw new Error("UMD 产物缺失 isEmail 导出。");

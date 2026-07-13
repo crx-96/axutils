@@ -53,6 +53,14 @@ const {
 } = require("@axutils/common/object/timing");
 const { StorageUtils: NodeStorageUtils } = require("@axutils/common/node/object/storage");
 const { objectToQuery, queryToObject } = require("@axutils/common/object/url");
+const {
+  HttpRequestError: HttpRequestErrorFromRxjs,
+  RxHttpClient: RxHttpClientFromRxjs,
+} = require("@axutils/common/rxjs/http");
+
+if (typeof RxHttpClientFromRxjs !== "function" || typeof HttpRequestErrorFromRxjs !== "function") {
+  throw new Error("CJS rxjs/http 子路径导出验证失败。");
+}
 
 if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {
   throw new Error("CJS 主入口类型判断验证失败。");

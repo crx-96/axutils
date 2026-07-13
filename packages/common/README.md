@@ -12,14 +12,105 @@
 pnpm add @axutils/common
 ```
 
+如果需要使用 RxJS HTTP 子路径，请按需安装：
+
+```bash
+pnpm add @axutils/common rxjs axios safe-stable-stringify spark-md5
+```
+
+`@axutils/common/rxjs/http` 不会从包主入口加载；不使用该功能时无需安装这些依赖。
+
 如果需要使用可选子路径依赖，请额外安装对应 peer 依赖：
 
 | 子路径 | 需要安装的方法 | peer 依赖 | 安装命令 |
 | --- | --- | --- | --- |
+| `@axutils/common/rxjs/http` | `RxHttpClient`、`HttpRequestError` | `rxjs`、`axios`、`safe-stable-stringify`、`spark-md5` | `pnpm add rxjs axios safe-stable-stringify spark-md5` |
 | `@axutils/common/object/json` | `jsonStringify`、`jsonStringifySafe` | `safe-stable-stringify` | `pnpm add safe-stable-stringify` |
 | `@axutils/common/crypto/md5` | `Md5` | `spark-md5` | `pnpm add spark-md5` |
 
 > `jsonParse`、`jsonParseSafe` 不依赖第三方库；Node 侧 `@axutils/common/node/crypto/md5` 基于 `node:crypto`，均无需额外安装。
+
+## RxJS HTTP 请求
+
+从 `@axutils/common/rxjs/http` 按需导入。请求方法返回 Observable，只有订阅时才会读取异步配置并调用 Axios；Axios 的默认适配器兼容浏览器、Node.js 和 Nuxt SSR。
+
+```ts
+import { RxHttpClient } from "@axutils/common/rxjs/http";
+
+const client = new RxHttpClient({
+  baseUrl: "https://api.example.com",
+  retryCount: 3, // 最多三次总尝试，不是额外重试三次
+  retryDelay: 100,
+  timeout: 10_000,
+});
+
+client.get<{ id: number }>("/users/1").subscribe({
+  next: (result) => {
+    console.log(result.code, result.data);
+  },
+  error: (error) => {
+    console.error(error);
+  },
+});
+```
+
+如果配置需要异步获取，可以使用静态 `create`；工厂返回 Observable，首次请求成功后配置会缓存，失败时默认最多按同步选项的 `retryCount` 尝试三次：
+
+```ts
+import { of } from "rxjs";
+import { RxHttpClient } from "@axutils/common/rxjs/http";
+
+const client = RxHttpClient.create(
+  () => of({ baseUrl: "https://api.example.com", retryCount: 3 }),
+  { retryCount: 3 },
+);
+```
+
+相同 method、完整 URL、params、data、headers、timeout 和重试选项的请求，在上一个请求结束前只会执行一次；订阅者共享同一个成功结果对象或错误实例。默认情况下，即使最后一个订阅者提前取消订阅，仍会等待底层请求结束并复用它，避免重复发起；开启 `cancelOnNoSubscribers` 后才会在最后一个订阅者离开时中止请求。请求结束后不会保留响应缓存，下一次调用会重新请求。传入 `signal` 的请求不会自动去重，以保证每个调用方都能独立取消；`abort()` 也会立即终止异步配置和 `retryDelay` 等尚未发起网络请求的等待阶段。
+
+```ts
+const request$ = client.get("/profile", { params: { tenant: "demo" } });
+request$.subscribe(renderProfile);
+client.get("/profile", { params: { tenant: "demo" } }).subscribe(renderProfile);
+```
+
+失败通过 Observable 的 `error` 通道发出 `HttpRequestError`，其 `code` 只表示 HTTP 状态码；无 HTTP 响应时为 `0`，错误分类为 `config`、`http`、`network`、`timeout`、`cancel` 或 `unknown`。默认只对 GET、HEAD、OPTIONS 的网络错误、超时、429 和 5xx 重试，4xx 不重试；可用 `retryable: false` 关闭单个请求的重试。POST、PUT、PATCH、DELETE 默认不重试；只有明确传入 `retryNonIdempotent: true` 时才允许这些方法重试，以避免网络异常但服务端已完成写入时造成重复提交。
+
+```ts
+import { HttpRequestError } from "@axutils/common/rxjs/http";
+
+client.get("/profile").subscribe({
+  error: (error) => {
+    if (error instanceof HttpRequestError) {
+      console.log(error.error.kind, error.code, error.error.cause);
+    }
+  },
+});
+```
+
+FormData、流、Map、Set 和循环引用等无法稳定 JSON 序列化的请求体默认不会自动去重；需要显式传入相同的 `dedupeKey`。显式 key 只负责声明不稳定请求体的去重身份；method、完整 URL、重试选项以及可稳定序列化的 params、headers 仍会参与区分，因此不同 URL 不会因为复用了同一个 key 而错误合并。如果 params 或 headers 本身也无法稳定序列化，应由 key 一并表达其业务身份：
+
+```ts
+client.post("/upload", formData, { dedupeKey: "upload:avatar:1" });
+```
+
+如果希望在最后一个订阅者取消时中止底层 Axios 请求，可以开启 `cancelOnNoSubscribers`；默认值为 `false`，取消订阅时只停止当前订阅者接收结果。使用请求去重时，只有所有订阅者都取消后才会触发 abort：
+
+```ts
+const request$ = client.get("/search", {
+  params: { keyword: "rxjs" },
+  cancelOnNoSubscribers: true,
+});
+
+const firstSubscription = request$.subscribe(renderResult);
+const secondSubscription = request$.subscribe(renderResult);
+firstSubscription.unsubscribe(); // 请求继续执行
+secondSubscription.unsubscribe(); // 最后一个订阅者离开，取消 Axios 请求
+```
+
+写请求或后台任务如果需要在调用方取消订阅后继续执行，请保持 `cancelOnNoSubscribers: false`。
+
+UMD 全量包会内置 RxJS、Axios、`safe-stable-stringify` 和 `spark-md5`；ESM/CJS 的 `rxjs/http` 子路径则将这些依赖作为可选 peer 依赖按需安装。
 
 ## 防抖、节流与深拷贝
 

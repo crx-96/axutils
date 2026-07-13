@@ -20,6 +20,7 @@ export default defineConfig({
         "object/timing": "./src/object/timing.ts",
         "object/url": "./src/object/url.ts",
         "node/object/storage": "./src/node/object/storage.ts",
+        "rxjs/http": "./src/rxjs/http.ts",
       },
       fileName: (format: string, entryName: string) => {
         const extension = format === "es" ? "js" : "cjs";
