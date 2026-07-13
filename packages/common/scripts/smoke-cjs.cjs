@@ -4,6 +4,9 @@ const {
   objectToQuery: objectToQueryFromEntry,
   queryToObject: queryToObjectFromEntry,
   StorageUtils: CommonStorageUtils,
+  debounce: debounceFromEntry,
+  deepClone: deepCloneFromEntry,
+  throttle: throttleFromEntry,
 } = require("@axutils/common");
 const {
   isEmail: isEmailFromReg,
@@ -43,6 +46,11 @@ const {
   jsonStringifySafe: jsonStringifySafeFromObjectJson,
 } = require("@axutils/common/object/json");
 const { StorageUtils: BrowserStorageUtils } = require("@axutils/common/object/storage");
+const { deepClone: deepCloneFromPath } = require("@axutils/common/object/object");
+const {
+  debounce: debounceFromPath,
+  throttle: throttleFromPath,
+} = require("@axutils/common/object/timing");
 const { StorageUtils: NodeStorageUtils } = require("@axutils/common/node/object/storage");
 const { objectToQuery, queryToObject } = require("@axutils/common/object/url");
 
@@ -59,6 +67,32 @@ if (objectToQueryFromEntry({ tag: ["cjs", "entry"] }) !== "tag=cjs&tag=entry") {
 if (JSON.stringify(queryToObjectFromEntry("?tag=cjs&tag=entry")) !== '{"tag":["cjs","entry"]}') {
   throw new Error("CJS 主入口 URL 查询解析验证失败。");
 }
+if (
+  typeof debounceFromEntry !== "function" ||
+  typeof throttleFromEntry !== "function" ||
+  typeof deepCloneFromEntry !== "function"
+) {
+  throw new Error("CJS 主入口对象工具导出验证失败。");
+}
+if (debounceFromEntry !== debounceFromPath || throttleFromEntry !== throttleFromPath) {
+  throw new Error("CJS 对象工具子路径与主入口导出不一致。");
+}
+const cjsCloneSource = { nested: { value: 1 } };
+const cjsClone = deepCloneFromEntry(cjsCloneSource);
+if (cjsClone === cjsCloneSource || cjsClone.nested === cjsCloneSource.nested) {
+  throw new Error("CJS 主入口 deepClone 验证失败。");
+}
+if (deepCloneFromEntry !== deepCloneFromPath) {
+  throw new Error("CJS deepClone 子路径与主入口导出不一致。");
+}
+if (throttleFromEntry(() => "cjs", 0)() !== "cjs") {
+  throw new Error("CJS throttle 调用验证失败。");
+}
+const cjsDebounced = debounceFromEntry(() => {}, 0);
+if (typeof cjsDebounced.cancel !== "function") {
+  throw new Error("CJS debounce cancel 验证失败。");
+}
+cjsDebounced.cancel();
 
 if (!isArrayFromType(["cjs"]) || !isBooleanFromType(true)) {
   throw new Error("CJS type 子路径导入验证失败。");

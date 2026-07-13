@@ -1,9 +1,12 @@
 import {
   StorageUtils as CommonStorageUtils,
+  debounce as debounceFromEntry,
+  deepClone as deepCloneFromEntry,
   isEmail as isEmailFromEntry,
   isNumber as isNumberFromEntry,
   objectToQuery as objectToQueryFromEntry,
   queryToObject as queryToObjectFromEntry,
+  throttle as throttleFromEntry,
 } from "@axutils/common";
 import {
   isBrowser as isBrowserFromPlatform,
@@ -43,7 +46,12 @@ import {
   jsonStringify as jsonStringifyFromObjectJson,
   jsonStringifySafe as jsonStringifySafeFromObjectJson,
 } from "@axutils/common/object/json";
+import { deepClone as deepCloneFromPath } from "@axutils/common/object/object";
 import { StorageUtils as BrowserStorageUtils } from "@axutils/common/object/storage";
+import {
+  debounce as debounceFromPath,
+  throttle as throttleFromPath,
+} from "@axutils/common/object/timing";
 import { objectToQuery, queryToObject } from "@axutils/common/object/url";
 
 if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {
@@ -59,6 +67,32 @@ if (objectToQueryFromEntry({ tag: ["esm", "entry"] }) !== "tag=esm&tag=entry") {
 if (JSON.stringify(queryToObjectFromEntry("?tag=esm&tag=entry")) !== '{"tag":["esm","entry"]}') {
   throw new Error("ESM 主入口 URL 查询解析验证失败。");
 }
+if (
+  typeof debounceFromEntry !== "function" ||
+  typeof throttleFromEntry !== "function" ||
+  typeof deepCloneFromEntry !== "function"
+) {
+  throw new Error("ESM 主入口对象工具导出验证失败。");
+}
+if (debounceFromEntry !== debounceFromPath || throttleFromEntry !== throttleFromPath) {
+  throw new Error("ESM 对象工具子路径与主入口导出不一致。");
+}
+const esmCloneSource = { nested: { value: 1 } };
+const esmClone = deepCloneFromEntry(esmCloneSource);
+if (esmClone === esmCloneSource || esmClone.nested === esmCloneSource.nested) {
+  throw new Error("ESM 主入口 deepClone 验证失败。");
+}
+if (deepCloneFromEntry !== deepCloneFromPath) {
+  throw new Error("ESM deepClone 子路径与主入口导出不一致。");
+}
+if (throttleFromEntry(() => "esm", 0)() !== "esm") {
+  throw new Error("ESM throttle 调用验证失败。");
+}
+const esmDebounced = debounceFromEntry(() => {}, 0);
+if (typeof esmDebounced.cancel !== "function") {
+  throw new Error("ESM debounce cancel 验证失败。");
+}
+esmDebounced.cancel();
 
 if (!isArrayFromType(["esm"]) || !isBooleanFromType(true)) {
   throw new Error("ESM type 子路径导入验证失败。");

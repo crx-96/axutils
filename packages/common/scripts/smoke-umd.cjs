@@ -21,6 +21,26 @@ if (!BrowserAxutilsCommon.isNumber(1) || BrowserAxutilsCommon.isNumber(NaN)) {
 if (!BrowserAxutilsCommon.isEmail("umd@example.com")) {
   throw new Error("UMD 浏览器全局分支 isEmail 验证失败。");
 }
+if (
+  typeof BrowserAxutilsCommon.debounce !== "function" ||
+  typeof BrowserAxutilsCommon.throttle !== "function" ||
+  typeof BrowserAxutilsCommon.deepClone !== "function"
+) {
+  throw new Error("UMD 浏览器全局分支对象工具导出验证失败。");
+}
+if (BrowserAxutilsCommon.throttle(() => "umd", 0)() !== "umd") {
+  throw new Error("UMD 浏览器全局分支 throttle 调用验证失败。");
+}
+const browserCloneSource = vm.runInContext("({ nested: { value: 1 } })", browserContext);
+const browserClone = BrowserAxutilsCommon.deepClone(browserCloneSource);
+if (browserClone === browserCloneSource || browserClone.nested === browserCloneSource.nested) {
+  throw new Error("UMD 浏览器全局分支 deepClone 验证失败。");
+}
+const browserDebounced = BrowserAxutilsCommon.debounce(() => {}, 0);
+if (typeof browserDebounced.cancel !== "function") {
+  throw new Error("UMD 浏览器全局分支 debounce cancel 验证失败。");
+}
+browserDebounced.cancel();
 if (BrowserAxutilsCommon.jsonStringify({ b: 2, a: 1 }, { sortKeys: true }) !== '{"a":1,"b":2}') {
   throw new Error("UMD 浏览器全局分支 jsonStringify 验证失败。");
 }
@@ -43,6 +63,30 @@ const browserStorage = new BrowserAxutilsCommon.StorageUtils({ prefix: "smoke-um
 browserStorage.set("key", "value");
 if (browserStorage.get("key") !== "value") {
   throw new Error("UMD 浏览器全局分支 storage 读写验证失败。");
+}
+
+// 使用 Node Realm 中的 UMD 函数复制浏览器 Realm 创建的对象，覆盖跨 Realm 输入边界。
+const crossRealmCloneSource = vm.runInContext(
+  "({ nested: { value: 1 }, date: new Date(0), regexp: /x/g, map: new Map([[{ id: 1 }, { value: 2 }]]), set: new Set([{ id: 3 }]) })",
+  browserContext,
+);
+const crossRealmClone = AxutilsCommon.deepClone(crossRealmCloneSource);
+const sourceMapEntry = [...crossRealmCloneSource.map.entries()][0];
+const clonedMapEntry = [...crossRealmClone.map.entries()][0];
+const sourceSetValue = [...crossRealmCloneSource.set][0];
+const clonedSetValue = [...crossRealmClone.set][0];
+if (
+  crossRealmClone === crossRealmCloneSource ||
+  crossRealmClone.nested === crossRealmCloneSource.nested ||
+  crossRealmClone.date === crossRealmCloneSource.date ||
+  crossRealmClone.regexp === crossRealmCloneSource.regexp ||
+  crossRealmClone.map === crossRealmCloneSource.map ||
+  crossRealmClone.set === crossRealmCloneSource.set ||
+  clonedMapEntry?.[0] === sourceMapEntry?.[0] ||
+  clonedMapEntry?.[1] === sourceMapEntry?.[1] ||
+  clonedSetValue === sourceSetValue
+) {
+  throw new Error("UMD 产物跨 Realm deepClone 验证失败。");
 }
 
 if (typeof AxutilsCommon.isNumber !== "function") {
@@ -71,6 +115,13 @@ if (
 }
 if (typeof AxutilsCommon.StorageUtils !== "function") {
   throw new Error("UMD 产物缺失 StorageUtils 导出。");
+}
+if (
+  typeof AxutilsCommon.debounce !== "function" ||
+  typeof AxutilsCommon.throttle !== "function" ||
+  typeof AxutilsCommon.deepClone !== "function"
+) {
+  throw new Error("UMD 产物缺失对象工具导出。");
 }
 
 if (!AxutilsCommon.isNumber(1) || AxutilsCommon.isNumber(NaN)) {

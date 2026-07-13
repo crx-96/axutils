@@ -1,6 +1,6 @@
 # @axutils/common
 
-`@axutils/common` 是 `axutils` monorepo 中的公共工具子包，当前提供一组常用类型判断、格式校验、运行时平台判断、JSON 序列化与 MD5 工具方法，作为后续公共工具集合的基础能力。
+`@axutils/common` 是 `axutils` monorepo 中的公共工具子包，当前提供一组常用类型判断、格式校验、运行时平台判断、对象工具、JSON 序列化与 MD5 工具方法，作为后续公共工具集合的基础能力。
 
 ## 兼容性
 
@@ -20,6 +20,38 @@ pnpm add @axutils/common
 | `@axutils/common/crypto/md5` | `Md5` | `spark-md5` | `pnpm add spark-md5` |
 
 > `jsonParse`、`jsonParseSafe` 不依赖第三方库；Node 侧 `@axutils/common/node/crypto/md5` 基于 `node:crypto`，均无需额外安装。
+
+## 防抖、节流与深拷贝
+
+三个工具均不依赖第三方包，可从主入口或对应子路径导入：
+
+```ts
+import { debounce, deepClone, throttle } from "@axutils/common";
+
+const saveDraft = debounce((content: string) => {
+  console.log("保存草稿", content);
+}, 300);
+saveDraft("latest");
+saveDraft.cancel(); // 取消尚未执行的保存
+
+const handleResize = throttle(() => {
+  console.log("处理一次尺寸变化");
+}, 100);
+handleResize(); // 首次调用立即执行，周期内最后一次调用会在周期末补执行
+
+const copiedState = deepClone({ user: { id: 1 }, tags: ["common"] });
+```
+
+也可以按需导入：
+
+```ts
+import { debounce, throttle } from "@axutils/common/object/timing";
+import { deepClone } from "@axutils/common/object/object";
+```
+
+`debounce` 和 `throttle` 的 `wait` 必须是 `0` 到 `2_147_483_647` 之间的有限数字；非有限值、负数或超出定时器上限的值分别抛出 `TypeError` 或 `RangeError`，`0` 合法。两个包装函数都会保留调用时的 `this` 和参数，并提供 `cancel()`；防抖默认只执行停止调用后的最后一次，节流默认首次立即执行并在周期末执行最后一次。如果周期边界仍有待执行的 trailing 定时器，边界调用会并入该调度并返回 `undefined`；其他节流周期内排队的调用也返回 `undefined`，只有同步执行的回调结果会返回给调用方。
+
+`deepClone` 支持原始值、数组、当前或其他 Realm 创建的普通对象、`Date`、`RegExp`、`Map`、`Set`、循环引用和共享引用，复制可枚举自有字符串/Symbol 属性并保留 `Object.create(null)` 原型。函数、自定义 class 实例、TypedArray、`WeakMap`、`WeakSet` 和 `Promise` 等未声明支持的对象会原样保留；属性描述符和非枚举属性不会复制。
 
 ## 缓存
 

@@ -15,7 +15,9 @@ export default defineConfig({
         "node/crypto/md5": "./src/node/crypto/md5.ts",
         "node/index": "./src/node/index.ts",
         "object/json": "./src/object/json.ts",
+        "object/object": "./src/object/object.ts",
         "object/storage": "./src/object/storage.ts",
+        "object/timing": "./src/object/timing.ts",
         "object/url": "./src/object/url.ts",
         "node/object/storage": "./src/node/object/storage.ts",
       },
@@ -27,7 +29,9 @@ export default defineConfig({
     },
     // ESM/CJS 产物：第三方包和 Node 内置模块不打包（external）
     rollupOptions: {
-      external: (id: string) => !id.startsWith(".") && !id.startsWith("/"),
+      // Rollup 在 Windows 上会把相对依赖解析成盘符开头的绝对路径；这些仍是包内模块，不能被误判为 external。
+      external: (id: string) =>
+        !id.startsWith(".") && !id.startsWith("/") && !/^[A-Za-z]:[\\/]/u.test(id),
     },
     sourcemap: true,
     target: "es2020",

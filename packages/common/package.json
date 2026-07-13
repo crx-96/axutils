@@ -50,6 +50,16 @@
         "default": "./dist/check/platform.cjs"
       }
     },
+    "./object/object": {
+      "import": {
+        "types": "./dist/object/object.d.ts",
+        "default": "./dist/object/object.js"
+      },
+      "require": {
+        "types": "./dist/object/object.d.cts",
+        "default": "./dist/object/object.cjs"
+      }
+    },
     "./object/json": {
       "import": {
         "types": "./dist/object/json.d.ts",
@@ -68,6 +78,16 @@
       "require": {
         "types": "./dist/object/storage.d.cts",
         "default": "./dist/object/storage.cjs"
+      }
+    },
+    "./object/timing": {
+      "import": {
+        "types": "./dist/object/timing.d.ts",
+        "default": "./dist/object/timing.js"
+      },
+      "require": {
+        "types": "./dist/object/timing.d.cts",
+        "default": "./dist/object/timing.cjs"
       }
     },
     "./object/url": {
