@@ -83,6 +83,13 @@ describe("object/url", () => {
     expect(queryToObject("/path#x?tag=a")).toEqual({});
   });
 
+  it("按 URLSearchParams 规则处理空 query、双问号和百分号边界", () => {
+    expect(queryToObject("?")).toEqual({});
+    expect(queryToObject("/path??a=1")).toEqual({ a: "1" });
+    expect(queryToObject("value=%00")).toEqual({ value: "\u0000" });
+    expect(queryToObject("value=%ZZ")).toEqual({ value: "%ZZ" });
+  });
+
   it("将重复 key 解析为保序字符串数组，并正确解码百分号和加号空格", () => {
     expect(queryToObject("tag=ts&tag=node&keyword=%E4%BD%A0%E5%A5%BD+world")).toEqual({
       tag: ["ts", "node"],

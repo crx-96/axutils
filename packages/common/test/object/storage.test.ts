@@ -57,6 +57,19 @@ class ThrowingStorage extends TestStorage {
   }
 }
 
+class PartiallyThrowingStorage extends TestStorage {
+  constructor(private readonly failingKey: string) {
+    super();
+  }
+
+  override getItem(key: string): string | null {
+    if (key === this.failingKey) {
+      throw new Error("partial get failed");
+    }
+    return super.getItem(key);
+  }
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -148,6 +161,20 @@ describe("object/storage", () => {
 
     expect(first.get("first")).toBeNull();
     expect(second.get("second")).toBe(2);
+  });
+
+  it("clear 在部分 key 读取失败时保留已清理结果并抛出异常", () => {
+    const failingKey = "storage-clear-partial-second";
+    const store = new PartiallyThrowingStorage(failingKey);
+    vi.stubGlobal("localStorage", store);
+    const storage = new StorageUtils({ prefix: "storage-clear-partial-" });
+
+    storage.set("first", 1);
+    storage.set("second", 2);
+
+    expect(() => storage.clear()).toThrow("partial get failed");
+    expect(store.length).toBe(1);
+    expect(store.key(0)).toBe(failingKey);
   });
 
   it("get 遇到非 StorageUtils 数据时返回 null 且不删除原值", () => {
