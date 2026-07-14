@@ -1,5 +1,6 @@
 import type { Locale } from "date-fns";
 import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "./constant";
+import type { Timezone } from "./format";
 import type { DurationFields } from "./types";
 
 export const LOCAL_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -38,8 +39,8 @@ export function assertTimezone(timezone: string): string {
   return timezone;
 }
 
-export function getTimezone(timezone?: string): string {
-  return assertTimezone(timezone ?? LOCAL_TIMEZONE);
+export function getTimezone(timezone?: string): Timezone {
+  return assertTimezone(timezone ?? LOCAL_TIMEZONE) as Timezone;
 }
 
 export function createUtcDate(
@@ -133,7 +134,7 @@ export interface ParsedDateTime {
 }
 
 const DATE_TIME_PATTERN =
-  /^(\d{4})[-/](\d{2})[-/](\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})?(?:\[([^\]]+)\])?$/u;
+  /^(\d{4})[-/](\d{2})[-/](\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})?(?:\[([^\]]+)\])?$/u;
 
 export function parseDateTimeString(value: string): ParsedDateTime {
   const match = DATE_TIME_PATTERN.exec(value);
@@ -175,7 +176,7 @@ export function parseDateTimeString(value: string): ParsedDateTime {
 }
 
 export function parseDateString(value: string) {
-  const match = /^(\d{4})[-/](\d{2})[-/](\d{2})(?:T(.*))?$/u.exec(value);
+  const match = /^(\d{4})[-/](\d{2})[-/](\d{2})(?:[Tt ](.*))?$/u.exec(value);
   if (!match) {
     invalid("日期字符串必须是 YYYY-MM-DD、YYYY/MM/DD 或完整 ISO 日期时间");
   }

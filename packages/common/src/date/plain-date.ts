@@ -1,4 +1,5 @@
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import type { DateFormatPattern, Timezone } from "./format";
 import {
   addYearMonths,
   createLocalDate,
@@ -65,7 +66,7 @@ export const PlainDate = {
   },
 
   /** 将日期作为目标时区的午夜转换为带时区时间点。 */
-  toZonedDateTime(date: PlainDateInput, timezone: string): ZonedDateTimeValue {
+  toZonedDateTime(date: PlainDateInput, timezone: Timezone): ZonedDateTimeValue {
     const value = fromInput(date);
     return {
       epochMs: fromZonedTime(
@@ -178,8 +179,16 @@ export const PlainDate = {
     return `${String(fields.year).padStart(4, "0")}-${String(fields.month).padStart(2, "0")}-${String(fields.day).padStart(2, "0")}`;
   },
 
-  /** 使用 UTC 时区格式化，保证不同运行时本地时区得到相同结果。 */
-  format(date: PlainDateInput, pattern: string, options: DateFormatOptions = {}): string {
+  /**
+   * 使用 UTC 时区格式化，保证不同运行时本地时区得到相同结果。
+   * @see DATE_FORMAT 预设格式常量（可输入 DATE_FORMAT. 查看）
+   * @see https://date-fns.org/docs/format date-fns 格式 token 文档
+   */
+  format(
+    date: PlainDateInput,
+    pattern: DateFormatPattern,
+    options: DateFormatOptions = {},
+  ): string {
     return formatInTimeZone(fromInput(date), "UTC", pattern, formatOptions(options.locale));
   },
 };

@@ -14,7 +14,10 @@ function fromInput(input: PlainTimeInput): Date {
     return createUtcDate(1970, 1, 1, fields.hour, fields.minute, fields.second, fields.millisecond);
   }
   if (typeof input === "string") {
-    const dateTime = input.includes("T") || input.includes("t") ? parseDateTimeString(input) : null;
+    // 兼容接口和表单中常见的 `YYYY-MM-DD HH:mm:ss` 写法；纯时间仍走更严格的 HH:mm:ss 校验。
+    const dateTime = /^\d{4}[-/]\d{2}[-/]\d{2}[Tt ]/u.test(input)
+      ? parseDateTimeString(input)
+      : null;
     if (dateTime) {
       return createUtcDate(
         1970,

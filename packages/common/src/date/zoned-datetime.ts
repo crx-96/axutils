@@ -1,4 +1,5 @@
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import type { DateFormatPattern, Timezone } from "./format";
 import {
   createLocalDate,
   createUtcDate,
@@ -17,7 +18,7 @@ import type {
 } from "./types";
 
 interface ZonedDateTimeOptions {
-  timezone?: string;
+  timezone?: Timezone;
 }
 
 function fromInput(
@@ -137,7 +138,7 @@ export const ZonedDateTime = {
   },
 
   /** 切换时区但保持同一个绝对时间点。 */
-  withTimeZone(zdt: ZonedDateTimeValue, timezone: string): ZonedDateTimeValue {
+  withTimeZone(zdt: ZonedDateTimeValue, timezone: Timezone): ZonedDateTimeValue {
     return { epochMs: zdt.epochMs, timezone: getTimezone(timezone) };
   },
 
@@ -172,8 +173,16 @@ export const ZonedDateTime = {
     return compareEpoch(first, second);
   },
 
-  /** 按关联时区格式化。 */
-  format(zdt: ZonedDateTimeValue, pattern: string, options: DateFormatOptions = {}): string {
+  /**
+   * 按关联时区格式化。
+   * @see DATE_FORMAT 预设格式常量（可输入 DATE_FORMAT. 查看）
+   * @see https://date-fns.org/docs/format date-fns 格式 token 文档
+   */
+  format(
+    zdt: ZonedDateTimeValue,
+    pattern: DateFormatPattern,
+    options: DateFormatOptions = {},
+  ): string {
     return formatInTimeZone(
       new Date(zdt.epochMs),
       getTimezone(zdt.timezone),

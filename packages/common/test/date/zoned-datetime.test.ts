@@ -15,6 +15,11 @@ describe("date/ZonedDateTime", () => {
     expect(ZonedDateTime.toString(value)).toContain("+08:00");
   });
 
+  it("接受中国接口常见的空格分隔日期时间", () => {
+    const value = ZonedDateTime.from("2024-06-15 10:00:00", { timezone: "Asia/Shanghai" });
+    expect(value.epochMs).toBe(Date.parse("2024-06-15T02:00:00Z"));
+  });
+
   it("切换时区保持同一时刻，并处理边界偏移", () => {
     const value = ZonedDateTime.from("2024-06-15T00:00:00Z", { timezone: "UTC" });
     const newZone = ZonedDateTime.withTimeZone(value, "America/New_York");

@@ -257,26 +257,29 @@ storage.set("job", { id: 1 });
 pnpm add date-fns date-fns-tz
 ```
 
-所有 `from()` 在输入无效时抛出 `RangeError`。纯日期、纯时间和无时区日期时间从 `Date` 提取字段时统一使用 UTC getter；ISO 字符串由模块直接解析，避免运行时本地时区导致日期偏移。需要时区的参数使用 IANA 标识符，例如 `Asia/Shanghai`、`America/New_York` 和 `UTC`；省略时使用运行时本地时区。
+所有 `from()` 在输入无效时抛出 `RangeError`。纯日期、纯时间和无时区日期时间从 `Date` 提取字段时统一使用 UTC getter；日期时间字符串的日期和时间部分可以用 `T`、`t` 或空格分隔，例如 `2024-06-15 10:30:00`，模块会直接解析，避免运行时本地时区导致日期偏移。需要时区的参数使用 IANA 标识符，例如 `Asia/Shanghai`、`America/New_York` 和 `UTC`；省略时使用运行时本地时区。
 
 ```ts
 import {
   Duration,
+  DATE_FORMAT,
   Instant,
   Now,
   PlainDate,
   PlainDateTime,
   PlainTime,
+  TIMEZONE,
   ZonedDateTime,
 } from "@axutils/common/date";
 
 const date = PlainDate.add("2024-01-31", { months: 1 });
 console.log(PlainDate.toString(date)); // 2024-02-29，月末溢出会 clamp 到目标月最后一天
 console.log(PlainTime.toString(PlainTime.add("23:30:00", { hours: 1 }))); // 00:30:00
-console.log(PlainDateTime.toString(PlainDateTime.from("2024-06-15T10:30:00")));
+console.log(PlainDateTime.toString(PlainDateTime.from("2024-06-15 10:30:00")));
+console.log(PlainDateTime.format(PlainDateTime.from("2024-01-02T03:04:05"), DATE_FORMAT.CN_DATE_TIME));
 
-const zdt = ZonedDateTime.from("2024-06-15T10:00:00+08:00[Asia/Shanghai]");
-console.log(ZonedDateTime.toString(ZonedDateTime.withTimeZone(zdt, "America/New_York")));
+const zdt = ZonedDateTime.from("2024-06-15T10:00:00", { timezone: TIMEZONE.CHINA });
+console.log(ZonedDateTime.toString(ZonedDateTime.withTimeZone(zdt, TIMEZONE.AMERICA_NEW_YORK)));
 console.log(Instant.epochMilliseconds(Instant.from("2024-06-15T10:00:00Z")));
 console.log(Duration.fromMilliseconds(90_061_000));
 console.log(Now.plainDateISO("Asia/Shanghai"));
@@ -292,9 +295,13 @@ console.log(Now.plainDateISO("Asia/Shanghai"));
 - `Duration`：`from`、`fromMilliseconds`、`totalMilliseconds`、`negated`、`abs`、`add`、`subtract`。`from`、`add`、`subtract` 保留各字段、不自动归约；`fromMilliseconds` 才会按天到毫秒完整拆解。
 - `Now`：`plainDateISO`、`plainTimeISO`、`plainDateTimeISO`、`zonedDateTimeISO`、`instant`。
 
+`DATE_FORMAT` 提供 `DATE`、`DATE_TIME`、`DATE_TIME_MS`、`SLASH_DATE`、`SLASH_DATE_TIME`、`CN_DATE`、`CN_DATE_TIME`、`TIME`、`TIME_MS`、`ISO_OFFSET` 和 `ISO_UTC` 常用格式；`format()` 的 `pattern` 参数使用 `DateFormatPattern` 类型，IDE 会提示这些预设，同时仍允许传入自定义 date-fns 格式字符串。`CN_DATE` 和 `CN_DATE_TIME` 使用不补零的月份、日期，更符合中文页面的自然展示。
+
+`TIMEZONE` 按亚洲、欧洲、美洲、非洲和大洋洲提供全球主要国家及地区常用的 IANA 时区标识符，例如 `ASIA_SHANGHAI`、`ASIA_TOKYO`、`EUROPE_LONDON`、`EUROPE_PARIS`、`AMERICA_NEW_YORK`、`AMERICA_LOS_ANGELES`、`AFRICA_CAIRO`、`AUSTRALIA_SYDNEY` 和 `PACIFIC_AUCKLAND`。所有公开的 `timezone` 参数都使用 `Timezone` 类型，IDE 会提示 `TIMEZONE.` 下的常用值，同时仍允许传入自定义 IANA 字符串。`CHINA` 是 `Asia/Shanghai` 的语义化别名。列表覆盖高频城市和商业场景，不等于完整 IANA 时区数据库；特殊地区仍可直接传入自定义 IANA 字符串。不要使用 `CST`、`IST` 等有歧义的缩写。
+
 `Now.plainTimeISO` 会保留当前毫秒字段；返回值仍是以 `1970-01-01T...Z` 表示目标时区墙上时间的 UTC 对齐 `Date`。
 
-`format` 的 `options.locale` 接受已导入的 date-fns locale 对象（例如 `import { zhCN } from "date-fns/locale"`），不接受字符串名称。时间常量 `MS_PER_SECOND`、`MS_PER_MINUTE`、`MS_PER_HOUR`、`MS_PER_DAY`、`SECONDS_PER_MINUTE`、`SECONDS_PER_HOUR` 不依赖第三方库，可直接从 `@axutils/common` 主入口导入。
+`format` 的 `options.locale` 接受已导入的 date-fns locale 对象（例如 `import { zhCN } from "date-fns/locale"`），不接受字符串名称；`DATE_FORMAT` 和 `TIMEZONE` 可帮助 IDE 补全常用值。时间常量 `MS_PER_SECOND`、`MS_PER_MINUTE`、`MS_PER_HOUR`、`MS_PER_DAY`、`SECONDS_PER_MINUTE`、`SECONDS_PER_HOUR` 不依赖第三方库，可直接从 `@axutils/common` 主入口导入。
 
 ## 使用方式
 

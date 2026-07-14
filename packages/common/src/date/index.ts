@@ -1,4 +1,6 @@
 export { Duration } from "./duration";
+export type { DateFormatPattern, Timezone } from "./format";
+export { DATE_FORMAT, TIMEZONE } from "./format";
 export { Instant } from "./instant";
 export { Now } from "./now";
 export { PlainDate } from "./plain-date";

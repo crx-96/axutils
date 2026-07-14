@@ -17,6 +17,11 @@ describe("date/PlainDate", () => {
     expect(PlainDate.toString(PlainDate.from("2026/12/12T10:30:00"))).toBe("2026-12-12");
   });
 
+  it("校验并接受带空格的完整日期时间输入", () => {
+    expect(PlainDate.toString("2024-06-15 10:30:00")).toBe("2024-06-15");
+    expect(PlainDate.toString("2024-06-15t10:30:00Z")).toBe("2024-06-15");
+  });
+
   it("of 工厂方法正常构造", () => {
     expect(PlainDate.toString(PlainDate.of(2024, 6, 15))).toBe("2024-06-15");
   });

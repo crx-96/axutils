@@ -1,4 +1,5 @@
 import type { Locale } from "date-fns";
+import type { Timezone } from "./format";
 
 /** 纯日期工具接受的输入：ISO 字符串、Date 或 Temporal 风格字段对象。 */
 export type PlainDateInput =
@@ -52,11 +53,11 @@ export interface DurationFields {
 /** date-fns 格式化配置；locale 必须传入已导入的 locale 对象。 */
 export interface DateFormatOptions {
   locale?: Locale | undefined;
-  timezone?: string | undefined;
+  timezone?: Timezone | undefined;
 }
 
 /** 带时区时间点的轻量公开表示。 */
 export interface ZonedDateTimeValue {
   epochMs: number;
-  timezone: string;
+  timezone: Timezone;
 }

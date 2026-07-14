@@ -1,3 +1,4 @@
+import type { Timezone } from "./format";
 import {
   dateTimeToUtcDate,
   durationMilliseconds,
@@ -49,7 +50,7 @@ export const Instant = {
   },
 
   /** 将绝对时间点关联到指定 IANA 时区。 */
-  toZonedDateTime(epochMs: number, timezone: string): ZonedDateTimeValue {
+  toZonedDateTime(epochMs: number, timezone: Timezone): ZonedDateTimeValue {
     return { epochMs: toEpoch(epochMs), timezone: getTimezone(timezone) };
   },
 

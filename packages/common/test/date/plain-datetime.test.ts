@@ -18,6 +18,11 @@ describe("date/PlainDateTime", () => {
     expect(PlainDateTime.toString("2026/12/12T10:30:00Z")).toBe("2026-12-12T10:30:00");
   });
 
+  it("接受 T、t 和空格作为日期与时间的分隔符", () => {
+    expect(PlainDateTime.toString("2026-12-12 10:30:00")).toBe("2026-12-12T10:30:00");
+    expect(PlainDateTime.toString("2026-12-12t10:30:00")).toBe("2026-12-12T10:30:00");
+  });
+
   it("支持关联时区、提取部分和格式化", () => {
     const value = PlainDateTime.from("2024-06-15T10:30:00");
     expect(PlainDateTime.toZonedDateTime(value, "Asia/Shanghai")).toEqual({

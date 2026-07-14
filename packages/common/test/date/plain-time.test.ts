@@ -6,6 +6,7 @@ describe("date/PlainTime", () => {
     expect(PlainTime.toString("10:30:00")).toBe("10:30:00");
     expect(PlainTime.toString("10:30:00.500")).toBe("10:30:00.500");
     expect(PlainTime.toString("2024-06-15T10:30:00")).toBe("10:30:00");
+    expect(PlainTime.toString("2024-06-15 10:30:00")).toBe("10:30:00");
     expect(PlainTime.toString({ hour: 10, minute: 30 })).toBe("10:30:00");
     expect(() => PlainTime.from("10:30")).toThrow(RangeError);
     expect(() => PlainTime.from({ hour: 24, minute: 0 })).toThrow(RangeError);
