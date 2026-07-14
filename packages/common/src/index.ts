@@ -23,6 +23,14 @@ export {
   isPlainObject,
   isString,
 } from "./check/type";
+export {
+  MS_PER_DAY,
+  MS_PER_HOUR,
+  MS_PER_MINUTE,
+  MS_PER_SECOND,
+  SECONDS_PER_HOUR,
+  SECONDS_PER_MINUTE,
+} from "./date/constant";
 export { deepClone } from "./object/object";
 export type { StorageKeyHandler, StorageOptions, StorageType } from "./object/storage";
 export { StorageUtils } from "./object/storage";

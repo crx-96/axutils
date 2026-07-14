@@ -179,6 +179,16 @@
         "types": "./dist/node/object/storage.d.cts",
         "default": "./dist/node/object/storage.cjs"
       }
+    },
+    "./date": {
+      "import": {
+        "types": "./dist/date/index.d.ts",
+        "default": "./dist/date/index.js"
+      },
+      "require": {
+        "types": "./dist/date/index.d.cts",
+        "default": "./dist/date/index.cjs"
+      }
     }
   },
   "files": [
@@ -195,7 +205,9 @@
     "axios": "^1.18.1",
     "rxjs": "^7.8.2",
     "safe-stable-stringify": "^2.4.0",
-    "spark-md5": "^3.0.2"
+    "spark-md5": "^3.0.2",
+    "date-fns": "^4.4.0",
+    "date-fns-tz": "^3.2.0"
   },
   "peerDependenciesMeta": {
     "axios": {
@@ -208,6 +220,12 @@
       "optional": true
     },
     "spark-md5": {
+      "optional": true
+    },
+    "date-fns": {
+      "optional": true
+    },
+    "date-fns-tz": {
       "optional": true
     }
   },
@@ -231,6 +249,8 @@
     "axios": "^1.18.1",
     "rxjs": "^7.8.2",
     "safe-stable-stringify": "^2.5.0",
-    "spark-md5": "^3.0.2"
+    "spark-md5": "^3.0.2",
+    "date-fns": "^4.4.0",
+    "date-fns-tz": "^3.2.0"
   }
 }

@@ -36,6 +36,7 @@ pnpm add @axutils/common axios safe-stable-stringify spark-md5
 | `@axutils/common/axios/http` | `PromiseHttpClient`、`PromiseHttpRequestError` | `axios`、`safe-stable-stringify`、`spark-md5` | `pnpm add axios safe-stable-stringify spark-md5` |
 | `@axutils/common/object/json` | `jsonStringify`、`jsonStringifySafe` | `safe-stable-stringify` | `pnpm add safe-stable-stringify` |
 | `@axutils/common/crypto/md5` | `Md5` | `spark-md5` | `pnpm add spark-md5` |
+| `@axutils/common/date` | `PlainDate`、`PlainTime`、`PlainDateTime`、`ZonedDateTime`、`Instant`、`Duration`、`Now` | `date-fns`、`date-fns-tz` | `pnpm add date-fns date-fns-tz` |
 
 > `jsonParse`、`jsonParseSafe` 不依赖第三方库；Node 侧 `@axutils/common/node/crypto/md5` 基于 `node:crypto`，均无需额外安装。
 
@@ -247,6 +248,53 @@ storage.set("job", { id: 1 });
 ```
 
 两套实现都提供 `get`、`set`、`remove`、`clear` 以及对应的 `getSafe`、`setSafe`、`removeSafe`、`clearSafe`。safe 方法不会抛错：`getSafe` 失败返回 `null`，其他 safe 方法失败返回 `false`，成功返回 `true`。
+
+## 时间工具
+
+时间工具从 `@axutils/common/date` 按需导入，API 按 Temporal 的命名空间和方法名组织，但当前返回的是轻量 `Date`、epoch 毫秒或 `ZonedDateTimeValue`，不是原生 Temporal 实例。使用此子路径需要安装可选 peer 依赖：
+
+```bash
+pnpm add date-fns date-fns-tz
+```
+
+所有 `from()` 在输入无效时抛出 `RangeError`。纯日期、纯时间和无时区日期时间从 `Date` 提取字段时统一使用 UTC getter；ISO 字符串由模块直接解析，避免运行时本地时区导致日期偏移。需要时区的参数使用 IANA 标识符，例如 `Asia/Shanghai`、`America/New_York` 和 `UTC`；省略时使用运行时本地时区。
+
+```ts
+import {
+  Duration,
+  Instant,
+  Now,
+  PlainDate,
+  PlainDateTime,
+  PlainTime,
+  ZonedDateTime,
+} from "@axutils/common/date";
+
+const date = PlainDate.add("2024-01-31", { months: 1 });
+console.log(PlainDate.toString(date)); // 2024-02-29，月末溢出会 clamp 到目标月最后一天
+console.log(PlainTime.toString(PlainTime.add("23:30:00", { hours: 1 }))); // 00:30:00
+console.log(PlainDateTime.toString(PlainDateTime.from("2024-06-15T10:30:00")));
+
+const zdt = ZonedDateTime.from("2024-06-15T10:00:00+08:00[Asia/Shanghai]");
+console.log(ZonedDateTime.toString(ZonedDateTime.withTimeZone(zdt, "America/New_York")));
+console.log(Instant.epochMilliseconds(Instant.from("2024-06-15T10:00:00Z")));
+console.log(Duration.fromMilliseconds(90_061_000));
+console.log(Now.plainDateISO("Asia/Shanghai"));
+```
+
+公开命名空间和主要方法如下：
+
+- `PlainDate`：`from`、`of`、`toZonedDateTime`、`toPlainDateTime`、`add`、`subtract`、`since`、`equals`、`compare`、`isBefore`、`isAfter`、`isBetween`、`yearOf`、`monthOf`、`dayOf`、`dayOfWeek`、`daysInMonth`、`startOfWeek`、`endOfWeek`、`toString`、`format`。年月日按日历运算，`format` 固定使用 UTC。
+- `PlainTime`：`from`、`of`、`add`、`subtract`、`since`、`equals`、`compare`、`isBefore`、`isAfter`、`hourOf`、`minuteOf`、`secondOf`、`millisecondOf`、`toString`。加减不跨日，超过 24 小时按周期取模。
+- `PlainDateTime`：`from`、`toZonedDateTime`、`add`、`subtract`、`since`、`equals`、`compare`、`toPlainDate`、`toPlainTime`、`isBefore`、`isAfter`、`format`、`toString`。可通过 `format` 的 `options.timezone` 指定格式化时区。
+- `ZonedDateTime`：`from`、`toInstant`、`toPlainDate`、`toPlainTime`、`toPlainDateTime`、`withTimeZone`、`add`、`subtract`、`since`、`equals`、`compare`、`format`、`toString`。内部以 `{ epochMs, timezone }` 表示，切换时区保持绝对时刻；加减按实际经过时间计算，因此跨 DST 时不保证保持相同挂钟时间。
+- `Instant`：`from`、`fromEpochMilliseconds`、`toZonedDateTime`、`epochMilliseconds`、`add`、`subtract`、`since`、`equals`、`compare`。`from` 只接受带 `Z` 或 UTC 偏移的 ISO 字符串，`add`/`subtract` 对非零 `years`、`months` 抛出 `RangeError`。
+- `Duration`：`from`、`fromMilliseconds`、`totalMilliseconds`、`negated`、`abs`、`add`、`subtract`。`from`、`add`、`subtract` 保留各字段、不自动归约；`fromMilliseconds` 才会按天到毫秒完整拆解。
+- `Now`：`plainDateISO`、`plainTimeISO`、`plainDateTimeISO`、`zonedDateTimeISO`、`instant`。
+
+`Now.plainTimeISO` 会保留当前毫秒字段；返回值仍是以 `1970-01-01T...Z` 表示目标时区墙上时间的 UTC 对齐 `Date`。
+
+`format` 的 `options.locale` 接受已导入的 date-fns locale 对象（例如 `import { zhCN } from "date-fns/locale"`），不接受字符串名称。时间常量 `MS_PER_SECOND`、`MS_PER_MINUTE`、`MS_PER_HOUR`、`MS_PER_DAY`、`SECONDS_PER_MINUTE`、`SECONDS_PER_HOUR` 不依赖第三方库，可直接从 `@axutils/common` 主入口导入。
 
 ## 使用方式
 
