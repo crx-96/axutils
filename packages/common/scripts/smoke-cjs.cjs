@@ -57,9 +57,19 @@ const {
   HttpRequestError: HttpRequestErrorFromRxjs,
   RxHttpClient: RxHttpClientFromRxjs,
 } = require("@axutils/common/rxjs/http");
+const {
+  PromiseHttpClient: PromiseHttpClientFromAxios,
+  PromiseHttpRequestError: PromiseHttpRequestErrorFromAxios,
+} = require("@axutils/common/axios/http");
 
 if (typeof RxHttpClientFromRxjs !== "function" || typeof HttpRequestErrorFromRxjs !== "function") {
   throw new Error("CJS rxjs/http 子路径导出验证失败。");
+}
+if (
+  typeof PromiseHttpClientFromAxios !== "function" ||
+  typeof PromiseHttpRequestErrorFromAxios !== "function"
+) {
+  throw new Error("CJS axios/http 子路径导出验证失败。");
 }
 
 if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {

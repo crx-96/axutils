@@ -130,6 +130,16 @@
         "default": "./dist/rxjs/http.cjs"
       }
     },
+    "./axios/http": {
+      "import": {
+        "types": "./dist/axios/http.d.ts",
+        "default": "./dist/axios/http.js"
+      },
+      "require": {
+        "types": "./dist/axios/http.d.cts",
+        "default": "./dist/axios/http.cjs"
+      }
+    },
     "./node": {
       "import": {
         "types": "./dist/node/index.d.ts",

@@ -20,6 +20,7 @@ export default defineConfig({
         "object/timing": "./src/object/timing.ts",
         "object/url": "./src/object/url.ts",
         "node/object/storage": "./src/node/object/storage.ts",
+        "axios/http": "./src/axios/http.ts",
         "rxjs/http": "./src/rxjs/http.ts",
       },
       fileName: (format: string, entryName: string) => {

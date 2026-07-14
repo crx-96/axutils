@@ -20,15 +20,73 @@ pnpm add @axutils/common rxjs axios safe-stable-stringify spark-md5
 
 `@axutils/common/rxjs/http` 不会从包主入口加载；不使用该功能时无需安装这些依赖。
 
+如果只使用不依赖 RxJS 的 Axios Promise HTTP 子路径，请安装：
+
+```bash
+pnpm add @axutils/common axios safe-stable-stringify spark-md5
+```
+
+`@axutils/common/axios/http` 不会从包主入口加载，也不需要安装 `rxjs`。
+
 如果需要使用可选子路径依赖，请额外安装对应 peer 依赖：
 
 | 子路径 | 需要安装的方法 | peer 依赖 | 安装命令 |
 | --- | --- | --- | --- |
 | `@axutils/common/rxjs/http` | `RxHttpClient`、`HttpRequestError` | `rxjs`、`axios`、`safe-stable-stringify`、`spark-md5` | `pnpm add rxjs axios safe-stable-stringify spark-md5` |
+| `@axutils/common/axios/http` | `PromiseHttpClient`、`PromiseHttpRequestError` | `axios`、`safe-stable-stringify`、`spark-md5` | `pnpm add axios safe-stable-stringify spark-md5` |
 | `@axutils/common/object/json` | `jsonStringify`、`jsonStringifySafe` | `safe-stable-stringify` | `pnpm add safe-stable-stringify` |
 | `@axutils/common/crypto/md5` | `Md5` | `spark-md5` | `pnpm add spark-md5` |
 
 > `jsonParse`、`jsonParseSafe` 不依赖第三方库；Node 侧 `@axutils/common/node/crypto/md5` 基于 `node:crypto`，均无需额外安装。
+
+## Axios Promise HTTP 请求
+
+从 `@axutils/common/axios/http` 按需导入。Promise 版本在调用 `request`、`get`、`post` 等方法时立即开始配置解析和网络请求；它不提供 Observable 式懒执行，也不支持 `cancelOnNoSubscribers`。Axios 默认适配器兼容浏览器、Node.js 和 Nuxt SSR。
+
+```ts
+import { PromiseHttpClient, PromiseHttpRequestError } from "@axutils/common/axios/http";
+
+const client = new PromiseHttpClient({
+  baseUrl: "https://api.example.com",
+  retryCount: 3, // 最多三次总尝试，不是额外重试三次
+  retryDelay: 100,
+  timeout: 10_000,
+});
+
+try {
+  const result = await client.get<{ id: number }>("/users/1");
+  console.log(result.code, result.data);
+} catch (error) {
+  if (error instanceof PromiseHttpRequestError) {
+    console.error(error.error.kind, error.code, error.error.cause);
+  }
+}
+```
+
+如果配置需要异步获取，可以使用静态 `create`。构造客户端不会执行工厂；第一次请求时并发调用共享一次初始化，成功配置会缓存，失败结果不会缓存。`AbortSignal` 只取消当前调用方等待配置和请求的 Promise，不会中止或污染客户端级共享初始化；因此首个带 signal 的请求被取消后，无 signal 的并发请求仍会继续等待同一个初始化，工厂成功后配置仍会缓存。配置工厂返回的普通 Promise 无法被强制中止，但调用方的请求 Promise 仍会在 `AbortSignal` 触发后立即结束：
+
+```ts
+const client = PromiseHttpClient.create(
+  async () => ({ baseUrl: await loadApiUrl(), retryCount: 3 }),
+  { retryDelay: 100 },
+);
+```
+
+默认情况下，相同 method、完整 URL、params、headers、data、timeout 和重试选项的未完成请求只执行一次，并共享同一个成功结果对象或 `PromiseHttpRequestError` 实例；请求完成、失败或取消后不会缓存响应。Map、Set、FormData、流、类实例和循环引用等不稳定值默认不去重，可传入 `dedupeKey` 声明其业务身份。带 `signal` 的请求始终独立执行，不参与自动去重：
+
+```ts
+const controller = new AbortController();
+const request = client.get("/profile", {
+  params: { tenant: "demo" },
+  signal: controller.signal,
+});
+controller.abort();
+await request.catch((error) => console.log(error.error.kind)); // cancel
+```
+
+默认只对 GET、HEAD、OPTIONS 的明确 Axios 网络错误（`ERR_NETWORK`）、超时、429 和 5xx 重试；4xx（429 除外）、取消、普通 `Error` 和无 response 的未知 AxiosError 都不会重试。POST、PUT、PATCH、DELETE 只有显式传入 `retryNonIdempotent: true` 才允许重试。错误统一分为 `config`、`http`、`network`、`timeout`、`cancel` 和 `unknown`，无 HTTP 响应时 `code` 为 `0`。
+
+`retryCount` 表示总尝试次数，范围为 `1` 到 `100`；`retryDelay` 和 `timeout` 的最大值为 `2_147_483_647` 毫秒，以避免超出浏览器和 Node.js 定时器可可靠表达的范围。请求级覆盖、同步客户端配置和异步配置工厂使用相同的边界校验。传入的 `signal` 需要同时具备布尔值 `aborted` 以及 `addEventListener`、`removeEventListener` 方法，支持跨 Realm 的 AbortSignal 兼容实现。
 
 ## RxJS HTTP 请求
 
@@ -110,7 +168,7 @@ secondSubscription.unsubscribe(); // 最后一个订阅者离开，取消 Axios 
 
 写请求或后台任务如果需要在调用方取消订阅后继续执行，请保持 `cancelOnNoSubscribers: false`。
 
-UMD 全量包会内置 RxJS、Axios、`safe-stable-stringify` 和 `spark-md5`；ESM/CJS 的 `rxjs/http` 子路径则将这些依赖作为可选 peer 依赖按需安装。
+UMD 全量包会内置 RxJS、Axios、`safe-stable-stringify` 和 `spark-md5`；ESM/CJS 的 `rxjs/http` 与 `axios/http` 子路径则将各自依赖作为可选 peer 依赖按需安装。
 
 ## 防抖、节流与深拷贝
 

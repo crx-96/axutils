@@ -9,6 +9,10 @@ import {
   throttle as throttleFromEntry,
 } from "@axutils/common";
 import {
+  PromiseHttpClient as PromiseHttpClientFromAxios,
+  PromiseHttpRequestError as PromiseHttpRequestErrorFromAxios,
+} from "@axutils/common/axios/http";
+import {
   isBrowser as isBrowserFromPlatform,
   isNode as isNodeFromPlatform,
 } from "@axutils/common/check/platform";
@@ -60,6 +64,12 @@ import {
 
 if (typeof RxHttpClientFromRxjs !== "function" || typeof HttpRequestErrorFromRxjs !== "function") {
   throw new Error("ESM rxjs/http 子路径导出验证失败。");
+}
+if (
+  typeof PromiseHttpClientFromAxios !== "function" ||
+  typeof PromiseHttpRequestErrorFromAxios !== "function"
+) {
+  throw new Error("ESM axios/http 子路径导出验证失败。");
 }
 
 if (!isNumberFromEntry(1) || isNumberFromEntry(NaN)) {

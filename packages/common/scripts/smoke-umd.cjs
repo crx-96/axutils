@@ -21,6 +21,12 @@ if (
 ) {
   throw new Error("UMD 浏览器全局分支缺失 RxJS HTTP 导出。");
 }
+if (
+  typeof BrowserAxutilsCommon.PromiseHttpClient !== "function" ||
+  typeof BrowserAxutilsCommon.PromiseHttpRequestError !== "function"
+) {
+  throw new Error("UMD 浏览器全局分支缺失 Axios Promise HTTP 导出。");
+}
 if (!BrowserAxutilsCommon.isNumber(1) || BrowserAxutilsCommon.isNumber(NaN)) {
   throw new Error("UMD 浏览器全局分支 isNumber 验证失败。");
 }
@@ -103,6 +109,12 @@ if (
   typeof AxutilsCommon.HttpRequestError !== "function"
 ) {
   throw new Error("UMD 产物缺失 RxJS HTTP 导出。");
+}
+if (
+  typeof AxutilsCommon.PromiseHttpClient !== "function" ||
+  typeof AxutilsCommon.PromiseHttpRequestError !== "function"
+) {
+  throw new Error("UMD 产物缺失 Axios Promise HTTP 导出。");
 }
 if (typeof AxutilsCommon.isEmail !== "function") {
   throw new Error("UMD 产物缺失 isEmail 导出。");
