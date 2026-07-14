@@ -32,6 +32,24 @@ export const DATE_FORMAT = {
  *
  * 保留任意字符串是因为 date-fns 支持业务自定义 token 组合；`string & {}` 则让 TypeScript
  * 编辑器在仍允许自定义格式的前提下，继续展示 DATE_FORMAT 中的常用字面量提示。
+ *
+ * 常用 token 说明（完整列表见 date-fns 文档）：
+ * - `yyyy` — 四位年份（如 2025）
+ * - `yy`   — 两位年份（如 25）
+ * - `M`    — 不补零的月份（1-12）
+ * - `MM`   — 补零的月份（01-12）
+ * - `d`    — 不补零的日期（1-31）
+ * - `dd`   — 补零的日期（01-31）
+ * - `H`    — 不补零的小时（0-23）
+ * - `HH`   — 补零的小时（00-23）
+ * - `m`    — 不补零的分钟（0-59）
+ * - `mm`   — 补零的分钟（00-59）
+ * - `s`    — 不补零的秒（0-59）
+ * - `ss`   — 补零的秒（00-59）
+ * - `SSS`  — 三位毫秒
+ * - `XXX`  — ISO 8601 时区偏移（+08:00）
+ * - `'T'`  — 字面量 T（日期时间分隔符，用单引号包裹）
+ * - `'Z'`  — 字面量 Z（表示 UTC，用单引号包裹）
  */
 export type DateFormatPattern = (typeof DATE_FORMAT)[keyof typeof DATE_FORMAT] | (string & {});
 
