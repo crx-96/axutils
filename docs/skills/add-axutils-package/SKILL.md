@@ -54,15 +54,21 @@ description: 为 axutils monorepo 新增一个可发布的 @axutils/* 子包时�
 6. 新增公共导出后，同步补：
    - 单元测试
    - 构建后导入验证
-   - README 使用示例
-   - 若该导出依赖第三方 peer 依赖，README 中需列出"子路径/方法 -> 需安装的包 -> 安装命令"对照，源码方法注释中也需说明依赖
+   - `docs/examples/<name>/` 下对应的详细使用文档
+   - 子包 README 中指向详细使用文档的跳转链接；链接必须使用指向 Git 仓库文件的绝对 URL，因为 `docs/examples/` 不随 npm 包发布；README 只保留包定位、基础安装、兼容性和简要能力说明，不直接写方法明细
+   - 若该导出依赖第三方 peer 依赖，详细使用文档中需列出"子路径/方法 -> 需安装的包 -> 安装命令"对照，源码方法注释中也需说明依赖
+   - 详细文档按源码功能目录映射：一级目录写入 `docs/examples/<name>/<目录名>.md`，嵌套目录保持层级。例如 `src/axios/*` 对应 `docs/examples/<name>/axios.md`，`src/node/crypto/*` 对应 `docs/examples/<name>/node/crypto.md`
+   - 详细文档必须覆盖对应模块的全部公共 API，包括公开函数、类、对象方法、实例方法、常量和类型；每个运行时方法都必须有用途、导入方式、关键参数与返回值、边界或限制以及至少一个使用示例，公开常量和类型也要说明用途
+   - 以 `package.json#exports`、主入口和聚合入口源码为准，列出对应 API 的全部合法使用方式，包括根入口、精确子路径、ESM `import`、CJS `require`、TypeScript `import type`、Node 聚合入口和 UMD 全局名称（适用时）；未导出的入口必须明确说明
+   - 依赖可选第三方 peer 的 API 不得从包主入口导出，以保证根入口零第三方运行时依赖；详细文档需说明根入口不可用的原因、所需 peer、替代子路径及 UMD 是否内置依赖。Node 专属 API 的运行时限制需单独说明
+   - 每份详细文档必须提供“公开导出/API -> 所需第三方 peer”映射，可按依赖完全相同的明确导出组归类；无第三方依赖的导出也要标明“无”。必须双向核对源码静态导入与 `peerDependencies`，确保每个 peer 都对应受影响 API、每个公开 API 都有依赖状态
 7. 新增子包后，必须同步更新根 `tsconfig.json` 的 `references`，使新包纳入项目引用体系。
 8. 新增任何 `@axutils/*` 子包后，必须在根 `README.md` 的子包列表中添加对应链接，并在必要时更新 `AGENTS.md` 中的相关约定。
 
 ## 推荐流程
 
 1. 复制 `packages/common` 的配置骨架
-2. 按实际包名调整 `package.json` 和 README
+2. 按实际包名调整 `package.json` 和精简版 README，并建立 `docs/examples/<name>/` 详细文档目录
 3. 先写测试，再补最小实现
 4. 验证 `pnpm --filter @axutils/<name> test`
 5. 验证 `pnpm --filter @axutils/<name> build`
@@ -75,4 +81,5 @@ description: 为 axutils monorepo 新增一个可发布的 @axutils/* 子包时�
 - 是否仍然是命名导出
 - 是否保持 tree-shaking 友好
 - 是否让子包单独打开时仍能使用根配置
-- 是否补齐文档和测试
+- README 是否只保留简要说明和文档跳转，详细文档是否按源码目录映射并逐方法补齐示例
+- 是否补齐测试

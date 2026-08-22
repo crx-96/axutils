@@ -1,20 +1,19 @@
 {
   "name": "axutils",
   "private": true,
-  "packageManager": "pnpm@10.34.4",
   "engines": {
     "node": ">=20.19.0"
   },
   "scripts": {
     "biome:check": "biome check .",
-    "build": "corepack pnpm -r build",
+    "build": "pnpm -r build",
     "changeset": "changeset",
-    "check": "biome check . && corepack pnpm -r typecheck && corepack pnpm -r test && corepack pnpm -r build && corepack pnpm --filter @axutils/common test:dist && corepack pnpm --filter @axutils/common publint",
+    "check": "biome check . && pnpm -r typecheck && pnpm -r test && pnpm -r build && pnpm --filter @axutils/common test:dist && pnpm --filter @axutils/common publint",
     "format": "biome format --write .",
     "lint": "biome check .",
     "release": "changeset publish",
-    "test": "corepack pnpm -r test",
-    "typecheck": "corepack pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
     "version-packages": "changeset version"
   },
   "repository": {

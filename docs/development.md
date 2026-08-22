@@ -5,12 +5,39 @@
 ## 环境要求
 
 - `Node.js >= 20.19.0`
-- 建议使用 `corepack` 管理 `pnpm`
+- 系统 `PATH` 中已安装可用的 `pnpm`；项目不固定其版本
+
+## 获取源码与安装依赖
+
+首次开发时，克隆仓库并在根目录安装整个 workspace 的依赖：
 
 ```bash
-corepack enable
-corepack pnpm install
+git clone https://github.com/crx-96/axutils.git
+cd axutils
+pnpm install
 ```
+
+常用安装方式：
+
+- `pnpm install`：按 `pnpm-lock.yaml` 安装或更新整个 workspace 的依赖。
+- `pnpm install --frozen-lockfile`：严格按锁文件安装；锁文件与 `package.json` 不一致时直接失败，适合 CI 或发布前复现环境。
+- `pnpm add -Dw <包名>`：向仓库根目录添加全 workspace 共用的开发工具。
+- `pnpm --filter <子包名> add <包名>`：向指定子包添加运行时依赖。
+- `pnpm --filter <子包名> add -D <包名>`：向指定子包添加开发依赖。
+
+例如，只给 `@axutils/common` 添加开发依赖：
+
+```bash
+pnpm --filter @axutils/common add -D <包名>
+```
+
+如果是使用本仓库已经发布的 npm 包，请在消费方项目中安装，而不是在本仓库根目录执行：
+
+```bash
+pnpm add @axutils/common
+```
+
+部分方法依赖可选 peer dependency；使用相关功能时，还需要按照子包 README 一并安装对应依赖。
 
 ## npm / pnpm 源说明
 
@@ -49,7 +76,7 @@ corepack pnpm install
 
 ## CI 环境说明
 
-CI（`.github/workflows/ci.yml`）运行在 `ubuntu-latest`，使用 pnpm `10.34.4` 和 Node.js `24`。由于 CI 已通过 `pnpm/action-setup` 固定 pnpm 版本，CI 中的命令不带 `corepack` 前缀（如 `pnpm lint` 而非 `corepack pnpm lint`）。本地开发时仍需使用 `corepack pnpm` 前缀，除非已全局安装对应版本的 pnpm。
+CI（`.github/workflows/ci.yml`）运行在 `ubuntu-latest`，使用 `pnpm/action-setup` 安装执行时可用的最新版 `pnpm`，Node.js 版本为 `24`。本地和 CI 命令都直接调用 `pnpm`，仓库不通过 `packageManager` 或 Corepack 固定其版本。
 
 CI 的验证步骤与根 `check` 脚本对齐：`lint` → `typecheck` → `test` → `build` → `@axutils/common test:dist` → `@axutils/common publint`。
 
@@ -61,48 +88,74 @@ CI 的验证步骤与根 `check` 脚本对齐：`lint` → `typecheck` → `test
 
 ## 根目录命令
 
-- `corepack pnpm install`：安装 workspace 依赖
-- `corepack pnpm lint`：运行全仓 `biome check .`
-- `corepack pnpm biome:check`：直接执行 Biome 检查脚本
-- `corepack pnpm typecheck`：递归执行各子包的 TypeScript 类型检查
-- `corepack pnpm test`：递归执行各子包测试
-- `corepack pnpm build`：递归执行各子包构建
-- `corepack pnpm check`：串行执行 `lint`、`typecheck`、`test`、`build`、`@axutils/common test:dist`、`@axutils/common publint`
-- `corepack pnpm changeset`：创建版本变更记录
-- `corepack pnpm version-packages`：根据 changeset 计算并写入版本号
-- `corepack pnpm release`：执行 npm 发布流程
+- `pnpm install`：安装整个 workspace 的依赖
+- `pnpm lint`：运行全仓 `biome check .`
+- `pnpm biome:check`：直接执行 Biome 检查脚本
+- `pnpm typecheck`：递归执行各子包的 TypeScript 类型检查
+- `pnpm test`：递归执行各子包测试
+- `pnpm build`：递归执行各子包构建
+- `pnpm check`：串行执行 `lint`、`typecheck`、`test`、`build`、`@axutils/common test:dist`、`@axutils/common publint`
+- `pnpm changeset`：创建版本变更记录
+- `pnpm version-packages`：根据 changeset 计算并写入版本号
+- `pnpm release`：执行 npm 发布流程
 
 ## 发布流程
 
-### 发布单个包
+本仓库通过 Changesets 管理版本号和发布。不要手动修改子包 `package.json` 中的 `version`，也不要逐个直接执行 `npm publish`。
 
-当只需要发布一个包的新版本时，按下面顺序执行：
+发布前确认以下条件：
+
+- 当前分支包含准备发布的全部改动，工作区没有误带的文件。
+- 已为需要发布的包创建 changeset。
+- npm 账号具有 `@axutils` scope 的发布权限。
+- 发布命令使用官方 npm registry。
+
+登录并检查当前 npm 身份：
 
 ```bash
-corepack pnpm check
-corepack pnpm changeset
-corepack pnpm version-packages
-corepack pnpm check
 npm login --registry=https://registry.npmjs.org/
-corepack pnpm release --otp=xxx
+npm whoami --registry=https://registry.npmjs.org/
+```
+
+### 发布单个包
+
+当只需要发布一个子包的新版本时，changeset 中只能选择这个包。以 `@axutils/common` 为例：
+
+```bash
+pnpm check
+pnpm changeset
+pnpm changeset status
+pnpm version-packages
+pnpm check
+pnpm release
 ```
 
 步骤说明：
 
-1. `corepack pnpm check`
+1. `pnpm check`
     - 先完成代码质量、类型检查、测试、构建和发布产物校验。
-2. `corepack pnpm changeset`
+2. `pnpm changeset`
     - 选择需要发布的包。
     - 选择版本升级类型：`patch`、`minor` 或 `major`。
     - 填写本次变更说明。
-3. `corepack pnpm version-packages`
+3. `pnpm changeset status`
+    - 在写入版本号前检查 Changesets 计算出的待发布包及版本，确认列表中没有其他包。
+4. `pnpm version-packages`
     - 根据 changeset 把版本号和 changelog 写回仓库文件。
-4. 再执行一次 `corepack pnpm check`
+5. 再执行一次 `pnpm check`
     - 确认版本写回后，构建与测试仍然通过。
-5. `npm login --registry=https://registry.npmjs.org/`
-    - 使用官方 npm 登录。
-6. `corepack pnpm release`
-    - 触发 `changeset publish`，发布本次已变更版本的包。
+6. `pnpm release`
+    - 触发 `changeset publish`，发布 workspace 中所有版本高于 npm 已发布版本的包。
+
+`pnpm release` 本身没有“只发布指定包”的过滤语义。单包发布依赖前面的版本变更范围控制：如果 `pnpm changeset status` 显示多个待发布包，执行该命令会一起发布它们，应先检查 changeset 和版本变更是否符合预期。
+
+如果 npm 账号启用了发布 OTP，在发布时传入当次验证码：
+
+```bash
+pnpm release --otp=123456
+```
+
+请将示例中的 `123456` 替换为当次验证码。
 
 ### 多个包一起发布
 
@@ -110,26 +163,37 @@ corepack pnpm release --otp=xxx
 
 常见做法有两种：
 
-- 执行一次 `corepack pnpm changeset`，在交互过程中一次选择多个包。
-- 执行多次 `corepack pnpm changeset`，分别为不同包生成多个 changeset 文件，最后统一发布。
+- 执行一次 `pnpm changeset`，在交互过程中一次选择多个包。
+- 执行多次 `pnpm changeset`，分别为不同包生成多个 changeset 文件，最后统一发布。
 
 推荐顺序：
 
 ```bash
-corepack pnpm check
-corepack pnpm changeset
-corepack pnpm changeset
-corepack pnpm version-packages
-corepack pnpm check
-npm login --registry=https://registry.npmjs.org/
-corepack pnpm release
+pnpm check
+pnpm changeset
+pnpm changeset
+pnpm changeset status
+pnpm version-packages
+pnpm check
+pnpm release
 ```
 
 说明：
 
-- 上面的 `corepack pnpm changeset` 可以是一条，也可以是多条，取决于你要拆成几个 changeset 记录。
-- `corepack pnpm version-packages` 会统一计算所有受影响包的新版本。
-- `corepack pnpm release` 会统一发布本次有版本变更的包。
+- 上面的 `pnpm changeset` 可以是一条，也可以是多条，取决于你要拆成几个 changeset 记录。
+- `pnpm changeset status` 用于在写入版本号前核对全部待发布包及预期版本。
+- `pnpm version-packages` 会统一计算所有受影响包的新版本并写回文件。
+- `pnpm release` 会统一发布 workspace 中所有尚未发布的新版本，无需为每个包分别运行发布命令。
+
+### 发布完成后确认
+
+发布完成后，可从官方 registry 查询版本，确认 npm 已可见：
+
+```bash
+npm view @axutils/common version --registry=https://registry.npmjs.org/
+```
+
+多个包一起发布时，对每个目标包分别执行一次查询。发布产生的版本号、changelog 和 changeset 删除记录必须提交到仓库，避免 npm 已发布新版本而仓库仍保留旧版本信息；这些文件是并入代码提交还是单独作为发布提交，按当次发布安排执行。是否创建 Git tag 或 GitHub Release，也按仓库当次发布安排执行。
 
 ### 版本号选择
 
