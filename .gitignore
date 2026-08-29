@@ -10,4 +10,5 @@ pnpm-debug.log*
 .zcode/plans/
 docs/superpowers/
 docs/plans/
+docs/status/
 .worktrees/

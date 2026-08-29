@@ -2,14 +2,16 @@
 
 > 本文描述的是 `axutils` 仓库的开发与构建环境要求；各发布子包的消费兼容性请以对应子包 README 为准。
 
-## 环境要求
+## 环境与版本口径
 
-- `Node.js >= 20.19.0`
-- 系统 `PATH` 中已安装可用的 `pnpm`；项目不固定其版本
+- 仓库开发：`Node.js >= 20.19.0`。
+- CI：`ubuntu-latest`、Node.js `24`，通过 `pnpm/action-setup` 安装执行时可用的最新版 pnpm。
+- 包消费：以各子包 `package.json#engines.node` 和 README 为准；当前 `@axutils/common` 为 `>=14.18.0`，不得与仓库开发版本混淆。
+- 本地和 CI 均直接调用 pnpm；系统 `PATH` 中须有可用的 pnpm，仓库不通过 `packageManager` 或 Corepack 固定版本。
 
-## 获取源码与安装依赖
+## 获取源码与依赖
 
-首次开发时，克隆仓库并在根目录安装整个 workspace 的依赖：
+首次开发时，在仓库根目录安装整个 workspace：
 
 ```bash
 git clone https://github.com/crx-96/axutils.git
@@ -17,98 +19,62 @@ cd axutils
 pnpm install
 ```
 
-常用安装方式：
+| 场景 | 命令 | 说明 |
+| --- | --- | --- |
+| 安装或更新 workspace | `pnpm install` | 按 `pnpm-lock.yaml` 解析依赖 |
+| 严格复现依赖 | `pnpm install --frozen-lockfile` | 锁文件与 `package.json` 不一致时直接失败；用于 CI、发布前复现或重建依赖目录 |
+| 添加共享开发工具 | `pnpm add -Dw <包名>` | 仅用于全 workspace 共享工具链 |
+| 添加子包运行时依赖 | `pnpm --filter <子包名> add <包名>` | 仅用于普通运行时依赖 |
+| 添加子包开发依赖 | `pnpm --filter <子包名> add -D <包名>` | 例如 `pnpm --filter @axutils/common add -D <包名>` |
 
-- `pnpm install`：按 `pnpm-lock.yaml` 安装或更新整个 workspace 的依赖。
-- `pnpm install --frozen-lockfile`：严格按锁文件安装；锁文件与 `package.json` 不一致时直接失败，适合 CI 或发布前复现环境。
-- `pnpm add -Dw <包名>`：向仓库根目录添加全 workspace 共用的开发工具。
-- `pnpm --filter <子包名> add <包名>`：向指定子包添加运行时依赖。
-- `pnpm --filter <子包名> add -D <包名>`：向指定子包添加开发依赖。
-
-例如，只给 `@axutils/common` 添加开发依赖：
-
-```bash
-pnpm --filter @axutils/common add -D <包名>
-```
-
-如果是使用本仓库已经发布的 npm 包，请在消费方项目中安装，而不是在本仓库根目录执行：
+第三方功能优先声明为可选 peer，并将本地开发/测试所需版本放入该子包 `devDependencies`。使用已发布包时，应在消费方项目而非本仓库根目录安装：
 
 ```bash
 pnpm add @axutils/common
 ```
 
-部分方法依赖可选 peer dependency；使用相关功能时，还需要按照子包 README 一并安装对应依赖。
+部分 API 依赖可选 peer；请按子包 README 跳转到对应详细使用文档，并按文档安装所需依赖。
 
-## npm / pnpm 源说明
+## npm / pnpm 源
 
-- 当前仓库通过项目级 `.npmrc` 指定源配置，默认依赖安装使用镜像源。
-- `@axutils` scope 已在项目级 `.npmrc` 中显式指向官方 npm：`https://registry.npmjs.org/`。
-- 本仓库继续使用 `pnpm` 作为 workspace 包管理器；不要改为 `npm install`。
-- 执行 `npm login` 时请显式使用官方源：`npm login --registry=https://registry.npmjs.org/`。
-- 执行发布时请显式使用官方源，避免受全局镜像配置影响。
+- 项目级 `.npmrc` 默认使用镜像源，`@axutils` scope 明确指向官方 npm `https://registry.npmjs.org/`。
+- 仓库只使用 pnpm 管理 workspace，不得改用 `npm install`。
+- 登录和发布时须显式使用官方源，避免受全局镜像配置影响；登录命令为 `npm login --registry=https://registry.npmjs.org/`。发布前还须确认项目 `.npmrc` 中 `@axutils` scope 仍指向官方 npm。
 
-## 目录结构
+## 仓库结构与配置
 
-```text
-.
-├─ .changeset/
-│  └─ config.json
-├─ .github/
-│  └─ workflows/
-│     └─ ci.yml
-├─ .npmrc
-├─ docs/
-│  ├─ development.md
-│  └─ skills/
-├─ packages/
-│  └─ common/
-├─ AGENTS.md
-├─ LICENSE
-├─ README.md
-├─ biome.jsonc
-├─ package.json
-├─ pnpm-workspace.yaml
-├─ tsconfig.base.json
-└─ tsconfig.json
-```
+- 可发布包位于 `packages/*`；文档和仓库内 Skills 位于 `docs/`。
+- 根目录统一维护 workspace、TypeScript、Biome、Changesets、CI 和发布配置。
+- 根 `tsconfig.json` 是项目引用入口，`tsconfig.base.json` 提供共享编译选项；新增子包时，必须将其加入根 `tsconfig.json#references`。
 
-> `tsconfig.json`（根）是项目引用入口，其 `references` 指向各子包；`tsconfig.base.json` 是共享编译选项。新增 `packages/*` 子包时，必须在根 `tsconfig.json` 的 `references` 中添加该包。
+## CI 验证
 
-## CI 环境说明
-
-CI（`.github/workflows/ci.yml`）运行在 `ubuntu-latest`，使用 `pnpm/action-setup` 安装执行时可用的最新版 `pnpm`，Node.js 版本为 `24`。本地和 CI 命令都直接调用 `pnpm`，仓库不通过 `packageManager` 或 Corepack 固定其版本。
-
-CI 的验证步骤与根 `check` 脚本对齐：`lint` → `typecheck` → `test` → `build` → `@axutils/common test:dist` → `@axutils/common publint`。
-
-关于 Node.js 版本口径：
-
-- **CI 运行版本**：Node.js `24`（CI 实际执行环境）
-- **仓库开发要求**：`Node.js >= 20.19.0`（根 `package.json` 的 `engines.node`，本地开发最低版本）
-- **消费方运行时兼容**：各子包 `package.json` 的 `engines.node`（当前 `@axutils/common` 声明 `>= 14.18.0`），面向包使用者，与仓库开发要求不同
+CI 使用 `pnpm install --frozen-lockfile`，随后与根 `check` 脚本按同一顺序执行：`lint` → `typecheck` → `test` → `build` → `@axutils/common test:dist` → `@axutils/common publint`。
 
 ## 根目录命令
 
-- `pnpm install`：安装整个 workspace 的依赖
-- `pnpm lint`：运行全仓 `biome check .`
-- `pnpm biome:check`：直接执行 Biome 检查脚本
-- `pnpm typecheck`：递归执行各子包的 TypeScript 类型检查
-- `pnpm test`：递归执行各子包测试
-- `pnpm build`：递归执行各子包构建
-- `pnpm check`：串行执行 `lint`、`typecheck`、`test`、`build`、`@axutils/common test:dist`、`@axutils/common publint`
-- `pnpm changeset`：创建版本变更记录
-- `pnpm version-packages`：根据 changeset 计算并写入版本号
-- `pnpm release`：执行 npm 发布流程
+| 命令 | 用途 |
+| --- | --- |
+| `pnpm install` | 安装整个 workspace 的依赖 |
+| `pnpm lint` | 运行全仓 `biome check .` |
+| `pnpm biome:check` | 直接执行与 lint 相同的 Biome 检查 |
+| `pnpm typecheck` | 递归执行各子包类型检查 |
+| `pnpm test` | 递归执行各子包测试 |
+| `pnpm build` | 递归执行各子包构建 |
+| `pnpm check` | 串行执行 lint、typecheck、test、build、common 的 `test:dist` 和 `publint` |
+| `pnpm changeset` | 创建版本变更记录 |
+| `pnpm version-packages` | 按 changeset 计算并写入版本号 |
+| `pnpm release` | 执行 npm 发布流程 |
 
 ## 发布流程
 
-本仓库通过 Changesets 管理版本号和发布。不要手动修改子包 `package.json` 中的 `version`，也不要逐个直接执行 `npm publish`。
+本仓库通过 Changesets 管理版本和发布。不得手动修改子包 `package.json#version`，也不得逐包执行 `npm publish`。
 
 发布前确认以下条件：
 
-- 当前分支包含准备发布的全部改动，工作区没有误带的文件。
-- 已为需要发布的包创建 changeset。
-- npm 账号具有 `@axutils` scope 的发布权限。
-- 发布命令使用官方 npm registry。
+- 当前分支包含全部待发布改动，工作区没有误带文件。
+- 所有目标包均有 changeset，且范围正确；尚未创建时须在下方 `pnpm changeset` 步骤完成。
+- npm 账号具有 `@axutils` scope 发布权限，登录和发布均使用官方 registry。
 
 登录并检查当前 npm 身份：
 
@@ -117,9 +83,7 @@ npm login --registry=https://registry.npmjs.org/
 npm whoami --registry=https://registry.npmjs.org/
 ```
 
-### 发布单个包
-
-当只需要发布一个子包的新版本时，changeset 中只能选择这个包。以 `@axutils/common` 为例：
+### 标准流程
 
 ```bash
 pnpm check
@@ -130,100 +94,50 @@ pnpm check
 pnpm release
 ```
 
-步骤说明：
+- 首次 `pnpm check` 验证发布前状态；`version-packages` 写回版本号和 changelog 后必须再执行一次，两个检查时点不得合并。
+- `pnpm changeset` 选择包、升级类型并填写说明，可执行一次或多次：单包发布只能选择目标包；多包发布可一次选择多个包，或分别创建多条 changeset。
+- `pnpm changeset status` 必须在写入版本号前核对全部待发布包和预期版本；范围不符时先修正 changeset 或版本变更。
+- `pnpm release` 触发 `changeset publish`，会发布 workspace 中所有版本高于 npm 已发布版本的包，不支持通过该命令过滤为单包。
 
-1. `pnpm check`
-    - 先完成代码质量、类型检查、测试、构建和发布产物校验。
-2. `pnpm changeset`
-    - 选择需要发布的包。
-    - 选择版本升级类型：`patch`、`minor` 或 `major`。
-    - 填写本次变更说明。
-3. `pnpm changeset status`
-    - 在写入版本号前检查 Changesets 计算出的待发布包及版本，确认列表中没有其他包。
-4. `pnpm version-packages`
-    - 根据 changeset 把版本号和 changelog 写回仓库文件。
-5. 再执行一次 `pnpm check`
-    - 确认版本写回后，构建与测试仍然通过。
-6. `pnpm release`
-    - 触发 `changeset publish`，发布 workspace 中所有版本高于 npm 已发布版本的包。
-
-`pnpm release` 本身没有“只发布指定包”的过滤语义。单包发布依赖前面的版本变更范围控制：如果 `pnpm changeset status` 显示多个待发布包，执行该命令会一起发布它们，应先检查 changeset 和版本变更是否符合预期。
-
-如果 npm 账号启用了发布 OTP，在发布时传入当次验证码：
+账号启用发布 OTP 时，传入当次验证码：
 
 ```bash
 pnpm release --otp=123456
 ```
 
-请将示例中的 `123456` 替换为当次验证码。
-
-### 多个包一起发布
-
-当一次需要发布多个包时，不需要逐个手工执行 `npm publish`。仍然使用 Changesets 统一管理。
-
-常见做法有两种：
-
-- 执行一次 `pnpm changeset`，在交互过程中一次选择多个包。
-- 执行多次 `pnpm changeset`，分别为不同包生成多个 changeset 文件，最后统一发布。
-
-推荐顺序：
-
-```bash
-pnpm check
-pnpm changeset
-pnpm changeset
-pnpm changeset status
-pnpm version-packages
-pnpm check
-pnpm release
-```
-
-说明：
-
-- 上面的 `pnpm changeset` 可以是一条，也可以是多条，取决于你要拆成几个 changeset 记录。
-- `pnpm changeset status` 用于在写入版本号前核对全部待发布包及预期版本。
-- `pnpm version-packages` 会统一计算所有受影响包的新版本并写回文件。
-- `pnpm release` 会统一发布 workspace 中所有尚未发布的新版本，无需为每个包分别运行发布命令。
+将示例中的 `123456` 替换为当次验证码。
 
 ### 发布完成后确认
 
-发布完成后，可从官方 registry 查询版本，确认 npm 已可见：
+从官方 registry 查询每个目标包，确认新版本已可见：
 
 ```bash
 npm view @axutils/common version --registry=https://registry.npmjs.org/
 ```
 
-多个包一起发布时，对每个目标包分别执行一次查询。发布产生的版本号、changelog 和 changeset 删除记录必须提交到仓库，避免 npm 已发布新版本而仓库仍保留旧版本信息；这些文件是并入代码提交还是单独作为发布提交，按当次发布安排执行。是否创建 Git tag 或 GitHub Release，也按仓库当次发布安排执行。
+发布产生的版本号、changelog 和 changeset 删除记录必须提交到仓库，避免 npm 与仓库状态不一致；并入代码提交或单独提交均按当次安排。Git tag 和 GitHub Release 也按当次发布安排执行。
 
 ### 版本号选择
 
-版本号由 Changesets 维护，不要手动修改各个 `package.json` 的 `version` 字段。
-
-- `patch`
-    - 用于修复 bug、实现细节调整、文档修正等不会影响既有公开 API 的改动。
-    - 示例：`1.2.3 -> 1.2.4`
-- `minor`
-    - 用于向后兼容地新增能力，例如新增导出、新增工具函数、新增子路径导出。
-    - 示例：`1.2.3 -> 1.3.0`
-- `major`
-    - 用于不兼容变更，例如删除导出、修改函数签名、修改返回值语义、改变默认行为导致旧代码需要调整。
-    - 示例：`1.2.3 -> 2.0.0`
+| 类型 | 适用变更 | 示例 |
+| --- | --- | --- |
+| `patch` | 不影响既有公开 API 的 bug 修复、实现调整或文档修正 | `1.2.3 -> 1.2.4` |
+| `minor` | 向后兼容地新增导出、工具函数或子路径等能力 | `1.2.3 -> 1.3.0` |
+| `major` | 删除导出，或不兼容地修改函数签名、返回值语义、默认行为 | `1.2.3 -> 2.0.0` |
 
 如果不确定升级类型，先按公开 API 是否兼容旧用法来判断：
 
-- 旧代码不需要改动：优先考虑 `patch` 或 `minor`
-- 旧代码需要改动：使用 `major`
+- 旧代码无需改动：根据是否新增能力选择 `patch` 或 `minor`。
+- 旧代码需要改动：使用 `major`。
 
 ## 开发约定
 
-- 所有可发布子包统一放在 `packages/*`
-- npm 包名统一使用 `@axutils/*`
-- 根目录维护统一的 TypeScript、Biome、发布和 CI 配置
-- 子包必须能够单独打开，并继续使用继承配置
-- 公共 API 必须通过 `exports` 显式声明
-- 根目录命令与开发环境说明统一维护在本文档
+- 可发布子包位于 `packages/*`，包名使用 `@axutils/*`。
+- 根目录维护共享的 TypeScript、Biome、发布和 CI 配置；子包单独打开时仍须使用继承配置。
+- 公共 API 必须通过 `exports` 显式声明。
 
 ## 相关文档
 
 - [仓库根 README](../README.md)
 - [新增子包流程](./skills/add-axutils-package/SKILL.md)
+- [项目审查流程](./skills/review-axutils-project/SKILL.md)
