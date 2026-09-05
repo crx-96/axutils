@@ -1,6 +1,6 @@
 {
   "name": "@axutils/common",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "axutils 的公共工具子包",
   "homepage": "https://github.com/crx-96/axutils/tree/main/packages/common#readme",
   "bugs": {

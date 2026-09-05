@@ -2,7 +2,7 @@
 
 ## 环境
 
-- 开发：Node.js >=20.19.0，系统 PATH 中可用的 pnpm；仓库不通过 packageManager 固定 pnpm 版本。
+- 开发：Node.js `^22.11 || ^24 || >=26`，系统 PATH 中可用的 pnpm >=10；发布工具调用的 npm 需 >=10.9.0。以上要求与 Changesets 3 对齐，仓库不通过 packageManager 固定 pnpm 版本。
 - 包消费：当前 common 支持 Node.js >=14.18.0 和浏览器，输出 ES2020 的 ESM/CJS/UMD。
 - CI：Node 24，Linux 与 Windows 中文路径；现代工具链构建后，Node 14.18.0 验证同一份产物。
 - 依赖恢复使用 `pnpm install --frozen-lockfile`。不要用全局工具的版本代替锁文件中项目工具的版本；根 lint 显式调用本地 Biome。
@@ -117,8 +117,12 @@ pnpm changeset
 pnpm changeset status
 pnpm version-packages
 pnpm check
-pnpm release --otp=123456
+pnpm release
 ```
+
+本地在交互终端发布，按 npm/pnpm 提示完成安全密钥或浏览器验证；确有当前有效的一次性验证码时，可通过 `pnpm release --otp=<验证码>` 传入。登录验证不等于完成当前发布验证。
+
+Changesets 已升级到 3.0.2，其发布代码会识别 pnpm 的 `ERR_PNPM_OTP_NON_INTERACTIVE` 并转入交互验证。遇到该错误时先确认本地依赖已按锁文件安装，且发布命令没有通过管道或无交互任务运行。Changesets 3 在没有待处理 changeset 时执行 `version-packages` 会返回非零状态；已完成版本更新、只需重试发布时，不要重复运行版本更新。
 
 发布前另行核对目标包、changeset、npm 身份与权限；version-packages 写回版本与 changelog 后重新检查。release 会发布所有高于 registry 版本的包，不能用它隐式选择单包。本次重构不执行发布。
 

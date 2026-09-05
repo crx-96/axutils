@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
-    "@changesets/cli": "2.31.0",
+    "@changesets/cli": "3.0.2",
     "@playwright/test": "^1.62.1",
     "@types/node": "24.12.4",
     "publint": "0.3.21",
@@ -38,6 +38,7 @@
     "vitest": "4.1.10"
   },
   "engines": {
-    "node": ">=20.19.0"
+    "node": "^22.11 || ^24 || >=26",
+    "pnpm": ">=10.0.0"
   }
 }
