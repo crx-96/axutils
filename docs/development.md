@@ -23,6 +23,8 @@ $env:PLAYWRIGHT_CHANNEL = "msedge" # 或 chrome
 pnpm check
 ```
 
+浏览器启动失败时，参见下文[浏览器测试找不到可执行文件](#浏览器测试找不到可执行文件)。
+
 | 命令 | 用途 |
 | --- | --- |
 | pnpm lint / pnpm biome:check | 本地锁定 Biome 的格式、导入、对象键排序及质量检查，只读不改写 |
@@ -70,6 +72,38 @@ Remove-Item Env:AXUTILS_TEST_NODE
 打包消费和浏览器测试使用系统临时目录并在结束时清理；浏览器服务器仅监听 127.0.0.1 并提供固定测试资源。设置 AXUTILS_KEEP_BROWSER_ARTIFACTS=1 可保留失败诊断文件，路径会打印到终端，调试结束后由使用者删除。
 
 遇到 Windows 中文路径下 pnpm exec 找不到已安装工具时，先确认项目 node_modules 的真实文件与版本。可用其 Node CLI 入口诊断，不要静默改用全局版本或更换包管理器。依赖 junction 失效时按锁文件重新安装整个 workspace，不手工改源码绕过缺失依赖。
+
+### 浏览器测试找不到可执行文件
+
+如果 `pnpm check` 在 `test:browser` 阶段出现大量测试失败，先向上查找第一个失败测试的 `Error:`。末尾的 `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`、`ELIFECYCLE` 和 `Exit status 1` 只是退出汇总，不能据此判断根因。
+
+以下错误表示 Playwright 在启动浏览器时找不到所需可执行文件，测试尚未进入业务断言：
+
+```text
+Error: browserType.launch: Executable doesn't exist at ...\ms-playwright\chromium_headless_shell-1234\...
+```
+
+这里的 `1234` 只是一次故障中的版本编号，实际以报错路径为准。项目默认使用 Playwright 配套的 Chromium；安装项目依赖不代表已下载匹配的浏览器，本机缓存中即使有其他编号的 Chromium，也不能满足当前版本的要求。仅此错误无需修改业务代码或测试断言，按以下任一方式配置浏览器即可。
+
+**方式一：复用已安装的 Edge/Chrome。** 在项目根目录、同一个 PowerShell 终端依次执行：
+
+```powershell
+$env:PLAYWRIGHT_CHANNEL = "msedge" # 使用已安装的 Chrome 时改为 chrome
+node -p "process.env.PLAYWRIGHT_CHANNEL" # 应输出 msedge 或 chrome
+pnpm check
+```
+
+环境变量只影响当前终端及其子进程；新开终端需要重新设置，在其他终端或自动化工具中设置不会同步到当前终端。若报错仍指向 `chromium_headless_shell-*`，检查执行测试的终端是否正确设置了变量。
+
+**方式二：安装项目 Playwright 所需的 Chromium。** 在项目根目录执行本地 CLI，将匹配的浏览器下载到本机缓存；无需全局安装 Playwright：
+
+```powershell
+node node_modules/@playwright/test/cli.js install chromium
+Remove-Item Env:PLAYWRIGHT_CHANNEL -ErrorAction SilentlyContinue # 如曾指定系统浏览器，清除后验证默认配置
+pnpm check
+```
+
+此后无需每次指定 Edge/Chrome；升级或切换项目 Playwright 版本后，若再次出现缺失浏览器的错误，重新执行安装命令。已有最新构建产物时，可先用 `pnpm test:browser` 单独复查浏览器阶段；完整验收仍使用 `pnpm check`。若配置后仍失败，应继续查看新的第一条 `Error:`，不要仅凭失败数量认定仍是同一问题。
 
 ## 依赖与发布
 
