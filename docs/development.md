@@ -83,7 +83,7 @@ pnpm changeset
 pnpm changeset status
 pnpm version-packages
 pnpm check
-pnpm release
+pnpm release --otp=123456
 ```
 
 发布前另行核对目标包、changeset、npm 身份与权限；version-packages 写回版本与 changelog 后重新检查。release 会发布所有高于 registry 版本的包，不能用它隐式选择单包。本次重构不执行发布。
