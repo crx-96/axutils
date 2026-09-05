@@ -1,89 +1,81 @@
-# 开发总览
+# 开发与验证
 
-> 本文描述的是 `axutils` 仓库的开发与构建环境要求；各发布子包的消费兼容性请以对应子包 README 为准。
+## 环境
 
-## 环境与版本口径
+- 开发：Node.js >=20.19.0，系统 PATH 中可用的 pnpm；仓库不通过 packageManager 固定 pnpm 版本。
+- 包消费：当前 common 支持 Node.js >=14.18.0 和浏览器，输出 ES2020 的 ESM/CJS/UMD。
+- CI：Node 24，Linux 与 Windows 中文路径；现代工具链构建后，Node 14.18.0 验证同一份产物。
+- 依赖恢复使用 `pnpm install --frozen-lockfile`。不要用全局工具的版本代替锁文件中项目工具的版本；根 lint 显式调用本地 Biome。
 
-- 仓库开发：`Node.js >= 20.19.0`。
-- CI：`ubuntu-latest`、Node.js `24`，通过 `pnpm/action-setup` 安装执行时可用的最新版 pnpm。
-- 包消费：以各子包 `package.json#engines.node` 和 README 为准；当前 `@axutils/common` 为 `>=14.18.0`，不得与仓库开发版本混淆。
-- 本地和 CI 均直接调用 pnpm；系统 `PATH` 中须有可用的 pnpm，仓库不通过 `packageManager` 或 Corepack 固定版本。
+## 安装与命令
 
-## 获取源码与依赖
-
-首次开发时，在仓库根目录安装整个 workspace：
+在仓库根目录执行：
 
 ```bash
-git clone https://github.com/crx-96/axutils.git
-cd axutils
-pnpm install
+pnpm install --frozen-lockfile
+pnpm check
 ```
 
-| 场景 | 命令 | 说明 |
-| --- | --- | --- |
-| 安装或更新 workspace | `pnpm install` | 按 `pnpm-lock.yaml` 解析依赖 |
-| 严格复现依赖 | `pnpm install --frozen-lockfile` | 锁文件与 `package.json` 不一致时直接失败；用于 CI、发布前复现或重建依赖目录 |
-| 添加共享开发工具 | `pnpm add -Dw <包名>` | 仅用于全 workspace 共享工具链 |
-| 添加子包运行时依赖 | `pnpm --filter <子包名> add <包名>` | 仅用于普通运行时依赖 |
-| 添加子包开发依赖 | `pnpm --filter <子包名> add -D <包名>` | 例如 `pnpm --filter @axutils/common add -D <包名>` |
+首次运行浏览器测试需可用浏览器。CI 在一次性 runner 中执行 `node node_modules/@playwright/test/cli.js install --with-deps chromium`。本地可复用已安装的 Edge/Chrome，无需下载；PowerShell 示例：
 
-第三方功能优先声明为可选 peer，并将本地开发/测试所需版本放入该子包 `devDependencies`。使用已发布包时，应在消费方项目而非本仓库根目录安装：
-
-```bash
-pnpm add @axutils/common
+```powershell
+$env:PLAYWRIGHT_CHANNEL = "msedge" # 或 chrome
+pnpm check
 ```
-
-部分 API 依赖可选 peer；请按子包 README 跳转到对应详细使用文档，并按文档安装所需依赖。
-
-## npm / pnpm 源
-
-- 项目级 `.npmrc` 默认使用镜像源，`@axutils` scope 明确指向官方 npm `https://registry.npmjs.org/`。
-- 仓库只使用 pnpm 管理 workspace，不得改用 `npm install`。
-- 登录和发布时须显式使用官方源，避免受全局镜像配置影响；登录命令为 `npm login --registry=https://registry.npmjs.org/`。发布前还须确认项目 `.npmrc` 中 `@axutils` scope 仍指向官方 npm。
-
-## 仓库结构与配置
-
-- 可发布包位于 `packages/*`；文档和仓库内 Skills 位于 `docs/`。
-- 根目录统一维护 workspace、TypeScript、Biome、Changesets、CI 和发布配置。
-- 根 `tsconfig.json` 是项目引用入口，`tsconfig.base.json` 提供共享编译选项；新增子包时，必须将其加入根 `tsconfig.json#references`。
-
-## CI 验证
-
-CI 使用 `pnpm install --frozen-lockfile`，随后与根 `check` 脚本按同一顺序执行：`lint` → `typecheck` → `test` → `build` → `@axutils/common test:dist` → `@axutils/common publint`。
-
-## 根目录命令
 
 | 命令 | 用途 |
 | --- | --- |
-| `pnpm install` | 安装整个 workspace 的依赖 |
-| `pnpm lint` | 运行全仓 `biome check .` |
-| `pnpm biome:check` | 直接执行与 lint 相同的 Biome 检查 |
-| `pnpm typecheck` | 递归执行各子包类型检查 |
-| `pnpm test` | 递归执行各子包测试 |
-| `pnpm build` | 递归执行各子包构建 |
-| `pnpm check` | 串行执行 lint、typecheck、test、build、common 的 `test:dist` 和 `publint` |
-| `pnpm changeset` | 创建版本变更记录 |
-| `pnpm version-packages` | 按 changeset 计算并写入版本号 |
-| `pnpm release` | 执行 npm 发布流程 |
+| pnpm lint / pnpm biome:check | 本地锁定 Biome 的格式、导入、对象键排序及质量检查，只读不改写 |
+| pnpm format | 代码格式化 |
+| pnpm typecheck | 各子包源码与单元测试类型检查 |
+| pnpm test | 各子包单元测试 |
+| pnpm test:tooling | 构建入口和声明转换测试 |
+| pnpm build | 各子包构建一次 |
+| pnpm test:dist | 已构建产物的 ESM/CJS/UMD 入口与行为契约 |
+| pnpm test:consumer | 真实 tarball、最小 peer 组合及 NodeNext ESM/CJS 类型检查 |
+| pnpm test:browser | 浏览器消费类型检查与 Playwright 真实浏览器测试 |
+| pnpm publint | 发布清单及打包检查 |
+| pnpm check | lint → 工具测试 → typecheck → 单元测试 → build → test:dist → test:consumer → publint → test:browser |
+| pnpm test:runtime | 用 AXUTILS_TEST_NODE 指定的 Node 运行全部包的产物冒烟 |
 
-## 发布流程
+单独打开 common 时，可在包目录执行各包脚本；`pnpm check:dist` 组合构建与产物冒烟。共享安装和完整 `pnpm check` 在仓库根执行。
 
-本仓库通过 Changesets 管理版本和发布。不得手动修改子包 `package.json#version`，也不得逐包执行 `npm publish`。
+指定最低消费运行时不需要切换全局 Node，例如已有对应二进制时：
 
-发布前确认以下条件：
-
-- 当前分支包含全部待发布改动，工作区没有误带文件。
-- 所有目标包均有 changeset，且范围正确；尚未创建时须在下方 `pnpm changeset` 步骤完成。
-- npm 账号具有 `@axutils` scope 发布权限，登录和发布均使用官方 registry。
-
-登录并检查当前 npm 身份：
-
-```bash
-npm login --registry=https://registry.npmjs.org/
-npm whoami --registry=https://registry.npmjs.org/
+```powershell
+$env:AXUTILS_TEST_NODE = "C:\path\to\node-v14.18.0\node.exe"
+pnpm test:runtime
+pnpm test:consumer
+Remove-Item Env:AXUTILS_TEST_NODE
 ```
 
-### 标准流程
+编译器仍使用当前开发 Node，只有消费者子进程使用指定版本。
+
+## 编辑器与修改后检查
+
+根目录和 common 的 `.vscode/settings.json` 分别支持两种打开方式：绑定根 Biome 配置，对 JavaScript、TypeScript、JSON/JSONC 启用保存时格式化和安全修复。Windows x64 明确使用 pnpm 安装树中的本地 Biome 原生程序，其他平台由扩展解析项目依赖。设置仅作用于工作区，不修改用户全局设置。
+
+每次修改后必须先格式化、再检查。全仓执行 `pnpm format`，随后执行 `pnpm lint`；小范围可运行 `node node_modules/@biomejs/biome/bin/biome format --write <文件...>`，再执行 `pnpm lint`。导入整理和对象排序使用 `node node_modules/@biomejs/biome/bin/biome check --write <文件...>` 的安全修复；不要批量使用 `--unsafe`。
+
+普通 JavaScript/TypeScript 与 JSON/JSONC 对象开启 useSortedKeys，手动保存时自动排序。package.json 使用 useSortedPackageJson 专用规则整理清单，保留 exports 的条件顺序（types 在 default 前）。对有求值或枚举顺序语义的对象，以及故意乱序的测试输入，使用 `biome-ignore assist/source/useSortedKeys: 原因` 局部豁免；不通过修改测试预期来迁就排序。
+
+包顶层 `playwright.config.ts` 归属 common/tsconfig.json，使用已有 Node 类型；test-browser/tsconfig.json 只负责浏览器测试。不要为修复编辑器项目归属而重复安装 @types/node，或把 TypeScript 7 的 native 包配置成传统 JS tsserver 的 tsdk。
+
+修改配置后，编辑器通常会自动更新；若仍显示旧诊断，执行 `Biome: Restart` 或 `Developer: Reload Window` 重新加载工作区。以本地 `pnpm lint` 和相应 tsconfig 的检查结果核对实际错误。
+
+## 测试与临时文件
+
+源码单元测试在 test 中，真实浏览器测试在 test-browser 中；两者使用不同配置。日期宿主时区测试启动独立 Vitest 进程，避免当前 worker 的 TZ 修改不能影响宿主 Date。
+
+打包消费和浏览器测试使用系统临时目录并在结束时清理；浏览器服务器仅监听 127.0.0.1 并提供固定测试资源。设置 AXUTILS_KEEP_BROWSER_ARTIFACTS=1 可保留失败诊断文件，路径会打印到终端，调试结束后由使用者删除。
+
+遇到 Windows 中文路径下 pnpm exec 找不到已安装工具时，先确认项目 node_modules 的真实文件与版本。可用其 Node CLI 入口诊断，不要静默改用全局版本或更换包管理器。依赖 junction 失效时按锁文件重新安装整个 workspace，不手工改源码绕过缺失依赖。
+
+## 依赖与发布
+
+根 devDependencies 放共享工具链；功能 peer 与对应开发版本放所属子包。项目 .npmrc 默认镜像源，@axutils scope 指向官方 npm；登录、身份检查和发布使用官方 registry。
+
+Changesets 管理版本，不手工改版本号或逐包 npm publish。标准流程：
 
 ```bash
 pnpm check
@@ -94,50 +86,10 @@ pnpm check
 pnpm release
 ```
 
-- 首次 `pnpm check` 验证发布前状态；`version-packages` 写回版本号和 changelog 后必须再执行一次，两个检查时点不得合并。
-- `pnpm changeset` 选择包、升级类型并填写说明，可执行一次或多次：单包发布只能选择目标包；多包发布可一次选择多个包，或分别创建多条 changeset。
-- `pnpm changeset status` 必须在写入版本号前核对全部待发布包和预期版本；范围不符时先修正 changeset 或版本变更。
-- `pnpm release` 触发 `changeset publish`，会发布 workspace 中所有版本高于 npm 已发布版本的包，不支持通过该命令过滤为单包。
+发布前另行核对目标包、changeset、npm 身份与权限；version-packages 写回版本与 changelog 后重新检查。release 会发布所有高于 registry 版本的包，不能用它隐式选择单包。本次重构不执行发布。
 
-账号启用发布 OTP 时，传入当次验证码：
+## 相关资料
 
-```bash
-pnpm release --otp=123456
-```
-
-将示例中的 `123456` 替换为当次验证码。
-
-### 发布完成后确认
-
-从官方 registry 查询每个目标包，确认新版本已可见：
-
-```bash
-npm view @axutils/common version --registry=https://registry.npmjs.org/
-```
-
-发布产生的版本号、changelog 和 changeset 删除记录必须提交到仓库，避免 npm 与仓库状态不一致；并入代码提交或单独提交均按当次安排。Git tag 和 GitHub Release 也按当次发布安排执行。
-
-### 版本号选择
-
-| 类型 | 适用变更 | 示例 |
-| --- | --- | --- |
-| `patch` | 不影响既有公开 API 的 bug 修复、实现调整或文档修正 | `1.2.3 -> 1.2.4` |
-| `minor` | 向后兼容地新增导出、工具函数或子路径等能力 | `1.2.3 -> 1.3.0` |
-| `major` | 删除导出，或不兼容地修改函数签名、返回值语义、默认行为 | `1.2.3 -> 2.0.0` |
-
-如果不确定升级类型，先按公开 API 是否兼容旧用法来判断：
-
-- 旧代码无需改动：根据是否新增能力选择 `patch` 或 `minor`。
-- 旧代码需要改动：使用 `major`。
-
-## 开发约定
-
-- 可发布子包位于 `packages/*`，包名使用 `@axutils/*`。
-- 根目录维护共享的 TypeScript、Biome、发布和 CI 配置；子包单独打开时仍须使用继承配置。
-- 公共 API 必须通过 `exports` 显式声明。
-
-## 相关文档
-
-- [仓库根 README](../README.md)
-- [新增子包流程](./skills/add-axutils-package/SKILL.md)
-- [项目审查流程](./skills/review-axutils-project/SKILL.md)
+- [架构与兼容契约](./architecture.md)
+- [新增子包](./skills/add-axutils-package/SKILL.md)
+- [项目审查](./skills/review-axutils-project/SKILL.md)

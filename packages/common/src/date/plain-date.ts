@@ -1,20 +1,20 @@
-import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
-import type { DateFormatPattern, Timezone } from "./format";
+import { formatInTimeZone } from "date-fns-tz";
+import type { DateFormatPattern, Timezone } from "./format.js";
 import {
   addYearMonths,
-  createLocalDate,
   createUtcDate,
   dateToUtcFields,
+  dateToZonedDate,
   formatOptions,
   invalid,
   parseDateString,
-} from "./internal";
+} from "./internal.js";
 import type {
   DateFormatOptions,
   DurationFields,
   PlainDateInput,
   ZonedDateTimeValue,
-} from "./types";
+} from "./types.js";
 
 function fromInput(input: PlainDateInput): Date {
   if (input instanceof Date) {
@@ -54,6 +54,7 @@ function compareDates(first: Date, second: Date): -1 | 0 | 1 {
 }
 
 /** 纯日期命名空间；所有字段都按 UTC 提取和存储，不受运行时本地时区影响。 */
+// biome-ignore assist/source/useSortedKeys: 保留公开命名空间的成员枚举顺序。
 export const PlainDate = {
   /** 从 ISO 日期、Date 或字段对象创建纯日期；无效输入统一抛 RangeError。 */
   from(input: PlainDateInput): Date {
@@ -69,10 +70,7 @@ export const PlainDate = {
   toZonedDateTime(date: PlainDateInput, timezone: Timezone): ZonedDateTimeValue {
     const value = fromInput(date);
     return {
-      epochMs: fromZonedTime(
-        createLocalDate(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate()),
-        timezone,
-      ).getTime(),
+      epochMs: dateToZonedDate(value, timezone).getTime(),
       timezone,
     };
   },
@@ -89,6 +87,7 @@ export const PlainDate = {
 
   /** 日期减法。 */
   subtract(date: PlainDateInput, duration: DurationFields): Date {
+    // biome-ignore assist/source/useSortedKeys: 保留日期字段 getter 的读取顺序。
     return addDate(fromInput(date), {
       years: -(duration.years ?? 0),
       months: -(duration.months ?? 0),

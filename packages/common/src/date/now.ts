@@ -1,7 +1,7 @@
 import { formatInTimeZone } from "date-fns-tz";
-import type { Timezone } from "./format";
-import { createUtcDate, getTimezone } from "./internal";
-import type { ZonedDateTimeValue } from "./types";
+import type { Timezone } from "./format.js";
+import { createUtcDate, getTimezone } from "./internal.js";
+import type { ZonedDateTimeValue } from "./types.js";
 
 function currentParts(timezone?: Timezone) {
   const zone = getTimezone(timezone);
@@ -15,10 +15,11 @@ function currentParts(timezone?: Timezone) {
     second = NaN,
     millisecond = NaN,
   ] = text.split("-").map(Number);
-  return { zone, date: createUtcDate(year, month, day, hour, minute, second, millisecond) };
+  return { date: createUtcDate(year, month, day, hour, minute, second, millisecond), zone };
 }
 
 /** 当前时间命名空间；纯值方法返回 UTC 对齐的 Date，避免调用方机器时区影响字段读取。 */
+// biome-ignore assist/source/useSortedKeys: 保留公开命名空间的成员枚举顺序。
 export const Now = {
   /** 获取目标时区的当前日期，并以 UTC 对齐 Date 返回。 */
   plainDateISO(timezone?: Timezone): Date {

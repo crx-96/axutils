@@ -18,9 +18,9 @@ describe("date/Instant", () => {
     expect(Instant.since(86_400_001, 0)).toEqual({
       days: 1,
       hours: 0,
+      milliseconds: 1,
       minutes: 0,
       seconds: 0,
-      milliseconds: 1,
     });
   });
 

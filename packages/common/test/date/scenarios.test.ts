@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DATE_FORMAT,
   Duration,
@@ -14,6 +14,15 @@ import {
 const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 describe("date/usage-scenarios", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2024-01-31T20:34:56.789Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   // ─────────── 1. 当前系统时间 ───────────
   it("获取当前系统时间，多种格式显示", () => {
     const now = Now.plainDateTimeISO();

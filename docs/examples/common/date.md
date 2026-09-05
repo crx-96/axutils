@@ -100,6 +100,21 @@ console.log(AxutilsCommon.DATE_FORMAT.DATE, AxutilsCommon.TIMEZONE.UTC);
 
 纯日期、纯时间和无时区日期时间从 `Date` 提取 UTC 字段，以避免调用方机器时区影响结果。字符串日期时间支持 `T`、`t` 或空格作为分隔符。所有无效输入统一抛 `RangeError`。
 
+### 时区转换边界
+
+将无偏移日期时间解释为指定时区时，先保留完整日历字段，再交给 date-fns-tz；不先构造宿主本地 Date。因此宿主处于夏令时缺失时段或跳过某一天时，不会在转换前改写原始字段。秒以下精度以整数毫秒保留。
+
+目标时区本身的重复时间、缺失时间及公元 0 年/BCE 仍遵从 date-fns-tz 的现有行为，并非完整 Temporal 消歧实现。例如目标纽约的 2024-11-03T01:30 仍可能受其宿主相关的消歧选择影响；需要指定唯一时间点时传入明确 UTC 偏移或 epoch。
+
+ISO 偏移的分钟部分必须为 00–59，完整范围不超过 ±14:00；+00:60、+01:99 和 ±14:01 均抛 RangeError。
+
+```ts
+import { PlainDateTime } from "@axutils/common/date";
+
+const value = PlainDateTime.toZonedDateTime("2024-03-10T02:30:00", "UTC");
+console.log(new Date(value.epochMs).toISOString()); // 2024-03-10T02:30:00.000Z
+```
+
 ## 常量
 
 ### `DATE_FORMAT`

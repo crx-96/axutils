@@ -145,9 +145,9 @@ export const queryToObject = (value: string): QueryObject => {
     // 先判断自有字段，避免 `__proto__`、`constructor` 等 key 读取到原型链上的值。
     if (Object.getOwnPropertyDescriptor(result, key) === undefined) {
       Object.defineProperty(result, key, {
-        value: item,
-        enumerable: true,
         configurable: true,
+        enumerable: true,
+        value: item,
         writable: true,
       });
       continue;
@@ -161,9 +161,9 @@ export const queryToObject = (value: string): QueryObject => {
     }
 
     Object.defineProperty(result, key, {
-      value: [current, item],
-      enumerable: true,
       configurable: true,
+      enumerable: true,
+      value: [current, item],
       writable: true,
     });
   }

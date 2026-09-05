@@ -1,5 +1,5 @@
-import { assertFinite, invalid } from "./internal";
-import type { DurationFields } from "./types";
+import { assertFinite, invalid } from "./internal.js";
+import type { DurationFields } from "./types.js";
 
 const FIELD_NAMES = [
   "years",
@@ -37,6 +37,7 @@ function mapFields(fields: DurationFields, mapper: (value: number) => number): D
 }
 
 /** Temporal.Duration 风格的轻量时间长度命名空间；from/add/subtract 不会自动归约字段。 */
+// biome-ignore assist/source/useSortedKeys: 保留公开命名空间的成员枚举顺序。
 export const Duration = {
   /** 从字段对象创建 Duration，未传入的字段不会被补入结果。 */
   from(fields: DurationFields): DurationFields {
@@ -57,6 +58,7 @@ export const Duration = {
     remaining -= minutes * 60_000;
     const seconds = Math.floor(remaining / 1_000);
     remaining -= seconds * 1_000;
+    // biome-ignore assist/source/useSortedKeys: 保留公开时长结果从大到小的字段枚举顺序。
     return {
       years: 0,
       months: 0,
@@ -123,4 +125,4 @@ export const Duration = {
   },
 };
 
-export type { DurationFields } from "./types";
+export type { DurationFields } from "./types.js";

@@ -6,8 +6,8 @@ export {
   isNode,
   isServer,
   isWebWorker,
-} from "./check/platform";
-export { isEmail, isHexColor, isHttpUrl, isIdCardCn, isIpv4, isPhoneCn } from "./check/reg";
+} from "./check/platform.js";
+export { isEmail, isHexColor, isHttpUrl, isIdCardCn, isIpv4, isPhoneCn } from "./check/reg.js";
 export {
   isArray,
   isArrowFunction,
@@ -22,7 +22,7 @@ export {
   isObject,
   isPlainObject,
   isString,
-} from "./check/type";
+} from "./check/type.js";
 export {
   MS_PER_DAY,
   MS_PER_HOUR,
@@ -30,10 +30,10 @@ export {
   MS_PER_SECOND,
   SECONDS_PER_HOUR,
   SECONDS_PER_MINUTE,
-} from "./date/constant";
-export { deepClone } from "./object/object";
-export type { StorageKeyHandler, StorageOptions, StorageType } from "./object/storage";
-export { StorageUtils } from "./object/storage";
-export type { DebouncedFunction, ThrottledFunction } from "./object/timing";
-export { debounce, throttle } from "./object/timing";
-export { objectToQuery, queryToObject } from "./object/url";
+} from "./date/constant.js";
+export { deepClone } from "./object/object.js";
+export type { StorageKeyHandler, StorageOptions, StorageType } from "./object/storage.js";
+export { StorageUtils } from "./object/storage.js";
+export type { DebouncedFunction, ThrottledFunction } from "./object/timing.js";
+export { debounce, throttle } from "./object/timing.js";
+export { objectToQuery, queryToObject } from "./object/url.js";

@@ -18,6 +18,8 @@ import {
 
 `@axutils/common/node` 聚合导出同一套方法和类型；`@axutils/common/node/crypto` 本身不是 `package.json.exports` 中的公开路径。
 
+Node 与通用转换入口共享相同的字节校验和编码语义。Buffer、Buffer.subarray 和 Uint8Array 子视图均按有效范围复制，归一化结果不共享输入底层内存；Node 的 Md5 仍使用 node:crypto，导入路径与所需依赖保持不变。
+
 ## 公开导出与所有合法使用方式
 
 Node 加密模块不需要第三方 peer，MD5 实现使用 Node.js 内置 `node:crypto`；它只适用于 Node.js 运行时。`@axutils/common` 根入口不导出任何 Node API，UMD 浏览器构建也不包含这些入口。

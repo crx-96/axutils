@@ -1,21 +1,21 @@
-import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
-import type { DateFormatPattern, Timezone } from "./format";
+import { formatInTimeZone } from "date-fns-tz";
+import type { DateFormatPattern, Timezone } from "./format.js";
 import {
-  createLocalDate,
   createUtcDate,
+  dateToZonedDate,
   durationMilliseconds,
   formatOptions,
   getTimezone,
   invalid,
   millisecondsToDuration,
   parseDateTimeString,
-} from "./internal";
+} from "./internal.js";
 import type {
   DateFormatOptions,
   DurationFields,
   ZonedDateTimeInput,
   ZonedDateTimeValue,
-} from "./types";
+} from "./types.js";
 
 interface ZonedDateTimeOptions {
   timezone?: Timezone;
@@ -41,8 +41,8 @@ function fromInput(
   );
   const epochMs =
     parsed.timezone || parsed.offsetMinutes === undefined
-      ? fromZonedTime(
-          createLocalDate(
+      ? dateToZonedDate(
+          createUtcDate(
             parsed.year,
             parsed.month,
             parsed.day,
@@ -91,6 +91,7 @@ function addMilliseconds(duration: DurationFields): number {
       "ZonedDateTime 的加法不支持 years 或 months；如需日历计算请先通过 toPlainDateTime 转为无时区值",
     );
   }
+  // biome-ignore assist/source/useSortedKeys: 按日期字段顺序读取并校验，保留首个错误的语义。
   return durationMilliseconds({
     days: duration.days,
     hours: duration.hours,
@@ -101,6 +102,7 @@ function addMilliseconds(duration: DurationFields): number {
 }
 
 /** 带 IANA 时区的绝对时间点命名空间，内部只保存 epochMs 与 timezone。 */
+// biome-ignore assist/source/useSortedKeys: 保留公开命名空间的成员枚举顺序。
 export const ZonedDateTime = {
   /** 从含时区 ISO、Date 或 options.timezone 构造带时区时间点。 */
   from(input: ZonedDateTimeInput, options: ZonedDateTimeOptions = {}): ZonedDateTimeValue {

@@ -279,9 +279,9 @@ export const jsonStringify = (
   // 否则设为 Error（理论上不会触达，循环引用已被预检测拦截，仅作兜底）
   // 注意：采用显式属性写法，避免构建器为对象展开运算符注入额外辅助代码，保持产物轻量
   const config = {
-    deterministic: resolveDeterministic(options?.sortKeys),
     bigint: true,
     circularValue: onCycle === "skip" ? null : Error,
+    deterministic: resolveDeterministic(options?.sortKeys),
   };
   const stringify = configure(config);
 
@@ -324,9 +324,9 @@ const postProcess = <T>(
   for (const key of keys) {
     // 使用数据属性定义，避免 `__proto__` 触发 Object.prototype 上的访问器并改变结果原型。
     Object.defineProperty(result, key, {
-      value: postProcess(obj[key], comparator, filterNullish),
-      enumerable: true,
       configurable: true,
+      enumerable: true,
+      value: postProcess(obj[key], comparator, filterNullish),
       writable: true,
     });
   }

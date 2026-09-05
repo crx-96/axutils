@@ -21,6 +21,10 @@ JSON 子路径的配置化序列化需要可选 peer 依赖：
 pnpm add safe-stable-stringify
 ```
 
+缓存的 key 处理函数对同一完整 key 的转换结果在实例生命周期内保持稳定，remove/clear 后再次使用也沿用该结果；未提供处理器时直接使用 prefix + key。clear 只移除记录标记与命名空间匹配的条目，保留其它业务数据；内存降级后端一次取得全部键，避免随数据量产生重复全量复制。
+
+通用 StorageUtils 使用 JSON 保存与读取值，Node StorageUtils 保存原引用，详见 [Node 缓存](https://github.com/crx-96/axutils/blob/main/docs/examples/common/node/object.md)。deepClone 的支持范围与可枚举键快照语义保持不变，数组路径优化不扩大到未支持类型。
+
 ## 公开导出与所有合法使用方式
 
 `@axutils/common` 根入口只聚合不需要第三方运行时依赖的对象工具。JSON 配置化工具保持在精确的 `object/json` 子路径中，因为该模块静态依赖可选 peer `safe-stable-stringify`；根入口不会加载它，也不会加载 Axios、RxJS、日期、通用加密或 Node 专用模块。以下表格覆盖 `package.json#exports` 中与对象工具有关的每个入口。

@@ -2,13 +2,17 @@
   "name": "@axutils/common",
   "version": "0.1.0",
   "description": "axutils 的公共工具子包",
-  "type": "module",
+  "homepage": "https://github.com/crx-96/axutils/tree/main/packages/common#readme",
+  "bugs": {
+    "url": "https://github.com/crx-96/axutils/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crx-96/axutils.git",
+    "directory": "packages/common"
+  },
   "sideEffects": false,
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "unpkg": "./dist/index.umd.cjs",
-  "jsdelivr": "./dist/index.umd.cjs",
+  "type": "module",
   "exports": {
     ".": {
       "import": {
@@ -191,26 +195,49 @@
       }
     }
   },
+  "main": "./dist/index.cjs",
+  "jsdelivr": "./dist/index.umd.cjs",
+  "unpkg": "./dist/index.umd.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist",
     "README.md"
   ],
-  "engines": {
-    "node": ">=14.18.0"
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "check:dist": "pnpm build && pnpm test:dist",
+    "publint": "publint run . --pack npm",
+    "test": "vitest run",
+    "test:browser": "tsc -p test-browser/tsconfig.json --noEmit && node ./scripts/test-browser.mjs",
+    "test:consumer": "node ./scripts/test-consumer.mjs",
+    "test:dist": "node ./scripts/smoke-esm.mjs && node ./scripts/smoke-cjs.cjs && node ./scripts/smoke-umd.cjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "publishConfig": {
-    "access": "public"
+  "devDependencies": {
+    "axios": "^1.18.1",
+    "date-fns": "^4.4.0",
+    "date-fns-tz": "^3.2.0",
+    "rxjs": "^7.8.2",
+    "safe-stable-stringify": "^2.5.0",
+    "spark-md5": "^3.0.2"
   },
   "peerDependencies": {
     "axios": "^1.18.1",
+    "date-fns": "^4.4.0",
+    "date-fns-tz": "^3.2.0",
     "rxjs": "^7.8.2",
     "safe-stable-stringify": "^2.4.0",
-    "spark-md5": "^3.0.2",
-    "date-fns": "^4.4.0",
-    "date-fns-tz": "^3.2.0"
+    "spark-md5": "^3.0.2"
   },
   "peerDependenciesMeta": {
     "axios": {
+      "optional": true
+    },
+    "date-fns": {
+      "optional": true
+    },
+    "date-fns-tz": {
       "optional": true
     },
     "rxjs": {
@@ -221,36 +248,12 @@
     },
     "spark-md5": {
       "optional": true
-    },
-    "date-fns": {
-      "optional": true
-    },
-    "date-fns-tz": {
-      "optional": true
     }
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/crx-96/axutils.git",
-    "directory": "packages/common"
+  "engines": {
+    "node": ">=14.18.0"
   },
-  "bugs": {
-    "url": "https://github.com/crx-96/axutils/issues"
-  },
-  "homepage": "https://github.com/crx-96/axutils/tree/main/packages/common#readme",
-  "scripts": {
-    "build": "node ./scripts/build.mjs",
-    "publint": "publint run . --pack npm",
-    "test": "vitest run",
-    "test:dist": "node ./scripts/build.mjs && node ./scripts/smoke-esm.mjs && node ./scripts/smoke-cjs.cjs && node ./scripts/smoke-umd.cjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
-  },
-  "devDependencies": {
-    "axios": "^1.18.1",
-    "rxjs": "^7.8.2",
-    "safe-stable-stringify": "^2.5.0",
-    "spark-md5": "^3.0.2",
-    "date-fns": "^4.4.0",
-    "date-fns-tz": "^3.2.0"
+  "publishConfig": {
+    "access": "public"
   }
 }

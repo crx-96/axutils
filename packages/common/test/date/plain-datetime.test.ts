@@ -5,7 +5,7 @@ describe("date/PlainDateTime", () => {
   it("解析 ISO、Date 和字段对象", () => {
     expect(PlainDateTime.toString("2024-06-15T10:30:00")).toBe("2024-06-15T10:30:00");
     expect(PlainDateTime.toString("2024-06-15T10:30:00Z")).toBe("2024-06-15T10:30:00");
-    expect(PlainDateTime.toString({ year: 2024, month: 6, day: 15, hour: 10, minute: 30 })).toBe(
+    expect(PlainDateTime.toString({ day: 15, hour: 10, minute: 30, month: 6, year: 2024 })).toBe(
       "2024-06-15T10:30:00",
     );
     expect(PlainDateTime.toString(new Date("2024-06-15T10:30:00Z"))).toBe("2024-06-15T10:30:00");

@@ -1,5 +1,19 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "identifierOrder": "lexicographic"
+          }
+        },
+        "useSortedKeys": "on"
+      }
+    },
+    "enabled": true
+  },
   "files": {
     "ignoreUnknown": true,
     "includes": [
@@ -7,6 +21,9 @@
       "!**/dist",
       "!**/coverage",
       "!**/node_modules",
+      "!docs/status",
+      "!docs/plans",
+      "!.pnpm-store",
       "!**/.vite",
       "!**/*.tsbuildinfo",
       "!**/*.log"
@@ -31,23 +48,17 @@
       "preset": "recommended"
     }
   },
-  "assist": {
-    "enabled": true,
-    "actions": {
-      "source": {
-        "organizeImports": {
-          "level": "on",
-          "options": {
-            "identifierOrder": "lexicographic"
-          }
-        },
-        "useSortedKeys": {
-          "level": "on",
-          "options": {
-            "sortOrder": "lexicographic"
+  "overrides": [
+    {
+      "assist": {
+        "actions": {
+          "source": {
+            "useSortedKeys": "off",
+            "useSortedPackageJson": "on"
           }
         }
-      }
+      },
+      "includes": ["**/package.json"]
     }
-  }
+  ]
 }

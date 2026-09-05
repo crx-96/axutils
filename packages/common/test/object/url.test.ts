@@ -12,12 +12,14 @@ describe("object/url", () => {
   });
 
   it("将对象序列化为不带前导问号的查询字符串", () => {
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
     expect(objectToQuery({ keyword: "你好 world", page: 1, enabled: false })).toBe(
       "keyword=%E4%BD%A0%E5%A5%BD+world&page=1&enabled=false",
     );
   });
 
   it("默认过滤 null 和 undefined，关闭过滤后保留其文本值", () => {
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
     const input = { keep: "value", nil: null, missing: undefined };
 
     expect(objectToQuery(input)).toBe("keep=value");
@@ -36,6 +38,7 @@ describe("object/url", () => {
   });
 
   it("sortKeys 支持升序、降序和自定义排序，且不改变数组元素顺序", () => {
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
     const input = { b: ["second", "first"], ccc: "three", aa: "one" };
 
     expect(objectToQuery(input, { sortKeys: true })).toBe("aa=one&b=second&b=first&ccc=three");
@@ -47,12 +50,12 @@ describe("object/url", () => {
 
   it("解析裸 query、带 hash 的路径和完整 HTTP URL", () => {
     expect(queryToObject("page=1&keyword=%E4%BD%A0%E5%A5%BD+world")).toEqual({
-      page: "1",
       keyword: "你好 world",
+      page: "1",
     });
     expect(queryToObject("/search?tab=all&keyword=hello+world#result")).toEqual({
-      tab: "all",
       keyword: "hello world",
+      tab: "all",
     });
     expect(queryToObject("https://example.com/search?enabled=false&tag=ts")).toEqual({
       enabled: "false",
@@ -62,8 +65,8 @@ describe("object/url", () => {
 
   it("保留裸 query 值中未编码的问号", () => {
     expect(queryToObject("redirect=https://auth.test/login?next=/app&lang=zh")).toEqual({
-      redirect: "https://auth.test/login?next=/app",
       lang: "zh",
+      redirect: "https://auth.test/login?next=/app",
     });
   });
 
@@ -92,8 +95,8 @@ describe("object/url", () => {
 
   it("将重复 key 解析为保序字符串数组，并正确解码百分号和加号空格", () => {
     expect(queryToObject("tag=ts&tag=node&keyword=%E4%BD%A0%E5%A5%BD+world")).toEqual({
-      tag: ["ts", "node"],
       keyword: "你好 world",
+      tag: ["ts", "node"],
     });
   });
 

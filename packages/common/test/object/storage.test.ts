@@ -112,7 +112,7 @@ describe("object/storage", () => {
   it("按秒计算默认过期时间，并允许 set 单独覆盖过期时间", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(0));
-    const storage = new StorageUtils({ prefix: "storage-expired-", expired: 10 });
+    const storage = new StorageUtils({ expired: 10, prefix: "storage-expired-" });
 
     storage.set("default", "value");
     storage.set("override", "value", 1);
@@ -130,11 +130,11 @@ describe("object/storage", () => {
     const handledKeys: string[] = [];
     vi.stubGlobal("localStorage", store);
     const storage = new StorageUtils({
-      prefix: "storage-key-",
       key: (key) => {
         handledKeys.push(key);
         return `md5:${key}`;
       },
+      prefix: "storage-key-",
     });
 
     storage.set("user", { id: 1 });
@@ -147,12 +147,12 @@ describe("object/storage", () => {
     const store = new TestStorage();
     vi.stubGlobal("localStorage", store);
     const first = new StorageUtils({
-      prefix: "storage-clear-first-",
       key: (key) => `hash:${key}`,
+      prefix: "storage-clear-first-",
     });
     const second = new StorageUtils({
-      prefix: "storage-clear-second-",
       key: (key) => `hash:${key}`,
+      prefix: "storage-clear-second-",
     });
 
     first.set("first", 1);
@@ -191,12 +191,12 @@ describe("object/storage", () => {
     const store = new TestStorage();
     vi.stubGlobal("localStorage", store);
     const first = new StorageUtils({
-      prefix: "storage-collision-first-",
       key: () => "storage-collision",
+      prefix: "storage-collision-first-",
     });
     const second = new StorageUtils({
-      prefix: "storage-collision-second-",
       key: () => "storage-collision",
+      prefix: "storage-collision-second-",
     });
 
     first.set("key", "first");
@@ -282,12 +282,6 @@ describe("object/storage", () => {
     const values = new Map<string, string>();
     let shouldFail = false;
     const brokenStorage = {
-      get length(): number {
-        if (shouldFail) {
-          throw new Error("length failed");
-        }
-        return values.size;
-      },
       getItem(key: string): string | null {
         if (shouldFail) {
           throw new Error("get failed");
@@ -299,6 +293,12 @@ describe("object/storage", () => {
           throw new Error("key failed");
         }
         return [...values.keys()][index] ?? null;
+      },
+      get length(): number {
+        if (shouldFail) {
+          throw new Error("length failed");
+        }
+        return values.size;
       },
       removeItem(key: string): void {
         if (shouldFail) {
@@ -330,5 +330,72 @@ describe("object/storage", () => {
 
     expect(storage.setSafe("cyclic", cyclic)).toBe(false);
     expect(storage.get("cyclic")).toBeNull();
+  });
+
+  it.each([
+    "Web Storage",
+    "Map 降级",
+  ])("%s 清理大集合时不漏项，也不删除其他命名空间、session 或业务原始值", (backend) => {
+    const localBackend = new TestStorage();
+    const sessionBackend = new TestStorage();
+    vi.stubGlobal("localStorage", backend === "Web Storage" ? localBackend : undefined);
+    vi.stubGlobal("sessionStorage", backend === "Web Storage" ? sessionBackend : undefined);
+    const prefix = `storage-large-${backend}-`;
+    const storage = new StorageUtils({ prefix });
+    const sameNamespace = new StorageUtils({ prefix });
+    const other = new StorageUtils({ prefix: `${prefix}other-` });
+    const session = new StorageUtils({ prefix, type: "session" });
+    const rawKey = `${prefix}foreign`;
+    localBackend.setItem(rawKey, "business value");
+
+    try {
+      for (let index = 0; index < 1000; index += 1) sameNamespace.set(String(index), index);
+      other.set("key", "other namespace");
+      session.set("key", "session value");
+      expect(storage.get("999")).toBe(999);
+
+      storage.clear();
+
+      for (let index = 0; index < 1000; index += 1) {
+        expect(sameNamespace.get(String(index))).toBeNull();
+      }
+      expect(other.get("key")).toBe("other namespace");
+      expect(session.get("key")).toBe("session value");
+      if (backend === "Web Storage") {
+        expect(localBackend.getItem(rawKey)).toBe("business value");
+        expect(localBackend.length).toBe(2);
+      }
+    } finally {
+      storage.clear();
+      other.clear();
+      session.clear();
+    }
+  });
+
+  it("有状态 key 处理函数在 remove、clear 和重新写入后保持原映射", () => {
+    vi.stubGlobal("localStorage", undefined);
+    let sequence = 0;
+    const handler = vi.fn((key: string) => `${++sequence}:${key}`);
+    const storage = new StorageUtils({ key: handler, prefix: "storage-stable-handler-" });
+
+    try {
+      storage.set("key", "first");
+      expect(storage.get("key")).toBe("first");
+      storage.remove("key");
+      storage.set("key", "after remove");
+      expect(storage.get("key")).toBe("after remove");
+      storage.clear();
+      storage.set("key", "after clear");
+      expect(storage.get("key")).toBe("after clear");
+      expect(handler.mock.calls).toEqual([["storage-stable-handler-key"]]);
+
+      storage.set("second", "second value");
+      expect(handler.mock.calls).toEqual([
+        ["storage-stable-handler-key"],
+        ["storage-stable-handler-second"],
+      ]);
+    } finally {
+      storage.clear();
+    }
   });
 });

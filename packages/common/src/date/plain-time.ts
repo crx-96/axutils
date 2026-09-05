@@ -5,8 +5,8 @@ import {
   invalid,
   millisecondsToDuration,
   parseDateTimeString,
-} from "./internal";
-import type { DurationFields, PlainTimeInput } from "./types";
+} from "./internal.js";
+import type { DurationFields, PlainTimeInput } from "./types.js";
 
 function fromInput(input: PlainTimeInput): Date {
   if (input instanceof Date) {
@@ -64,6 +64,7 @@ function compareTimes(first: PlainTimeInput, second: PlainTimeInput): -1 | 0 | 1
 }
 
 function addTime(time: Date, duration: DurationFields): Date {
+  // biome-ignore assist/source/useSortedKeys: 按时间字段顺序读取并校验，保留首个错误的语义。
   const milliseconds = durationMilliseconds({
     hours: duration.hours,
     minutes: duration.minutes,
@@ -77,6 +78,7 @@ function addTime(time: Date, duration: DurationFields): Date {
 }
 
 /** 纯时间命名空间；时间加减不跨日，超出 24 小时按周期取模。 */
+// biome-ignore assist/source/useSortedKeys: 保留公开命名空间的成员枚举顺序。
 export const PlainTime = {
   /** 从 ISO 时间、datetime 或 Date/字段对象构造纯时间。 */
   from(input: PlainTimeInput): Date {
@@ -95,6 +97,7 @@ export const PlainTime = {
 
   /** 时间减法。 */
   subtract(time: PlainTimeInput, duration: DurationFields): Date {
+    // biome-ignore assist/source/useSortedKeys: 按时间字段顺序读取并校验，保留首个错误的语义。
     return addTime(fromInput(time), {
       hours: -(duration.hours ?? 0),
       minutes: -(duration.minutes ?? 0),

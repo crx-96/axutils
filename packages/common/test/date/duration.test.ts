@@ -15,26 +15,26 @@ describe("date/Duration", () => {
 
   it("在毫秒与完整字段之间转换", () => {
     expect(Duration.fromMilliseconds(0)).toEqual({
-      years: 0,
-      months: 0,
       days: 0,
       hours: 0,
-      minutes: 0,
-      seconds: 0,
       milliseconds: 0,
+      minutes: 0,
+      months: 0,
+      seconds: 0,
+      years: 0,
     });
     expect(Duration.fromMilliseconds(90_061_000)).toEqual({
-      years: 0,
-      months: 0,
       days: 1,
       hours: 1,
-      minutes: 1,
-      seconds: 1,
       milliseconds: 0,
+      minutes: 1,
+      months: 0,
+      seconds: 1,
+      years: 0,
     });
     expect(Duration.totalMilliseconds({ days: 1, hours: 1 })).toBe(90_000_000);
     expect(Duration.totalMilliseconds({})).toBe(0);
-    expect(() => Duration.totalMilliseconds({ years: 1, days: 1 })).toThrow(RangeError);
+    expect(() => Duration.totalMilliseconds({ days: 1, years: 1 })).toThrow(RangeError);
   });
 
   it("支持逐字段取反和绝对值", () => {

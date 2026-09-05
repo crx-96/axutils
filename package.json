@@ -1,36 +1,43 @@
 {
   "name": "axutils",
   "private": true,
-  "engines": {
-    "node": ">=20.19.0"
-  },
-  "scripts": {
-    "biome:check": "biome check .",
-    "build": "pnpm -r build",
-    "changeset": "changeset",
-    "check": "biome check . && pnpm -r typecheck && pnpm -r test && pnpm -r build && pnpm --filter @axutils/common test:dist && pnpm --filter @axutils/common publint",
-    "format": "biome format --write .",
-    "lint": "biome check .",
-    "release": "changeset publish",
-    "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck",
-    "version-packages": "changeset version"
+  "homepage": "https://github.com/crx-96/axutils#readme",
+  "bugs": {
+    "url": "https://github.com/crx-96/axutils/issues"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/crx-96/axutils.git"
   },
-  "bugs": {
-    "url": "https://github.com/crx-96/axutils/issues"
+  "scripts": {
+    "biome:check": "node ./node_modules/@biomejs/biome/bin/biome check .",
+    "build": "pnpm -r build",
+    "changeset": "changeset",
+    "check": "node ./scripts/workspace.mjs check",
+    "format": "node ./node_modules/@biomejs/biome/bin/biome format --write .",
+    "lint": "node ./node_modules/@biomejs/biome/bin/biome check .",
+    "publint": "node ./scripts/workspace.mjs publint",
+    "release": "changeset publish",
+    "test": "pnpm -r test",
+    "test:browser": "node ./scripts/workspace.mjs test:browser",
+    "test:consumer": "node ./scripts/workspace.mjs test:consumer",
+    "test:dist": "node ./scripts/workspace.mjs test:dist",
+    "test:runtime": "node ./scripts/runtime-smoke.mjs",
+    "test:tooling": "node --test scripts/test/*.test.mjs",
+    "typecheck": "pnpm -r typecheck",
+    "version-packages": "changeset version"
   },
-  "homepage": "https://github.com/crx-96/axutils#readme",
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
     "@changesets/cli": "2.31.0",
+    "@playwright/test": "^1.62.1",
     "@types/node": "24.12.4",
     "publint": "0.3.21",
     "typescript": "7.0.1-rc",
     "vite": "8.1.3",
     "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

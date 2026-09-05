@@ -5,7 +5,7 @@ describe("date/PlainDate", () => {
   it("从三种输入构造并提取字段", () => {
     expect(PlainDate.toString(PlainDate.from("2024-06-15"))).toBe("2024-06-15");
     expect(PlainDate.toString(PlainDate.from(new Date("2024-06-15T23:00:00Z")))).toBe("2024-06-15");
-    expect(PlainDate.toString(PlainDate.from({ year: 2024, month: 6, day: 15 }))).toBe(
+    expect(PlainDate.toString(PlainDate.from({ day: 15, month: 6, year: 2024 }))).toBe(
       "2024-06-15",
     );
     expect(PlainDate.toString(PlainDate.from("2024-06-15T10:30:00Z"))).toBe("2024-06-15");

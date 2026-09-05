@@ -2,6 +2,7 @@
  * 常用日期时间格式。格式字符串仍兼容 date-fns 的完整 token 语法；这些常量只覆盖高频场景，
  * 不能替代需要精细定制的业务格式。
  */
+// biome-ignore assist/source/useSortedKeys: 保留公开格式常量的枚举顺序。
 export const DATE_FORMAT = {
   /** 机器和接口常用的短日期，例如 2025-12-12。 */
   DATE: "yyyy-MM-dd",
@@ -56,6 +57,7 @@ export type DateFormatPattern = (typeof DATE_FORMAT)[keyof typeof DATE_FORMAT] |
 /**
  * 常用 IANA 时区标识符。时区名称必须交给运行时校验，不能把 `CST` 等有歧义的缩写当作时区。
  */
+// biome-ignore assist/source/useSortedKeys: 保留公开时区常量的枚举顺序和地域分组。
 export const TIMEZONE = {
   UTC: "UTC",
 

@@ -23,9 +23,9 @@ const copyEnumerableProperties = (source: object, target: object, cache: CloneCa
   for (const key of getEnumerableKeys(source)) {
     const propertyValue = Reflect.get(source, key);
     Object.defineProperty(target, key, {
-      value: cloneValue(propertyValue, cache),
-      enumerable: true,
       configurable: true,
+      enumerable: true,
+      value: cloneValue(propertyValue, cache),
       writable: true,
     });
   }
@@ -115,8 +115,18 @@ const cloneValue = (value: unknown, cache: CloneCache): unknown => {
     return value;
   }
 
-  if (cache.has(value)) {
-    return cache.get(value);
+  // 缓存只保存已创建的对象副本，因此 undefined 可直接表示尚未登记。
+  const cached = cache.get(value);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  // 数组有跨 Realm 的直接判别入口，提前处理可避免依次触发内建品牌校验异常。
+  if (Array.isArray(value)) {
+    const clone: unknown[] = new Array(value.length);
+    cache.set(value, clone);
+    copyEnumerableProperties(value, clone, cache);
+    return clone;
   }
 
   if (isDateValue(value)) {
@@ -150,13 +160,6 @@ const cloneValue = (value: unknown, cache: CloneCache): unknown => {
     for (const item of value) {
       clone.add(cloneValue(item, cache));
     }
-    copyEnumerableProperties(value, clone, cache);
-    return clone;
-  }
-
-  if (Array.isArray(value)) {
-    const clone: unknown[] = new Array(value.length);
-    cache.set(value, clone);
     copyEnumerableProperties(value, clone, cache);
     return clone;
   }

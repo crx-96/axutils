@@ -1,23 +1,23 @@
-import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
-import type { DateFormatPattern, Timezone } from "./format";
+import { formatInTimeZone } from "date-fns-tz";
+import type { DateFormatPattern, Timezone } from "./format.js";
 import {
   addYearMonths,
-  createLocalDate,
   createUtcDate,
   dateTimeToUtcDate,
   dateToUtcFields,
+  dateToZonedDate,
   durationMilliseconds,
   formatOptions,
   invalid,
   millisecondsToDuration,
   parseDateTimeString,
-} from "./internal";
+} from "./internal.js";
 import type {
   DateFormatOptions,
   DurationFields,
   PlainDateTimeInput,
   ZonedDateTimeValue,
-} from "./types";
+} from "./types.js";
 
 function fromInput(input: PlainDateTimeInput): Date {
   if (input instanceof Date) {
@@ -53,6 +53,7 @@ function addDateTime(date: Date, duration: DurationFields): Date {
   let result = addYearMonths(date, duration.years ?? 0, duration.months ?? 0);
   result = new Date(
     result.getTime() +
+      // biome-ignore assist/source/useSortedKeys: 按日期字段顺序读取并校验，保留首个错误的语义。
       durationMilliseconds({
         days: duration.days,
         hours: duration.hours,
@@ -78,6 +79,7 @@ function compareDateTimes(first: PlainDateTimeInput, second: PlainDateTimeInput)
 }
 
 /** 无时区日期时间命名空间；Date 内部值始终以 UTC getter 表示原始字段。 */
+// biome-ignore assist/source/useSortedKeys: 保留公开命名空间的成员枚举顺序。
 export const PlainDateTime = {
   /** 从完整 ISO 日期时间、Date 或字段对象构造。 */
   from(input: PlainDateTimeInput): Date {
@@ -88,18 +90,7 @@ export const PlainDateTime = {
   toZonedDateTime(dateTime: PlainDateTimeInput, timezone: Timezone): ZonedDateTimeValue {
     const value = fromInput(dateTime);
     return {
-      epochMs: fromZonedTime(
-        createLocalDate(
-          value.getUTCFullYear(),
-          value.getUTCMonth() + 1,
-          value.getUTCDate(),
-          value.getUTCHours(),
-          value.getUTCMinutes(),
-          value.getUTCSeconds(),
-          value.getUTCMilliseconds(),
-        ),
-        timezone,
-      ).getTime(),
+      epochMs: dateToZonedDate(value, timezone).getTime(),
       timezone,
     };
   },
@@ -111,6 +102,7 @@ export const PlainDateTime = {
 
   /** 日期时间减法。 */
   subtract(dateTime: PlainDateTimeInput, duration: DurationFields): Date {
+    // biome-ignore assist/source/useSortedKeys: 保留日期字段 getter 的读取顺序。
     return addDateTime(fromInput(dateTime), {
       years: -(duration.years ?? 0),
       months: -(duration.months ?? 0),

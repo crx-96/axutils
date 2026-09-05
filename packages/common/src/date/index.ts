@@ -1,11 +1,11 @@
-export { Duration } from "./duration";
-export type { DateFormatPattern, Timezone } from "./format";
-export { DATE_FORMAT, TIMEZONE } from "./format";
-export { Instant } from "./instant";
-export { Now } from "./now";
-export { PlainDate } from "./plain-date";
-export { PlainDateTime } from "./plain-datetime";
-export { PlainTime } from "./plain-time";
+export { Duration } from "./duration.js";
+export type { DateFormatPattern, Timezone } from "./format.js";
+export { DATE_FORMAT, TIMEZONE } from "./format.js";
+export { Instant } from "./instant.js";
+export { Now } from "./now.js";
+export { PlainDate } from "./plain-date.js";
+export { PlainDateTime } from "./plain-datetime.js";
+export { PlainTime } from "./plain-time.js";
 export type {
   DateFormatOptions,
   DurationFields,
@@ -14,6 +14,6 @@ export type {
   PlainTimeInput,
   ZonedDateTimeInput,
   ZonedDateTimeValue,
-} from "./types";
-export type { ZonedDateTimeOptions } from "./zoned-datetime";
-export { ZonedDateTime } from "./zoned-datetime";
+} from "./types.js";
+export type { ZonedDateTimeOptions } from "./zoned-datetime.js";
+export { ZonedDateTime } from "./zoned-datetime.js";

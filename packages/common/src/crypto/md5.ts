@@ -1,11 +1,11 @@
 import SparkMD5 from "spark-md5";
 
 import {
+  type Md5Input,
+  type Md5StringEncoding,
   binaryStringToBytes,
   bytesToBase64,
   bytesToHex,
-  type Md5Input,
-  type Md5StringEncoding,
   normalizeMd5Input,
 } from "./convert.js";
 

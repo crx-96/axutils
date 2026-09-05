@@ -53,6 +53,7 @@ if (typeof browserDebounced.cancel !== "function") {
   throw new Error("UMD 浏览器全局分支 debounce cancel 验证失败。");
 }
 browserDebounced.cancel();
+// biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
 if (BrowserAxutilsCommon.jsonStringify({ b: 2, a: 1 }, { sortKeys: true }) !== '{"a":1,"b":2}') {
   throw new Error("UMD 浏览器全局分支 jsonStringify 验证失败。");
 }
@@ -154,6 +155,7 @@ if (!AxutilsCommon.isNumber(1) || AxutilsCommon.isNumber(NaN)) {
 if (!AxutilsCommon.isEmail("umd@example.com")) {
   throw new Error("UMD 产物 isEmail 验证失败。");
 }
+// biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
 if (AxutilsCommon.jsonStringify({ b: 2, a: 1 }, { sortKeys: true }) !== '{"a":1,"b":2}') {
   throw new Error("UMD 产物 jsonStringify 验证失败。");
 }

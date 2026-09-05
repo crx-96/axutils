@@ -8,7 +8,8 @@
 
 ## 文档
 
-- [开发总览](./docs/development.md)
+- [开发与验证](./docs/development.md)
+- [架构与兼容契约](./docs/architecture.md)
 
 根目录安装、检查、测试、构建与发布命令统一维护在 [开发总览](./docs/development.md) 中。
 

@@ -1,4 +1,4 @@
-import type { Timezone } from "./format";
+import type { Timezone } from "./format.js";
 import {
   dateTimeToUtcDate,
   durationMilliseconds,
@@ -6,8 +6,8 @@ import {
   invalid,
   millisecondsToDuration,
   parseDateTimeString,
-} from "./internal";
-import type { DurationFields, ZonedDateTimeValue } from "./types";
+} from "./internal.js";
+import type { DurationFields, ZonedDateTimeValue } from "./types.js";
 
 const INSTANT_PATTERN =
   /^\d{4}[-/]\d{2}[-/]\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/u;
@@ -35,6 +35,7 @@ function normalize(value: string): number {
 }
 
 /** 绝对时间点命名空间，内部统一使用 Unix epoch 毫秒表示。 */
+// biome-ignore assist/source/useSortedKeys: 保留公开命名空间的成员枚举顺序。
 export const Instant = {
   /** 从带 Z 或 UTC 偏移的 ISO 字符串创建绝对时间点。 */
   from(value: string): number {

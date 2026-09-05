@@ -79,6 +79,19 @@ console.log(digest, AxutilsCommon.bytesToBase64(bytes));
 
 `Md5Input` 是 `string | readonly number[] | Uint8Array`；字符串编码 `Md5StringEncoding` 是 `"utf8" | "hex" | "base64"`。字符串默认按 UTF-8 处理；`hex` 要求连续偶数位十六进制，`base64` 使用标准 RFC 4648 字母表，不接受 URL-safe 变体。所有字节数组方法都要求每个值为 `0` 到 `255` 的整数。
 
+`Buffer` 是 `Uint8Array` 的子类，在 Node.js 中可传给这些 API。`normalizeMd5Input` 与 `toByteArray` 返回普通、独立的 `Uint8Array`，只包含输入视图的有效字节；其 byteOffset 为 0，底层 ArrayBuffer 长度等于字节数。修改原输入不会改变该副本，也不会把 Buffer 池的其它字节纳入摘要。
+
+```ts
+import { Md5 } from "@axutils/common/crypto/md5";
+import { normalizeMd5Input } from "@axutils/common/crypto/convert";
+
+const source = new Uint8Array([0, 97, 98, 99, 0]);
+const bytes = normalizeMd5Input(source.subarray(1, 4));
+source[1] = 0;
+console.log([...bytes]); // [97, 98, 99]
+console.log(new Md5().update(bytes).toHex()); // 900150983cd24fb0d6963f7d28e17f72
+```
+
 ## `Md5`
 
 ### `new Md5()`

@@ -30,6 +30,7 @@ describe("object/json", () => {
   });
 
   it("sortKeys 升序", () => {
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
     const data = { c: 3, a: 1, b: 2 };
     expect(jsonStringify(data, { sortKeys: true })).toBe('{"a":1,"b":2,"c":3}');
     expect(jsonStringify(data, { sortKeys: "asc" })).toBe('{"a":1,"b":2,"c":3}');
@@ -41,12 +42,14 @@ describe("object/json", () => {
   });
 
   it("sortKeys 自定义比较函数", () => {
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
     const data = { aaa: 1, a: 2, aa: 3 };
     const byLengthDesc = (a: string, b: string): number => b.length - a.length;
     expect(jsonStringify(data, { sortKeys: byLengthDesc })).toBe('{"aaa":1,"aa":3,"a":2}');
   });
 
   it("sortKeys 递归到嵌套对象", () => {
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
     const data = { z: 1, a: { z: 2, a: 3 } };
     expect(jsonStringify(data, { sortKeys: true })).toBe('{"a":{"a":3,"z":2},"z":1}');
   });
@@ -57,6 +60,7 @@ describe("object/json", () => {
   });
 
   it("sortKeys false 保持原顺序", () => {
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
     const data = { c: 3, a: 1, b: 2 };
     expect(jsonStringify(data, { sortKeys: false })).toBe('{"c":3,"a":1,"b":2}');
   });
@@ -92,6 +96,7 @@ describe("object/json", () => {
   });
 
   it("space 与排序组合", () => {
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
     const data = { b: 2, a: 1 };
     expect(jsonStringify(data, { sortKeys: true, space: 2 })).toBe('{\n  "a": 1,\n  "b": 2\n}');
   });
@@ -130,6 +135,7 @@ describe("object/json", () => {
 
   it("配置化路径下的共享对象引用不视为循环", () => {
     const shared = { x: 1 };
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证键顺序处理且不弱化回归覆盖。
     const data = { b: shared, a: shared };
     expect(jsonStringify(data, { sortKeys: true })).toBe('{"a":{"x":1},"b":{"x":1}}');
   });

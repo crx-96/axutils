@@ -54,13 +54,13 @@ export class StorageUtils {
   private declare readonly expired: number;
   private declare readonly prefix: string;
   private declare readonly keyHandler: StorageKeyHandler | undefined;
-  private declare readonly keyCache: Map<string, string>;
+  private declare readonly keyCache: Map<string, string> | undefined;
 
   constructor(options: StorageOptions = {}) {
     this.expired = normalizeExpired(options.expired);
     this.prefix = options.prefix ?? "";
     this.keyHandler = options.key;
-    this.keyCache = new Map();
+    this.keyCache = this.keyHandler === undefined ? undefined : new Map();
   }
 
   /**
@@ -69,10 +69,10 @@ export class StorageUtils {
    */
   set<T = unknown>(key: string, value: T, expired?: number): void {
     memoryStorage.set(this.getStorageKey(key), {
+      data: value,
+      expiresAt: toExpiresAt(expired === undefined ? this.expired : expired),
       marker: STORAGE_RECORD_MARKER,
       prefix: this.prefix,
-      expiresAt: toExpiresAt(expired === undefined ? this.expired : expired),
-      data: value,
     });
   }
 
@@ -148,15 +148,17 @@ export class StorageUtils {
     }
   }
 
-  /** 生成并缓存底层 key；处理函数收到的是 `prefix + key`。 */
+  /** 无处理函数时直接拼接；有处理函数时在实例生命周期内缓存 `prefix + key` 的处理结果。 */
   private getStorageKey(key: string): string {
+    if (this.keyHandler === undefined || this.keyCache === undefined) {
+      return this.prefix + key;
+    }
     const cached = this.keyCache.get(key);
     if (cached !== undefined) {
       return cached;
     }
 
-    const rawKey = this.prefix + key;
-    const storageKey = this.keyHandler === undefined ? rawKey : this.keyHandler(rawKey);
+    const storageKey = this.keyHandler(this.prefix + key);
     this.keyCache.set(key, storageKey);
     return storageKey;
   }

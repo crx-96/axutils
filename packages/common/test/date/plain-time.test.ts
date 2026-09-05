@@ -21,9 +21,9 @@ describe("date/PlainTime", () => {
     expect(PlainTime.millisecondOf("10:30:00.500")).toBe(500);
     expect(PlainTime.since("10:30:01", "10:30:00")).toEqual({
       hours: 0,
+      milliseconds: 0,
       minutes: 0,
       seconds: 1,
-      milliseconds: 0,
     });
   });
 });

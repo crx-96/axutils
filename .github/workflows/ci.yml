@@ -2,45 +2,48 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: workspace/中文路径/axutils
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v4
+        with:
+          path: workspace/中文路径/axutils
+      - uses: pnpm/action-setup@v4
         with:
           version: latest
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
-
-      - name: Install dependencies
+          cache-dependency-path: workspace/中文路径/axutils/pnpm-lock.yaml
+      - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
-
-      - name: Build
-        run: pnpm build
-
-      - name: Dist smoke test
-        run: pnpm --filter @axutils/common test:dist
-
-      - name: Publint
-        run: pnpm --filter @axutils/common publint
+      - name: Install test Chromium
+        run: node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Full verification (one package build)
+        run: pnpm check
+      - name: Locate minimum consumer runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 14.18.0
+      - name: Remember consumer runtime
+        run: node -e "require('fs').appendFileSync(process.env.GITHUB_ENV, 'AXUTILS_TEST_NODE=' + process.execPath + '\n')"
+      - name: Restore development runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Same artifacts on Node 14.18.0
+        run: pnpm test:runtime
+      - name: Packed consumers on Node 14.18.0
+        run: pnpm test:consumer

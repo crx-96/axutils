@@ -1,0 +1,20 @@
+{
+  ".": [],
+  "./axios/http": ["axios", "safe-stable-stringify", "spark-md5"],
+  "./check/platform": [],
+  "./check/reg": [],
+  "./check/type": [],
+  "./crypto/convert": [],
+  "./crypto/md5": ["spark-md5"],
+  "./date": ["date-fns", "date-fns-tz"],
+  "./node": [],
+  "./node/crypto/convert": [],
+  "./node/crypto/md5": [],
+  "./node/object/storage": [],
+  "./object/json": ["safe-stable-stringify"],
+  "./object/object": [],
+  "./object/storage": [],
+  "./object/timing": [],
+  "./object/url": [],
+  "./rxjs/http": ["axios", "rxjs", "safe-stable-stringify", "spark-md5"]
+}
