@@ -18,5 +18,4 @@
 - 根入口保持无第三方运行时依赖。新增导出时同步导出快照、peer 映射、产物/消费测试与使用文档。
 - Promise 与 RxJS 的重试范围、配置上限、错误结构及取消时机有区别，不因内部共享而统一。
 - deepClone 的可枚举键快照、跨 Realm、共享引用和不支持类型的行为必须保留，不能直接替换为 structuredClone。
-- 单包验证使用 pnpm typecheck、pnpm test；构建后执行 pnpm test:dist、pnpm test:consumer、pnpm test:browser、pnpm publint。pnpm check:dist 组合构建和产物冒烟。
-- 修改代码或配置后按根规则执行本地 Biome 格式化和检查；单独打开本包时，`.vscode/settings.json` 仍指向根 Biome 配置与依赖。顶层工具配置必须纳入本层 tsconfig，浏览器测试使用 test-browser 的 DOM 配置。
+- 验证范围与命令见[开发文档](../../docs/development.md#验证范围)。单独打开本包时，`.vscode/settings.json` 仍指向根 Biome 配置与依赖；顶层工具配置纳入本层 tsconfig，浏览器测试使用 test-browser 的 DOM 配置。

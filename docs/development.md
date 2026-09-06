@@ -53,11 +53,18 @@ Remove-Item Env:AXUTILS_TEST_NODE
 
 编译器仍使用当前开发 Node，只有消费者子进程使用指定版本。
 
+## 验证范围
+
+- 纯文档或规则修改检查内容、链接和规则一致性；Skill 另验证元数据，不因文档修改运行代码构建与浏览器矩阵。
+- 局部代码修改运行相关类型与行为检查，并完成下节要求的格式和 lint 检查；涉及公共契约、共享工具链、依赖、新增发布包或源码重构时，运行根 `pnpm check`。最低运行时兼容性另用 `AXUTILS_TEST_NODE` 检查同一份产物。
+- `pnpm check` 已包含上表各阶段，无需先逐项完整运行再重跑。诊断时可单独执行失败阶段；通过后仅因新改动、失败或未解决疑点追加检查。发布前仍执行完整检查。
+- 源码和测试同时重构时，先冻结原测试和公共契约基线，源码通过原测试与原产物检查后再整理测试；新增缺陷诊断可独立运行，格式化也不得提前改写冻结测试。
+
 ## 编辑器与修改后检查
 
 根目录和 common 的 `.vscode/settings.json` 分别支持两种打开方式：绑定根 Biome 配置，对 JavaScript、TypeScript、JSON/JSONC 启用保存时格式化和安全修复。Windows x64 明确使用 pnpm 安装树中的本地 Biome 原生程序，其他平台由扩展解析项目依赖。设置仅作用于工作区，不修改用户全局设置。
 
-每次修改后必须先格式化、再检查。全仓执行 `pnpm format`，随后执行 `pnpm lint`；小范围可运行 `node node_modules/@biomejs/biome/bin/biome format --write <文件...>`，再执行 `pnpm lint`。导入整理和对象排序使用 `node node_modules/@biomejs/biome/bin/biome check --write <文件...>` 的安全修复；不要批量使用 `--unsafe`。
+修改 Biome 支持的代码或配置后，运行 `node node_modules/@biomejs/biome/bin/biome format --write <本次改动文件...>`，再执行 `pnpm lint` 并修复全部诊断。导入整理和对象排序使用本地 `biome check --write <本次改动文件...>` 的安全修复；不要批量使用 `--unsafe`。只有任务要求全仓格式化时才执行 `pnpm format`。
 
 普通 JavaScript/TypeScript 与 JSON/JSONC 对象开启 useSortedKeys，手动保存时自动排序。package.json 使用 useSortedPackageJson 专用规则整理清单，保留 exports 的条件顺序（types 在 default 前）。对有求值或枚举顺序语义的对象，以及故意乱序的测试输入，使用 `biome-ignore assist/source/useSortedKeys: 原因` 局部豁免；不通过修改测试预期来迁就排序。
 
@@ -124,7 +131,7 @@ pnpm release
 
 Changesets 已升级到 3.0.2，其发布代码会识别 pnpm 的 `ERR_PNPM_OTP_NON_INTERACTIVE` 并转入交互验证。遇到该错误时先确认本地依赖已按锁文件安装，且发布命令没有通过管道或无交互任务运行。Changesets 3 在没有待处理 changeset 时执行 `version-packages` 会返回非零状态；已完成版本更新、只需重试发布时，不要重复运行版本更新。
 
-发布前另行核对目标包、changeset、npm 身份与权限；version-packages 写回版本与 changelog 后重新检查。release 会发布所有高于 registry 版本的包，不能用它隐式选择单包。本次重构不执行发布。
+发布需有用户授权；执行前核对目标包、changeset、npm 身份与权限，version-packages 写回版本与 changelog 后重新检查。release 会发布所有高于 registry 版本的包，不能用它隐式选择单包。
 
 ## 相关资料
 

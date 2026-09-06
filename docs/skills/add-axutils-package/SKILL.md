@@ -27,8 +27,7 @@ description: 在 axutils workspace 新增可发布的 @axutils 子包，并接�
 - scripts/smoke-esm.mjs 和 smoke-cjs.cjs 各自加载全部公开入口，共用本包行为契约和独立导出快照；UMD 包另提供 smoke-umd.cjs，供 root test:runtime 使用。
 - test:dist 只消费 dist，单独组合命令可串联 build 与 test:dist。不要在根 check 的后续阶段再构建包。
 - 建立本包最小 peer 映射和真实 tarball 消费 fixture，验证无 peer 主入口及 NodeNext ESM/CJS 类型。common 的消费脚本可作为实现参考，包名和业务类型断言必须替换为本包契约。
-- 依次运行本包测试、根 build、产物/消费验证与 publint，最后根 pnpm check。对最低运行时使用 AXUTILS_TEST_NODE 验证同一产物。
-- 修改结束先用本地 Biome 格式化改动文件并修复对象键排序，再运行根 `pnpm lint`，修复全部诊断后进入其余验证；package.json 使用 useSortedPackageJson，保留 exports 的条件次序。
+- 按[修改后检查](../../development.md#编辑器与修改后检查)完成格式与 lint 检查，再运行根 `pnpm check`，无需预先重复其全部阶段；最低运行时使用 `AXUTILS_TEST_NODE` 验证同一产物。
 
 ## 使用文档
 
