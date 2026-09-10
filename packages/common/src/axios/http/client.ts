@@ -69,7 +69,11 @@ export class PromiseHttpClient {
     return new PromiseHttpClient(options, factory);
   }
 
-  /** 发起通用请求；输入配置只做浅复制，不会修改调用方的 params、data 或 headers。 */
+  /**
+   * 发起通用请求；输入配置只做浅复制，不会修改调用方的 params、data 或 headers。
+   * 输入校验在返回 Promise 前同步抛出 TypeError/RangeError；异步配置与请求失败通过 Promise 拒绝。
+   * T 只声明预期响应类型，不对响应数据做运行时结构校验。
+   */
   request<T = unknown, D = unknown>(
     config: PromiseHttpRequestConfig<D>,
   ): Promise<PromiseHttpSuccess<T>> {
@@ -161,7 +165,9 @@ export class PromiseHttpClient {
 
   private validateRequestInput(input: PromiseHttpRequestConfig): void {
     validateRequestInput(input);
-  } /** 获取并缓存异步配置；共享初始化不绑定任何请求 signal，失败不缓存。 */
+  }
+
+  /** 获取并缓存异步配置；共享初始化不绑定任何请求 signal，失败不缓存。 */
   private getConfigPromise(): Promise<PromiseHttpClientConfig> {
     if (this.cachedConfig !== undefined) return Promise.resolve(this.cachedConfig);
     if (this.configLoading !== undefined) return this.configLoading;
@@ -211,14 +217,18 @@ export class PromiseHttpClient {
     input: PromiseHttpRequestConfig<D>,
   ): ResolvedRequest<D> {
     return resolveRequest(clientConfig, input);
-  } /**
+  }
+
+  /**
    * 根据请求语义生成 in-flight key。
    *
    * 带 signal 的调用必须独立执行；不稳定请求体默认关闭自动去重，显式 dedupeKey 则由调用方接管身份。
    */
   private getDedupeKey<D>(request: ResolvedRequest<D>): string | undefined {
     return getDedupeKey(request);
-  } /** 创建或复用同 key 的 in-flight Promise；成功、失败、取消后都会清理 Map。 */
+  }
+
+  /** 创建或复用同 key 的 in-flight Promise；成功、失败、取消后都会清理 Map。 */
   private getOrCreateInFlight<T, D>(
     key: string,
     request: ResolvedRequest<D>,

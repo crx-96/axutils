@@ -287,6 +287,8 @@ console.log(text);
 
 解析 JSON 文本；非法文本抛 `SyntaxError`。配置化路径可以递归排序结果对象 key，或删除值为 `null` 的对象字段；JSON 文本没有 `undefined`，所以 `filterNullish` 只过滤 `null`。排序会创建新对象，不保证引用相等。
 
+类型参数 `T` 只声明预期结果类型，不会校验或转换实际数据结构。合法 JSON 即使与 `T` 不符也会正常返回，调用方需在业务边界确认字段、类型和必填项；不确定结构时可先使用默认的 `unknown`。
+
 ```ts
 import { jsonParse } from "@axutils/common/object/json";
 
@@ -313,6 +315,8 @@ console.log(jsonStringifySafe(undefined)); // undefined
 ### `jsonParseSafe<T = unknown>(text, options?)`
 
 行为与 `jsonParse` 相同，但任何异常都返回 `null`。合法文本 `"null"` 的解析结果也为 `null`，调用方不能只凭返回值区分解析失败和原文就是 `null`。
+
+本方法同样不按 `T` 做运行时结构校验；例如 `jsonParseSafe<{ ok: boolean }>("123")` 会返回数字 `123`，不会因类型不匹配而返回 `null`。`Safe` 只表示捕获解析和后处理异常，业务结构仍需由调用方校验。
 
 ```ts
 import { jsonParseSafe } from "@axutils/common/object/json";

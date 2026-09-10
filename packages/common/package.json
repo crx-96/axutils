@@ -11,6 +11,7 @@
     "url": "git+https://github.com/crx-96/axutils.git",
     "directory": "packages/common"
   },
+  "license": "MIT",
   "sideEffects": false,
   "type": "module",
   "exports": {

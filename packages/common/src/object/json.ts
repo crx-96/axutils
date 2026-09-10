@@ -242,11 +242,12 @@ const isDefaultStringifyOptions = (options: JsonStringifyOptions | undefined): b
  * 在原生 `JSON.stringify` 基础上增加配置项：key 排序、过滤 nullish 字段、
  * 缩进格式化、循环引用处理。底层使用 `safe-stable-stringify` 实现配置化路径。
  *
- * **FastPath**：未传入配置或所有配置项均为默认值时，直接调用原生 `JSON.stringify`，
- * 性能与原生完全一致。
+ * **FastPath**：未启用排序、过滤或显式循环引用策略时，直接调用原生 `JSON.stringify`，
+ * 保留原生异常；`space` 可单独设置。
  *
  * **配置化路径**：通过 `safe-stable-stringify` 的 `configure` 工厂创建序列化器，
  * 按需配置排序、循环引用处理和 replacer（用于 filterNullish）。
+ * 显式传入 `onCycle: "throw"` 也会进入此路径，即使未启用其他配置。
  *
  * 依赖说明：使用本方法需要安装 peer 依赖 `safe-stable-stringify`（`npm i safe-stable-stringify`）。
  * 不使用 `@axutils/common/object/json` 子路径的用户无需安装。
@@ -254,7 +255,8 @@ const isDefaultStringifyOptions = (options: JsonStringifyOptions | undefined): b
  * @param value 待序列化的值
  * @param options 序列化配置，见 {@link JsonStringifyOptions}
  * @returns JSON 字符串；当根值为 `undefined`、函数或 `Symbol` 时，与原生一致返回 `undefined`
- * @throws {JsonCircularReferenceError} 检测到循环引用且 `onCycle` 为 `"throw"`（默认）
+ * @throws {TypeError} 原生路径遇到循环引用或 BigInt 等不可序列化值
+ * @throws {JsonCircularReferenceError} 配置化路径检测到循环引用，且 `onCycle` 未传或为 `"throw"`
  */
 export const jsonStringify = (
   value: unknown,
@@ -365,6 +367,7 @@ const resolveComparator = (
  * 注意：
  * - JSON 文本中不存在 `undefined`，因此 `filterNullish` 只过滤 `null`。
  * - 排序会创建新对象，不保证引用相等。
+ * - T 只声明预期结果类型，不做运行时结构校验；调用方需确认解析值是否满足业务结构。
  *
  * @param text JSON 文本
  * @param options 反序列化配置，见 {@link JsonParseOptions}
@@ -429,6 +432,7 @@ export const jsonStringifySafe = (
  * 注意：由于合法的 JSON 可以解析为 `null`（如文本 `"null"`），
  * 调用方无法仅凭返回值 `null` 区分"解析失败"与"原文就是 null"。
  * 若需区分，请使用 {@link jsonParse} 捕获异常。
+ * T 同样不提供运行时结构校验；合法 JSON 与预期类型不符时不会因此返回 `null`。
  *
  * @param text JSON 文本
  * @param options 反序列化配置，见 {@link JsonParseOptions}

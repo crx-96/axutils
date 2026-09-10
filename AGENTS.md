@@ -13,6 +13,7 @@
 以下链接供定位相关主题，按当前决定所需读取相应章节；已加载且仍适用的内容可直接复用，新增信息缺口再展开。
 
 - 开发、验证、构建和发布：[docs/development.md](./docs/development.md)
+- 编码、类型边界、异常与审查依据：[docs/coding-standards.md](./docs/coding-standards.md)
 - 模块边界与兼容契约：[docs/architecture.md](./docs/architecture.md)
 - 当前发布包：[packages/common/AGENTS.md](./packages/common/AGENTS.md)
 - 新增发布包：[新增子包 Skill](./docs/skills/add-axutils-package/SKILL.md)
@@ -20,6 +21,7 @@
 
 ## 工程约定
 
+- 按[编码与审查规范](./docs/coding-standards.md)维护工具库的类型边界、错误语义和可读性；新增要求用于新增及本次确需修改的内容，既有公共契约与配置优先，审查时区分历史缺陷、新规范差距和可选改进。
 - 公共契约以包清单的 exports、公开入口和消费测试为准。内部目录可调整，包名、路径、类型和行为的破坏性变更说明影响与迁移方式；命名导出、依赖方向及双格式声明见[架构契约](./docs/architecture.md)。
 - 发布包默认 ES2020、Node.js >=14.18.0；开发工具使用根 package.json 声明的现代 Node。环境、依赖归属、发布和新增包验证接入见[开发文档](./docs/development.md)。
 - 按职责拆分和复用，保留不同客户端、平台与存储的既有语义；差异见[职责与依赖方向](./docs/architecture.md#职责与依赖方向)。性能优化以测量和行为回归证据说明收益及限制。

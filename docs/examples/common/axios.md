@@ -103,9 +103,16 @@ const client = PromiseHttpClient.create(
 
 ## 请求结果和错误
 
-成功时每个方法返回 `PromiseHttpSuccess<T>`：`{ code, success: true, data, error: null }`，其中 `code` 是 HTTP 状态码，不读取后端响应体中的业务 code。
+请求成功时，返回的 Promise resolve 为 `PromiseHttpSuccess<T>`：`{ code, success: true, data, error: null }`，其中 `code` 是 HTTP 状态码，不读取后端响应体中的业务 code。
 
-失败时 Promise rejection 的值是 `PromiseHttpRequestError`，同时暴露：
+类型参数 `T` 只声明预期的响应数据类型，不会按 `T` 对实际数据做结构校验或转换。调用方需要确认 `result.data` 的结构；处理不可信响应时可使用 `unknown`，在业务边界校验后再使用字段。
+
+错误按发生阶段处理：
+
+- 构造客户端、调用 `create` 或请求方法时，参数校验可能同步抛出 `TypeError`；例如 `timeout: -1`。超过 Promise 客户端的重试次数或计时上限时抛出 `RangeError`。请求校验发生在返回 Promise 前，单独使用 `client.get(...).catch(...)` 接不到这些同步异常。
+- 返回 Promise 后，异步配置初始化失败、请求执行失败及请求取消通过 rejection 传递，错误值为 `PromiseHttpRequestError`。用 `try` 包住客户端创建与 `await client.get(...)`，可以处理两个阶段的错误。
+
+`PromiseHttpRequestError` 暴露：
 
 - `code`：HTTP 状态码；没有响应时为 `0`。
 - `success`：固定 `false`。
@@ -120,13 +127,17 @@ import {
   PromiseHttpRequestError,
 } from "@axutils/common/axios/http";
 
-const client = new PromiseHttpClient({ baseUrl: "https://api.example.com" });
 try {
+  const client = new PromiseHttpClient({ baseUrl: "https://api.example.com" });
   const result = await client.get<{ id: number }>("/users/1");
   console.log(result.code, result.data.id);
 } catch (error) {
   if (error instanceof PromiseHttpRequestError) {
     console.error(error.error.kind, error.code, error.error.cause);
+  } else if (error instanceof TypeError || error instanceof RangeError) {
+    console.error("参数校验失败", error.message);
+  } else {
+    throw error;
   }
 }
 ```

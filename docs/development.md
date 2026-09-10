@@ -139,6 +139,7 @@ Changesets 已升级到 3.0.2，其发布代码会识别 pnpm 的 `ERR_PNPM_OTP_
 
 ## 相关资料
 
+- [编码与审查规范](./coding-standards.md)
 - [架构与兼容契约](./architecture.md)
 - [新增子包](./skills/add-axutils-package/SKILL.md)
 - [项目审查](./skills/review-axutils-project/SKILL.md)

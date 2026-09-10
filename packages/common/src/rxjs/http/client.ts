@@ -89,7 +89,11 @@ export class RxHttpClient {
     return new RxHttpClient(options, factory);
   }
 
-  /** 发起通用请求；输入配置只做浅复制，不会修改调用方的 params、data 或 headers。 */
+  /**
+   * 创建通用请求 Observable；输入配置只做浅复制，不会修改调用方的 params、data 或 headers。
+   * 输入校验在返回 Observable 前同步抛出 TypeError；订阅后的配置与请求失败通过 error 通道发出。
+   * T 只声明预期响应类型，不对响应数据做运行时结构校验。
+   */
   request<T = unknown, D = unknown>(config: HttpRequestConfig<D>): Observable<HttpSuccess<T>> {
     assertObject(config, "HttpRequestConfig 必须是对象");
     if (typeof config.url !== "string") {
@@ -225,7 +229,9 @@ export class RxHttpClient {
     input: HttpRequestConfig<D>,
   ): ResolvedRequest<D> {
     return resolveRequest(clientConfig, input);
-  } /**
+  }
+
+  /**
    * 根据请求语义生成 in-flight key。
    *
    * 自动 key 使用现有 jsonStringify 的递归 key 排序，再用 Md5 压缩长度；两个依赖均为可选 peer，
@@ -233,7 +239,9 @@ export class RxHttpClient {
    */
   private getDedupeKey<D>(request: ResolvedRequest<D>): string | undefined {
     return getDedupeKey(request);
-  } /** 创建或复用同 key 的 in-flight Observable；请求完成/失败/取消后都会清理 Map。 */
+  }
+
+  /** 创建或复用同 key 的 in-flight Observable；请求完成/失败/取消后都会清理 Map。 */
   private getOrCreateInFlight<T, D>(
     key: string,
     request: ResolvedRequest<D>,

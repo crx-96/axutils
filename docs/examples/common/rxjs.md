@@ -108,7 +108,14 @@ const client = RxHttpClient.create(
 
 成功时请求 Observable 的 `next` 通道发出 `HttpSuccess<T>`：`{ code, success: true, data, error: null }`，`code` 是 HTTP 状态码。
 
-失败时从 `error` 通道发出 `HttpRequestError`，包含 `code`、`success: false`、`data: null` 和 `error`。`error.kind` 是 `config`、`http`、`network`、`timeout`、`cancel` 或 `unknown`；没有 HTTP 响应时 `code` 为 `0`；原始 Axios/配置错误保存在 `error.cause`。
+类型参数 `T` 只声明预期的响应数据类型，不会按 `T` 对实际数据做结构校验或转换。调用方需要确认 `result.data` 的结构；处理不可信响应时可使用 `unknown`，在业务边界校验后再使用字段。
+
+错误按发生阶段处理：
+
+- 构造客户端、调用 `create` 或请求方法时，参数校验可能同步抛出 `TypeError`；例如 `timeout: -1`。请求校验发生在返回 Observable 前，此时尚未订阅，订阅的 `error` 回调接不到这些异常，需要在调用处使用 `try/catch`。
+- 订阅后的配置初始化、请求执行或取消错误通过 Observable 的 `error` 通道发出 `HttpRequestError`，由订阅者的错误回调处理。
+
+`HttpRequestError` 包含 `code`、`success: false`、`data: null` 和 `error`。`error.kind` 是 `config`、`http`、`network`、`timeout`、`cancel` 或 `unknown`；没有 HTTP 响应时 `code` 为 `0`；原始 Axios/配置错误保存在 `error.cause`。
 
 ```ts
 import {
@@ -116,15 +123,25 @@ import {
   RxHttpClient,
 } from "@axutils/common/rxjs/http";
 
-const client = new RxHttpClient({ baseUrl: "https://api.example.com" });
-client.get<{ id: number }>("/users/1").subscribe({
-  next: (result) => console.log(result.code, result.data.id),
-  error: (error: unknown) => {
-    if (error instanceof HttpRequestError) {
-      console.error(error.error.kind, error.code, error.error.cause);
-    }
-  },
-});
+try {
+  const client = new RxHttpClient({ baseUrl: "https://api.example.com" });
+  client.get<{ id: number }>("/users/1").subscribe({
+    next: (result) => console.log(result.code, result.data.id),
+    error: (error: unknown) => {
+      if (error instanceof HttpRequestError) {
+        console.error(error.error.kind, error.code, error.error.cause);
+      } else {
+        console.error("未预期的订阅错误", error);
+      }
+    },
+  });
+} catch (error) {
+  if (error instanceof TypeError) {
+    console.error("参数校验失败", error.message);
+  } else {
+    throw error;
+  }
+}
 ```
 
 ### `new HttpRequestError(code, error)`
