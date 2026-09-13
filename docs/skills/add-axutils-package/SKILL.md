@@ -5,32 +5,26 @@ description: 在 axutils workspace 新增可发布的 @axutils 子包，并接�
 
 # 新增 axutils 子包
 
-根据新包职责和现有上下文建立发布单元。入口与依赖设计可查[架构契约](../../architecture.md)，命令与环境可查[开发文档](../../development.md) 对应章节；已明确的部分直接实施。以 common 的包清单与薄工具入口为参考，业务实现、可选 peer 和专属测试按新包需求选择。
-
-以下按职责列出接入要点，可结合已有文件和依赖关系安排工作；会影响包名、公共行为或发布范围的未决选择按[项目任务判断](../../../AGENTS.md#任务判断)处理。
+先按[发布单元边界](../../architecture.md#workspace-与公共入口)判断新包职责；用户已明确要求新增包时直接按该范围实施。遵循[目录与职责](../../architecture.md#目录与职责)，以 common 的包清单和薄构建入口为参考，按新包能力选择实现与验证，避免整包复制 common 的业务代码、peer 和断言。
 
 ## 建立发布单元
 
-- 在 packages/<name> 建立 package.json、README、AGENTS.md、tsconfig.json、tsconfig.build.json、src、test 和 scripts；AGENTS 登记本包入口、特有契约与回到根规则的路由。
-- 包名使用 @axutils/<name>，声明描述、仓库 directory、许可/发布信息、type:module、sideEffects:false 和 files 白名单；版本交给 Changesets。
-- 在根 tsconfig references 和 README 包列表登记新包；继承共享 TypeScript/Biome 选项，集中复用配置实现。
-- 工具配置文件加入所在目录的 tsconfig；Node 工具使用 node 类型，浏览器测试的 DOM 类型留在各自配置中。需要单独打开子包时，复用 common 的工作区格式化设置并调整相对路径，使编辑器解析同一份根 Biome 配置和本地版本。
+- 在 `packages/<name>/` 建立包清单、源码、测试与必要配置；按[清单要求](../../development.md#依赖与发布)声明包信息和依赖，继承共享配置。仅为实际能力建立可选目录。
+- 包级 AGENTS 登记本包功能地图、特有契约与根规则链接；不复制架构文档、命令表或通用执行规则。
+- 工具配置纳入所在目录的 tsconfig，浏览器测试的 DOM 类型使用独立配置。需要单独打开子包时，参考 common 的工作区设置并调整相对路径，复用同一份根 Biome 配置和本地版本。
 
 ## 入口、依赖与构建
 
-- exports 显式列出公共路径；每项提供 import.types/default 和 require.types/default，分别对应 dist 下 .d.ts/.js 与 .d.cts/.cjs。
-- 按[构建与声明](../../architecture.md#构建与声明)组织源码和双格式引用，沿用 exports 产物目标派生入口的共享机制。
-- scripts/build.mjs 调用根 scripts/build/package.mjs 的 buildPackage(packageRoot, options)。需要 UMD 时提供入口和全局名称，同时声明一致的 unpkg/jsdelivr；不需要时省略 UMD 配置。
-- 兼容目标沿用[项目工程约定](../../../AGENTS.md#工程约定)，依赖按[职责与依赖方向](../../architecture.md#职责与依赖方向)隔离；对应功能的可选 peer 与开发依赖放本包。
+- 按[公共入口](../../architecture.md#workspace-与公共入口)和[构建与声明](../../architecture.md#构建与声明)建立 exports 与薄构建脚本；检查每个产物目标都能映射到真实源码。
+- 对照[依赖方向](../../architecture.md#职责与依赖方向)确认根入口、第三方适配和平台能力的加载边界。为每个入口记录最小 peer；不把所有适配汇入根入口，也不跨包导入私有源码。
+- 需要 UMD 时提供本包入口与全局名并同步清单；不需要时省略 UMD 配置和相应测试。
 
 ## 验证接入
 
-- 提供 build、typecheck、test、test:dist、test:consumer、publint；浏览器能力提供 test:browser。缺少必要脚本会使根 pnpm check 失败。
-- scripts/smoke-esm.mjs 和 smoke-cjs.cjs 各自加载全部公开入口，共用本包行为契约和独立导出快照；UMD 包另提供 smoke-umd.cjs，供 root test:runtime 使用。
-- test:dist 消费已有 dist，单独组合命令可串联 build 与 test:dist；根 check 的后续阶段复用前面构建的同一份产物。
-- 建立本包最小 peer 映射和真实 tarball 消费 fixture，验证无 peer 主入口及 NodeNext ESM/CJS 类型。common 的消费脚本可作为实现参考，包名和业务类型断言对应本包契约。
-- 验收按[验证范围](../../development.md#验证范围)的新包场景完成集成与最低运行时检查；格式与 lint 的处理见[修改后检查](../../development.md#编辑器与修改后检查)。
+- 按[子包接入要求](../../development.md#验证层次与子包接入)登记根 TypeScript references 和 README，提供必需脚本、约定的 smoke 文件及对应消费用例；浏览器能力主动接入浏览器阶段，当前调度器不会自动发现漏配。
+- 验证 fixture 对应新包自己的行为、公开符号与类型；复用 common 脚本时清除其中的包名和业务假设，共享机制按架构规则放置。
+- 按[验证范围](../../development.md#验证范围)的新包场景完成集成和最低运行时消费检查，并核对新包确实出现在根调度输出中；格式处理遵循[修改后检查](../../development.md#编辑器与修改后检查)。
 
 ## 使用文档
 
-包 README 提供定位、安装、兼容性和详细文档链接；API 说明放 docs/examples/<name>，按公开功能组织并保持现有链接可用。逐项说明真实入口、参数、返回值、边界、示例和 peer 需求；指向仓库文档的链接使用绝对 Git URL，文档不随 npm 包发布。
+按[使用文档要求](../../coding-standards.md#依赖发布与使用文档)提供包 README 和详细示例，逐项核对消费者能通过文档中的包路径运行示例。交付包名、公开能力和实际验证结果；新增包任务本身不等于要求立即发布到 registry。
