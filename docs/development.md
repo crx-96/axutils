@@ -25,21 +25,21 @@ pnpm check
 
 浏览器启动失败时，参见下文[浏览器测试找不到可执行文件](#浏览器测试找不到可执行文件)。
 
-| 命令 | 用途 |
-| --- | --- |
-| pnpm lint / pnpm biome:check | 本地锁定 Biome 的格式、导入、对象键排序及质量检查，只读不改写 |
-| pnpm format | 代码格式化 |
-| pnpm typecheck | 各子包源码与单元测试类型检查 |
-| pnpm test | 各子包单元测试 |
-| pnpm test:tooling | 构建入口和声明转换测试 |
-| pnpm build | 各子包构建一次 |
-| pnpm test:dist | 已构建产物的 ESM/CJS/UMD 入口与行为契约 |
-| pnpm test:consumer | 真实 tarball、最小 peer 组合及 NodeNext ESM/CJS 类型检查 |
-| pnpm test:browser | 浏览器消费类型检查与 Playwright 真实浏览器测试 |
-| pnpm publint | 发布清单及打包检查 |
-| pnpm check | lint → 工具测试 → typecheck → 单元测试 → build → test:dist → test:consumer → publint → test:browser |
-| pnpm test:runtime | 用 AXUTILS_TEST_NODE 指定的 Node 运行全部包的产物冒烟 |
-| pnpm release | 发布尚未发布的本地包版本并创建 Git 标签；完整操作顺序见[发布流程](#发布流程) |
+| 命令                         | 用途                                                                                                |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| pnpm lint / pnpm biome:check | 本地锁定 Biome 的格式、导入、对象键排序及质量检查，只读不改写                                       |
+| pnpm format                  | 代码格式化                                                                                          |
+| pnpm typecheck               | 各子包源码与单元测试类型检查                                                                        |
+| pnpm test                    | 各子包单元测试                                                                                      |
+| pnpm test:tooling            | 构建入口和声明转换测试                                                                              |
+| pnpm build                   | 各子包构建一次                                                                                      |
+| pnpm test:dist               | 已构建产物的 ESM/CJS/UMD 入口与行为契约                                                             |
+| pnpm test:consumer           | 真实 tarball、最小 peer 组合及 NodeNext ESM/CJS 类型检查                                            |
+| pnpm test:browser            | 浏览器消费类型检查与 Playwright 真实浏览器测试                                                      |
+| pnpm publint                 | 发布清单及打包检查                                                                                  |
+| pnpm check                   | lint → 工具测试 → typecheck → 单元测试 → build → test:dist → test:consumer → publint → test:browser |
+| pnpm test:runtime            | 用 AXUTILS_TEST_NODE 指定的 Node 运行全部包的产物冒烟                                               |
+| pnpm release                 | 发布尚未发布的本地包版本并创建 Git 标签；完整操作顺序见[发布流程](#发布流程)                        |
 
 单独打开 common 时，可在包目录执行各包脚本；`pnpm check:dist` 组合构建与产物冒烟。共享安装和完整 `pnpm check` 在仓库根执行。
 
@@ -56,15 +56,15 @@ Remove-Item Env:AXUTILS_TEST_NODE
 
 ## 验证层次与子包接入
 
-| 层次 | 验证职责与边界 |
-| --- | --- |
-| 根工具测试 | 验证入口派生、声明转换、包发现与调度等共享工具链行为 |
-| 源码类型与单元测试 | 检查源码类型及公共行为；共享 fixture 不封装客户端策略，异步测试使用明确完成信号或虚拟时钟 |
-| 产物冒烟 | ESM/CJS 加载全部公开入口，复用本包行为契约并比对独立导出快照；UMD 另验证 require、浏览器全局和跨 Realm |
-| 隔离消费 | 在工作区外消费真实 tarball，按无 peer 与最小 peer 组合检查运行时及 NodeNext、skipLibCheck:false 下的 ESM/CJS 声明；peer 使用已锁定安装树，不替代全新安装验证 |
-| 发布清单 | publint 检查包元数据与入口；结合真实 tarball 核对发布文件，不能仅凭工作区文件存在判断已包含在包中 |
-| 真实浏览器 | 消费真实包名，检查通用产物无 Node 内置模块，并验证涉及的浏览器能力；common 覆盖存储、计时器、摘要和 HTTP |
-| 最低运行时与 CI | CI 平台与版本见[环境](#环境)；最低消费 Node 运行已构建的同一份产物，开发工具继续使用现代 Node |
+| 层次               | 验证职责与边界                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 根工具测试         | 验证入口派生、声明转换、包发现与调度等共享工具链行为                                                                                                         |
+| 源码类型与单元测试 | 检查源码类型及公共行为；共享 fixture 不封装客户端策略，异步测试使用明确完成信号或虚拟时钟                                                                    |
+| 产物冒烟           | ESM/CJS 加载全部公开入口，复用本包行为契约并比对独立导出快照；UMD 另验证 require、浏览器全局和跨 Realm                                                       |
+| 隔离消费           | 在工作区外消费真实 tarball，按无 peer 与最小 peer 组合检查运行时及 NodeNext、skipLibCheck:false 下的 ESM/CJS 声明；peer 使用已锁定安装树，不替代全新安装验证 |
+| 发布清单           | publint 检查包元数据与入口；结合真实 tarball 核对发布文件，不能仅凭工作区文件存在判断已包含在包中                                                            |
+| 真实浏览器         | 消费真实包名，检查通用产物无 Node 内置模块，并验证涉及的浏览器能力；common 覆盖存储、计时器、摘要和 HTTP                                                     |
+| 最低运行时与 CI    | CI 平台与版本见[环境](#环境)；最低消费 Node 运行已构建的同一份产物，开发工具继续使用现代 Node                                                                |
 
 每个可发布包提供 `build`、`typecheck`、`test`、`test:dist`、`test:consumer`、`publint`。根 `scripts/workspace.mjs` 发现直接位于 `packages/` 下的包，排除 `private:true`，检查必需脚本并通过 pnpm 按包依赖拓扑调度；新增包在根 TypeScript references 和 README 包列表登记。
 
@@ -165,7 +165,7 @@ pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
 pnpm check
 
 # 5. 发布到 npm
-pnpm release
+pnpm release --otp=1234
 ```
 
 - `pnpm changeset` 按提示选择包、升级级别并填写更新摘要，生成 `.changeset/*.md`。兼容修复选 `patch`，新增兼容功能选 `minor`，破坏兼容选 `major`。
