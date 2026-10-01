@@ -49,8 +49,9 @@ const toExpiresAt = (expired: number | undefined): number => {
 /**
  * Node 端高性能进程内缓存。
  * 直接保存值引用，不做 JSON 编解码，因此读写开销低，并支持循环对象等 Node 内存值。
+ * `Key` 可指定业务 key 的字符串联合类型，默认接受任意字符串；仅提供静态提示与约束。
  */
-export class StorageUtils {
+export class StorageUtils<Key extends string = string> {
   private declare readonly expired: number;
   private declare readonly prefix: string;
   private declare readonly keyHandler: StorageKeyHandler | undefined;
@@ -67,7 +68,7 @@ export class StorageUtils {
    * 写入缓存。
    * `expired` 单位为秒，小于等于 0 表示不过期；计算结果超出安全时间范围时抛出 `RangeError`。
    */
-  set<T = unknown>(key: string, value: T, expired?: number): void {
+  set<T = unknown>(key: Key, value: T, expired?: number): void {
     memoryStorage.set(this.getStorageKey(key), {
       data: value,
       expiresAt: toExpiresAt(expired === undefined ? this.expired : expired),
@@ -77,7 +78,7 @@ export class StorageUtils {
   }
 
   /** 读取缓存；不存在或过期时返回 `null`。 */
-  get<T = unknown>(key: string): T | null {
+  get<T = unknown>(key: Key): T | null {
     const storageKey = this.getStorageKey(key);
     const record = memoryStorage.get(storageKey);
 
@@ -96,7 +97,7 @@ export class StorageUtils {
   }
 
   /** 删除一个缓存条目。 */
-  remove(key: string): void {
+  remove(key: Key): void {
     memoryStorage.delete(this.getStorageKey(key));
   }
 
@@ -110,7 +111,7 @@ export class StorageUtils {
   }
 
   /** 读取安全版本：任意异常都返回 `null`。 */
-  getSafe<T = unknown>(key: string): T | null {
+  getSafe<T = unknown>(key: Key): T | null {
     try {
       return this.get<T>(key);
     } catch {
@@ -119,7 +120,7 @@ export class StorageUtils {
   }
 
   /** 写入安全版本：成功返回 `true`，任意异常返回 `false`。 */
-  setSafe<T = unknown>(key: string, value: T, expired?: number): boolean {
+  setSafe<T = unknown>(key: Key, value: T, expired?: number): boolean {
     try {
       this.set(key, value, expired);
       return true;
@@ -129,7 +130,7 @@ export class StorageUtils {
   }
 
   /** 删除安全版本：成功返回 `true`，任意异常返回 `false`。 */
-  removeSafe(key: string): boolean {
+  removeSafe(key: Key): boolean {
     try {
       this.remove(key);
       return true;
@@ -149,7 +150,7 @@ export class StorageUtils {
   }
 
   /** 无处理函数时直接拼接；有处理函数时在实例生命周期内缓存 `prefix + key` 的处理结果。 */
-  private getStorageKey(key: string): string {
+  private getStorageKey(key: Key): string {
     if (this.keyHandler === undefined || this.keyCache === undefined) {
       return this.prefix + key;
     }

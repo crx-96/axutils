@@ -350,7 +350,7 @@ try {
 
 ## 通用缓存：`object/storage`
 
-### `new StorageUtils(options?)`
+### `new StorageUtils<Key = string>(options?)`
 
 创建通用缓存实例。浏览器优先使用 `localStorage`，`type: "session"` 使用 `sessionStorage`；Node 或 Web Storage 不可用时，实例创建时降级到对应类型的进程内 `Map`。缓存值走 JSON 编解码，因此不支持循环引用、`BigInt`、`undefined`、函数和 Symbol。`expired` 单位为秒，小于等于 `0` 表示不过期；非有限值抛 `TypeError`。
 
@@ -367,6 +367,23 @@ const storage = new StorageUtils({
 });
 storage.set("User", { id: 1 });
 console.log(storage.get<{ id: number }>("User"));
+```
+
+创建时可用字符串联合类型限定业务 key，`set`、`get`、`remove` 及对应的 `Safe` 方法都会提供补全并检查 key。省略 `Key` 时仍接受任意字符串；方法上的值类型泛型 `T` 保持独立。泛型只提供静态约束，不会校验运行时数据，也不改变 `prefix` 与 `key` 回调的处理方式。
+
+```ts
+import { StorageUtils } from "@axutils/common/object/storage";
+
+type CacheKey = "token" | "user";
+const storage = new StorageUtils<CacheKey>({ prefix: "app:" });
+storage.set("user", { id: 1 });
+const user = storage.get<{ id: number }>("user");
+storage.setSafe("token", "abc");
+const token = storage.getSafe<string>("token");
+storage.remove("user");
+storage.removeSafe("token");
+console.log(user?.id, token);
+// storage.get("missing"); // 类型错误：key 必须是 "token" 或 "user"
 ```
 
 ### `storage.set<T>(key, value, expired?)`

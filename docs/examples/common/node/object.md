@@ -47,7 +47,7 @@ import type {
 
 Node 缓存没有 `AxutilsCommon` UMD 用法；浏览器应使用 [通用缓存文档](https://github.com/crx-96/axutils/blob/main/docs/examples/common/object.md) 中的 `StorageUtils`。
 
-## `new StorageUtils(options?)`
+## `new StorageUtils<Key = string>(options?)`
 
 创建 Node 进程内缓存实例。所有实例共享同一个进程内 Map，但 `prefix` 命名空间相互隔离。
 
@@ -64,6 +64,22 @@ const storage = new StorageUtils({
   key: (key) => key.toLowerCase(),
 });
 storage.set("Job", { id: 1 });
+```
+
+创建时可用字符串联合类型限定业务 key，`set`、`get`、`remove` 及对应的 `Safe` 方法都会提供补全并检查 key。省略 `Key` 时仍接受任意字符串；方法上的值类型泛型 `T` 保持独立。泛型只提供静态约束，不会校验运行时数据，也不改变 `prefix` 与 `key` 回调的处理方式。
+
+```ts
+import { StorageUtils } from "@axutils/common/node/object/storage";
+
+const storage = new StorageUtils<"job" | "status">({ prefix: "worker:" });
+storage.set("job", { id: 1 });
+const job = storage.get<{ id: number }>("job");
+storage.setSafe("status", "ready");
+const status = storage.getSafe<string>("status");
+storage.remove("job");
+storage.removeSafe("status");
+console.log(job?.id, status);
+// storage.get("missing"); // 类型错误：key 必须是 "job" 或 "status"
 ```
 
 ## 实例方法

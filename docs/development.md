@@ -39,6 +39,7 @@ pnpm check
 | pnpm publint | 发布清单及打包检查 |
 | pnpm check | lint → 工具测试 → typecheck → 单元测试 → build → test:dist → test:consumer → publint → test:browser |
 | pnpm test:runtime | 用 AXUTILS_TEST_NODE 指定的 Node 运行全部包的产物冒烟 |
+| pnpm release | 发布尚未发布的本地包版本并创建 Git 标签；完整操作顺序见[发布流程](#发布流程) |
 
 单独打开 common 时，可在包目录执行各包脚本；`pnpm check:dist` 组合构建与产物冒烟。共享安装和完整 `pnpm check` 在仓库根执行。
 
@@ -88,6 +89,8 @@ Remove-Item Env:AXUTILS_TEST_NODE
 
 根目录和 common 的 `.vscode/settings.json` 分别支持两种打开方式：绑定根 Biome 配置，对 JavaScript、TypeScript、JSON/JSONC 启用保存时格式化和安全修复。Windows x64 明确使用 pnpm 安装树中的本地 Biome 原生程序，其他平台由扩展解析项目依赖。设置仅作用于工作区，不修改用户全局设置。
 
+Zed 对应使用根目录和 common 的 `.zed/settings.json`，需已安装 Biome 扩展并恢复项目依赖，且 Zed 的 PATH 中可找到 Node。两种打开方式均用 Node 启动仓库本地 Biome CLI，通过 `config_path` 指向根 Biome 配置，避免扩展回退到全局版本。在 JavaScript、JSX、TypeScript、TSX、JSON/JSONC 中启用 Biome 和保存时格式化、修复与排序；JS/TS 的导入整理明确交给 `source.organizeImports.biome`。项目设置用 `inline_config: null` 清除用户级内联规则覆盖，使导入排序选项及 package.json 的专用排序继续由仓库配置决定。相关设置见 [Biome 的 Zed 文档](https://biomejs.dev/reference/zed/)。
+
 修改 Biome 支持的代码或配置后，使用本地 `node node_modules/@biomejs/biome/bin/biome format --write <本次改动文件...>` 格式化，配合 `pnpm lint` 或根 `pnpm check` 的 lint 阶段核对并解决诊断。导入整理和对象排序可用本地 `biome check --write <本次改动文件...>` 的安全修复；`--unsafe` 中可能改变语义的建议逐项判断后采用。格式化范围随任务范围选择，`pnpm format` 适用于全仓格式化请求。
 
 普通 JavaScript/TypeScript 与 JSON/JSONC 对象开启 useSortedKeys，手动保存时自动排序。package.json 使用 useSortedPackageJson 专用规则整理清单，保留 exports 的条件顺序（types 在 default 前）。对有求值或枚举顺序语义的对象，以及故意乱序的测试输入，可使用 `biome-ignore assist/source/useSortedKeys: 原因` 局部豁免，保留行为与测试预期。
@@ -95,6 +98,8 @@ Remove-Item Env:AXUTILS_TEST_NODE
 包顶层 `playwright.config.ts` 归属 common/tsconfig.json，复用已有 Node 类型；test-browser/tsconfig.json 负责浏览器测试。编辑器项目归属问题可从现有 tsconfig 与类型配置排查；TypeScript 7 的 native 包与传统 JS tsserver 的 tsdk 接口不同，配置时按实际工具类型选择。
 
 修改配置后，编辑器通常会自动更新；若仍显示旧诊断，执行 `Biome: Restart` 或 `Developer: Reload Window` 重新加载工作区。以本地 `pnpm lint` 和相应 tsconfig 的检查结果核对实际错误。
+
+Zed 若仍保留旧排序诊断，可执行 `editor: restart language server` 后保存文件；从仓库根目录和包目录运行本地 Biome 应得到相同排序结果。若仍有差异，核对 Zed 实际使用的 Biome 版本与配置路径，以及是否存在额外的内联配置覆盖。
 
 ## 测试与临时文件
 
@@ -142,22 +147,34 @@ pnpm check
 
 新增发布包以 `@axutils/<name>` 命名，声明描述、仓库 `directory`、与仓库一致的许可、兼容范围、`type:module`、入口及 `files` 白名单。沿用无导入副作用的库设计并声明 `sideEffects:false`；确有导入副作用时明确用途并如实配置。版本与 changelog 由 Changesets 管理。
 
-Changesets 统一管理版本与发布。常见流程如下，可按当前 changeset 和版本状态从适用阶段继续：
+### 发布流程
 
-```bash
-pnpm check
+改完代码后，在仓库根目录按顺序执行，每一步成功后再执行下一步：
+
+```powershell
+# 1. 填写修改说明，选择 patch / minor / major
 pnpm changeset
-pnpm changeset status
+
+# 2. 自动修改版本号，并更新 CHANGELOG.md
 pnpm version-packages
+
+# 3. 同步锁文件
+pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
+
+# 4. 检查、测试并构建
 pnpm check
+
+# 5. 发布到 npm
 pnpm release
 ```
 
-本地在交互终端发布，按 npm/pnpm 提示完成安全密钥或浏览器验证；确有当前有效的一次性验证码时，可通过 `pnpm release --otp=<验证码>` 传入。登录验证不等于完成当前发布验证。
+- `pnpm changeset` 按提示选择包、升级级别并填写更新摘要，生成 `.changeset/*.md`。兼容修复选 `patch`，新增兼容功能选 `minor`，破坏兼容选 `major`。
+- `pnpm version-packages` 才会更新受影响包的 `package.json` 和 `CHANGELOG.md`，并删除已汇总的 changeset 文件；这一步仍是本地修改。
+- 已有本次更新的 changeset 时，从第 2 步开始；已完成升版和验证、仅发布失败时，解决失败原因后重试 `pnpm release`。
+- 升版前可用 `pnpm changeset status` 查看升版计划，升版后用 `pnpm changeset publish-plan` 查看实际待发布的包和版本。
+- npm 未登录时先执行 `npm login --registry=https://registry.npmjs.org/`，发布时按提示完成认证。浏览器测试环境按[安装与命令](#安装与命令)配置。
 
-Changesets 已升级到 3.0.2，其发布代码会识别 pnpm 的 `ERR_PNPM_OTP_NON_INTERACTIVE` 并转入交互验证。遇到该错误时核对本地依赖是否按锁文件安装，以及发布命令的管道和交互状态。Changesets 3 在没有待处理 changeset 时执行 `version-packages` 会返回非零状态；版本已更新、仅需重试发布时，从发布阶段继续。
-
-发布范围以用户授权为依据，已有明确授权时可继续执行；核对目标包、changeset、npm 身份与权限后发布。version-packages 写回版本与 changelog 后，检查结果对应更新后的待发布状态。release 会发布所有高于 registry 版本的包；单包发布场景可先核对所有待发布包，范围不符时继续独立准备工作，并就新增发布范围询问用户。
+发布时，本次代码和版本记录先提交，发布成功后再同步提交和标签。当前 `pnpm release` 脚本负责 npm 发布与创建标签，代码提交与远端同步由发布执行者完成。
 
 ## 相关资料
 

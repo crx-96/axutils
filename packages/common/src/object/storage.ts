@@ -38,8 +38,9 @@ export interface StorageOptions {
  * 浏览器优先使用 `localStorage`/`sessionStorage`；在 Node 或 Web Storage 不可用时，
  * 实例创建时自动降级到进程内 Map。缓存值通过 JSON 编解码，因此不支持循环引用、BigInt、
  * `undefined`、函数和 Symbol。
+ * `Key` 可指定业务 key 的字符串联合类型，默认接受任意字符串；仅提供静态提示与约束。
  */
-export class StorageUtils {
+export class StorageUtils<Key extends string = string> {
   private declare readonly expired: number;
   private declare readonly prefix: string;
   private declare readonly keyHandler: StorageKeyHandler | undefined;
@@ -60,7 +61,7 @@ export class StorageUtils {
    * 缓存值不能包含 `undefined`、函数或 Symbol，否则会抛出 `TypeError`；
    * 过期时间计算结果超出安全时间范围时抛出 `RangeError`。
    */
-  set<T = unknown>(key: string, value: T, expired?: number): void {
+  set<T = unknown>(key: Key, value: T, expired?: number): void {
     const record: StorageRecord = {
       data: value,
       expiresAt: toExpiresAt(expired === undefined ? this.expired : expired),
@@ -72,7 +73,7 @@ export class StorageUtils {
   }
 
   /** 读取缓存；不存在、过期或数据损坏时返回 `null`。 */
-  get<T = unknown>(key: string): T | null {
+  get<T = unknown>(key: Key): T | null {
     const storageKey = this.getStorageKey(key);
     const value = this.storage.getItem(storageKey);
 
@@ -93,7 +94,7 @@ export class StorageUtils {
   }
 
   /** 删除一个缓存条目。 */
-  remove(key: string): void {
+  remove(key: Key): void {
     this.storage.removeItem(this.getStorageKey(key));
   }
 
@@ -117,7 +118,7 @@ export class StorageUtils {
   }
 
   /** 读取安全版本：任意异常都返回 `null`。 */
-  getSafe<T = unknown>(key: string): T | null {
+  getSafe<T = unknown>(key: Key): T | null {
     try {
       return this.get<T>(key);
     } catch {
@@ -126,7 +127,7 @@ export class StorageUtils {
   }
 
   /** 写入安全版本：成功返回 `true`，任意异常返回 `false`。 */
-  setSafe<T = unknown>(key: string, value: T, expired?: number): boolean {
+  setSafe<T = unknown>(key: Key, value: T, expired?: number): boolean {
     try {
       this.set(key, value, expired);
       return true;
@@ -136,7 +137,7 @@ export class StorageUtils {
   }
 
   /** 删除安全版本：成功返回 `true`，任意异常返回 `false`。 */
-  removeSafe(key: string): boolean {
+  removeSafe(key: Key): boolean {
     try {
       this.remove(key);
       return true;
@@ -159,7 +160,7 @@ export class StorageUtils {
    * 未配置处理函数时直接拼接；配置后在实例生命周期内复用首次处理结果。
    * key 处理函数收到的是 `prefix + key`，保持有状态处理函数的映射稳定。
    */
-  private getStorageKey(key: string): string {
+  private getStorageKey(key: Key): string {
     if (this.keyHandler === undefined || this.keyCache === undefined) {
       return this.prefix + key;
     }

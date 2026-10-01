@@ -1,5 +1,15 @@
 # @axutils/common
 
+## 1.1.0
+
+### Minor Changes
+
+- 为通用及 Node 版 `StorageUtils` 新增 key 泛型，支持通过 `StorageUtils<"key1" | "key2">` 为 `set`、`get`、`remove` 及对应的 `Safe` 方法提供 key 补全和类型约束。省略泛型时仍接受任意字符串，原有值类型泛型和运行时存储行为保持兼容。
+
+### Patch Changes
+
+- StorageUtils添加泛型
+
 ## 1.0.0
 
 ### Major Changes

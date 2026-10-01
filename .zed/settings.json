@@ -1,0 +1,105 @@
+{
+  "languages": {
+    "JavaScript": {
+      "code_actions_on_format": {
+        "source.action.useSortedKeys.biome": true,
+        "source.fixAll.biome": true,
+        "source.organizeImports": false,
+        "source.organizeImports.biome": true
+      },
+      "format_on_save": "on",
+      "formatter": {
+        "language_server": {
+          "name": "biome"
+        }
+      },
+      "language_servers": ["biome", "..."]
+    },
+    "JSON": {
+      "code_actions_on_format": {
+        "source.action.useSortedKeys.biome": true,
+        "source.action.useSortedPackageJson.biome": true,
+        "source.fixAll.biome": true
+      },
+      "format_on_save": "on",
+      "formatter": {
+        "language_server": {
+          "name": "biome"
+        }
+      },
+      "language_servers": ["biome", "..."]
+    },
+    "JSONC": {
+      "code_actions_on_format": {
+        "source.action.useSortedKeys.biome": true,
+        "source.action.useSortedPackageJson.biome": true,
+        "source.fixAll.biome": true
+      },
+      "format_on_save": "on",
+      "formatter": {
+        "language_server": {
+          "name": "biome"
+        }
+      },
+      "language_servers": ["biome", "..."]
+    },
+    "JSX": {
+      "code_actions_on_format": {
+        "source.action.useSortedKeys.biome": true,
+        "source.fixAll.biome": true,
+        "source.organizeImports": false,
+        "source.organizeImports.biome": true
+      },
+      "format_on_save": "on",
+      "formatter": {
+        "language_server": {
+          "name": "biome"
+        }
+      },
+      "language_servers": ["biome", "..."]
+    },
+    "TSX": {
+      "code_actions_on_format": {
+        "source.action.useSortedKeys.biome": true,
+        "source.fixAll.biome": true,
+        "source.organizeImports": false,
+        "source.organizeImports.biome": true
+      },
+      "format_on_save": "on",
+      "formatter": {
+        "language_server": {
+          "name": "biome"
+        }
+      },
+      "language_servers": ["biome", "..."]
+    },
+    "TypeScript": {
+      "code_actions_on_format": {
+        "source.action.useSortedKeys.biome": true,
+        "source.fixAll.biome": true,
+        "source.organizeImports": false,
+        "source.organizeImports.biome": true
+      },
+      "format_on_save": "on",
+      "formatter": {
+        "language_server": {
+          "name": "biome"
+        }
+      },
+      "language_servers": ["biome", "..."]
+    }
+  },
+  "lsp": {
+    "biome": {
+      "binary": {
+        "arguments": ["./node_modules/@biomejs/biome/bin/biome", "lsp-proxy"],
+        "path": "node"
+      },
+      "settings": {
+        "config_path": "./biome.jsonc",
+        "inline_config": null,
+        "require_config_file": true
+      }
+    }
+  }
+}
