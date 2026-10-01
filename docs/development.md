@@ -151,7 +151,7 @@ pnpm check
 
 改完代码后，在仓库根目录按顺序执行，每一步成功后再执行下一步：
 
-```powershell
+````powershell
 # 1. 填写修改说明，选择 patch / minor / major
 pnpm changeset
 
@@ -161,11 +161,19 @@ pnpm version-packages
 # 3. 同步锁文件
 pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
 
-# 4. 检查、测试并构建
+# 4. 检查、测试并构建，执行完这个之后要提交代码，否则发布会报错
 pnpm check
 
+```shell
+# 如果发布失败，看是否登录状态有问题
+npm login --registry=https://registry.npmjs.org/
+npm whoami --registry=https://registry.npmjs.org/
+````
+
 # 5. 发布到 npm
+
 pnpm release --otp=1234
+
 ```
 
 - `pnpm changeset` 按提示选择包、升级级别并填写更新摘要，生成 `.changeset/*.md`。兼容修复选 `patch`，新增兼容功能选 `minor`，破坏兼容选 `major`。
@@ -182,3 +190,4 @@ pnpm release --otp=1234
 - [架构与兼容契约](./architecture.md)
 - [新增子包](./skills/add-axutils-package/SKILL.md)
 - [项目审查](./skills/review-axutils-project/SKILL.md)
+```
