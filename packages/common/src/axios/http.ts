@@ -14,6 +14,8 @@ export type {
   PromiseHttpMethod,
   PromiseHttpRequestConfig,
   PromiseHttpRequestOptions,
+  PromiseHttpResponseResult,
+  PromiseHttpResponseTransformer,
   PromiseHttpResult,
   PromiseHttpSuccess,
 } from "./http/types.js";

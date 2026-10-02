@@ -14,7 +14,7 @@ pnpm add @axutils/common axios safe-stable-stringify spark-md5
 
 | `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
 | --- | --- | --- | --- |
-| `@axutils/common/axios/http` | `PromiseHttpClient`（`create`、`request`、`get`、`post`、`put`、`patch`、`delete`）、`PromiseHttpRequestError` | `PromiseHttpMethod`、`PromiseHttpClientConfig`、`PromiseHttpClientOptions`、`PromiseHttpConfigFactory`、`PromiseHttpRequestOptions`、`PromiseHttpRequestConfig`、`PromiseHttpSuccess`、`PromiseHttpFailure`、`PromiseHttpResult`、`PromiseHttpErrorKind`、`PromiseHttpErrorInfo` | `axios`、`safe-stable-stringify`、`spark-md5` |
+| `@axutils/common/axios/http` | `PromiseHttpClient`（`create`、`request`、`get`、`post`、`put`、`patch`、`delete`）、`PromiseHttpRequestError` | `PromiseHttpMethod`、`PromiseHttpClientConfig`、`PromiseHttpClientOptions`、`PromiseHttpConfigFactory`、`PromiseHttpRequestOptions`、`PromiseHttpRequestConfig`、`PromiseHttpSuccess`、`PromiseHttpFailure`、`PromiseHttpResult`、`PromiseHttpErrorKind`、`PromiseHttpErrorInfo`、`PromiseHttpResponseTransformer`、`PromiseHttpResponseResult` | `axios`、`safe-stable-stringify`、`spark-md5` |
 | `@axutils/common` (`.`) | 不导出 Axios HTTP API | 不导出上述类型 | 根入口无第三方运行时依赖 |
 
 ESM 使用精确子路径导入全部运行时 API：
@@ -34,6 +34,8 @@ import type {
   PromiseHttpMethod,
   PromiseHttpRequestConfig,
   PromiseHttpRequestOptions,
+  PromiseHttpResponseResult,
+  PromiseHttpResponseTransformer,
   PromiseHttpResult,
   PromiseHttpSuccess,
 } from "@axutils/common/axios/http";
@@ -73,6 +75,8 @@ client.get("/health").then((result) => console.log(result.code));
 - `retryable`：是否允许请求重试，默认 `true`。
 - `retryNonIdempotent`：是否允许 POST/PUT/PATCH/DELETE 重试，默认 `false`。
 - `axiosInstance`：可选 Axios 实例，必须提供 `request` 方法。
+- `transformHeaders`：同步处理请求头副本，适合读取最新 token；请求级 headers 优先。
+- `transformResponse`：处理统一成功结果，支持同步或 Promise 返回值，并自动推导结果类型。
 
 ```ts
 import { PromiseHttpClient } from "@axutils/common/axios/http";
@@ -101,9 +105,94 @@ const client = PromiseHttpClient.create(
 );
 ```
 
+## 统一处理请求头和成功结果
+
+`constructor` 的第一个参数和 `create(factory, options)` 的第二个参数都支持这两个字段。它们属于客户端选项，不放在配置工厂返回的 `PromiseHttpClientConfig` 中。
+
+```ts
+import { PromiseHttpClient, type PromiseHttpSuccess, type PromiseHttpClientOptions } from "@axutils/common/axios/http";
+
+interface UserResponse {
+  user: { id: number; name: string };
+}
+
+let token = "initial-token";
+const options = {
+  transformHeaders: (headers) => ({
+    ...headers,
+    Authorization: `Bearer ${token}`,
+  }),
+  transformResponse: (result: PromiseHttpSuccess<UserResponse>) => result.data.user,
+} satisfies PromiseHttpClientOptions;
+
+const client = new PromiseHttpClient(options);
+const configured = PromiseHttpClient.create(async () => ({ baseUrl: "/api" }), options);
+// 两者均推导为 Promise<{ id: number; name: string }>
+const user = await client.get("/user");
+console.log(user.name, (await configured.get("/user")).id);
+
+token = "refreshed-token";
+await client.get("/user", {
+  headers: { authorization: "Bearer request-token" },
+}); // 此请求使用 request-token
+```
+
+### 请求头优先级与执行时机
+
+- `transformHeaders` 收到当前请求 headers 的副本；未传 headers 时为空对象，`common` 和当前方法分组会展开。可以返回普通 headers 对象或 `AxiosHeaders`。
+- 回调在每次调用请求方法后、配置解析完成后执行，网络重试沿用本次处理结果。构造客户端不会执行回调。
+- 合并顺序为 Axios 实例默认 headers → 回调结果 → 请求级 headers。同名 header 不区分大小写，请求级 `false`、`null` 等屏蔽值也保留。
+- 回调输入不包含 Axios 实例默认 headers；未提供的字段仍由 Axios 默认配置补齐。要屏蔽默认字段，可在返回值中将它设为 `false` 或 `null`。
+- 回调中的对象和多值数组修改不会影响调用方原 headers。请求级字段始终最后覆盖，所以回调不能删除或改写调用方明确指定的同名字段。
+- 最终 headers 在自动去重前参与身份计算；不同 token 的请求会独立执行。使用显式 `dedupeKey` 且请求参数不可稳定序列化时，仍由调用方负责 key 的业务身份。
+
+### 返回类型推导
+
+没有 `transformResponse` 时，`get<T>` 等方法继续返回 `Promise<PromiseHttpSuccess<T>>`。传入后返回处理函数的结果；例如返回 `string` 就得到 `Promise<string>`，返回 `Promise<User>` 则得到 `Promise<User>`。`request`、`get`、`post`、`put`、`patch`、`delete` 都采用相同规则。
+
+回调只处理成功结果，网络重试结束后才执行；去重时底层请求共享，每个调用方分别转换。异步转换等待期间仍可使用 `signal` 取消接收结果，但已启动的用户 Promise 自身不会被中止。
+
+### 使用 Promise 转换
+
+```ts
+import { PromiseHttpClient, type PromiseHttpSuccess } from "@axutils/common/axios/http";
+
+interface ApiUser {
+  user_id: number;
+  user_name: string;
+}
+
+interface User {
+  id: number;
+  name: string;
+}
+
+const client = new PromiseHttpClient({
+  transformHeaders: (headers) => ({ ...headers, test: "123" }),
+  transformResponse: async (result: PromiseHttpSuccess<ApiUser>): Promise<User> => ({
+    id: result.data.user_id,
+    name: result.data.user_name,
+  }),
+});
+
+// 自动等待转换完成，get 返回 Promise<User>，await 后是 User
+const user = await client.get<ApiUser>("/user");
+console.log(user.name);
+```
+
+回调内可以使用 `await` 完成异步业务处理，也可以直接返回一个 Promise。`create(factory, options)` 的第二个参数接受同样的处理函数。此客户端按 Promise 语义展开返回值；如需使用 RxJS 转换流，可在回调中通过 `firstValueFrom` 或 `lastValueFrom` 将其转为 Promise。
+
+未标注参数的回调收到 `PromiseHttpSuccess<unknown>`，其中 `code`、`success` 和 `error` 有明确类型。读取业务字段时，在回调参数上声明响应体类型，或先校验 `unknown`；这不会自动校验服务器返回的数据。
+
+将选项保存为变量时，使用上例的 `satisfies PromiseHttpClientOptions` 保留处理函数的具体返回类型。直接标注宽泛的 `PromiseHttpClientOptions` 会丢失具体返回类型，结果只能推导为 `unknown`。可选处理函数用 `PromiseHttpClientOptions<typeof transformResponse>` 描述，结果会保留转换类型与 `PromiseHttpSuccess<T>` 的联合。导出的 `PromiseHttpResponseTransformer` 和 `PromiseHttpResponseResult<T, Options>` 可用于声明处理函数和提取结果类型。
+
+TypeScript 无法把任意泛型函数重新应用到每次请求的 `T`：`<T>(result: PromiseHttpSuccess<T>) => result.data` 的返回类型会推导为 `unknown`。需要统一拆业务结构时，使用上面的具体响应体类型。请求方法的 `T` 始终表示原始响应体；传入处理函数后，最终结果由该函数决定。
+
+处理函数本身类型错误会在构造客户端时同步抛出 `TypeError`。`transformHeaders` 必须同步返回 headers 对象，执行失败走统一错误通道，`error.kind` 为 `config`，且不会发网络请求；`transformResponse` 抛错或 Promise 拒绝也走统一错误通道，原始错误保存在 `error.cause`，不会触发网络重试。
+
 ## 请求结果和错误
 
-请求成功时，返回的 Promise resolve 为 `PromiseHttpSuccess<T>`：`{ code, success: true, data, error: null }`，其中 `code` 是 HTTP 状态码，不读取后端响应体中的业务 code。
+未配置 `transformResponse` 时，成功请求的 Promise resolve 为 `PromiseHttpSuccess<T>`：`{ code, success: true, data, error: null }`，其中 `code` 是 HTTP 状态码，不读取后端响应体中的业务 code。
 
 类型参数 `T` 只声明预期的响应数据类型，不会按 `T` 对实际数据做结构校验或转换。调用方需要确认 `result.data` 的结构；处理不可信响应时可使用 `unknown`，在业务边界校验后再使用字段。
 
@@ -159,7 +248,7 @@ console.log(error.code, error.success, error.data); // 503 false null
 
 ## `client.request<T, D>(config)`
 
-发起通用请求，返回 `Promise<PromiseHttpSuccess<T>>`。调用时立即开始配置解析和请求，不是 Observable 懒执行。`config` 必须包含字符串 `url` 和 `method`；`data` 是请求体，`params`/`headers` 交给 Axios。输入只做浅复制，不会修改调用方的对象。
+发起通用请求，默认返回 `Promise<PromiseHttpSuccess<T>>`；配置 `transformResponse` 后返回其处理结果。调用时立即开始配置解析和请求。`config` 必须包含字符串 `url` 和 `method`；`data` 是请求体，`params`/`headers` 交给 Axios。输入只做浅复制，不会修改调用方的对象。
 
 可覆盖的 `PromiseHttpRequestOptions`：`params`、`headers`、`timeout`、`retryCount`、`retryDelay`、`retryable`、`retryNonIdempotent`、`dedupe`、`dedupeKey`、`signal`。
 
@@ -187,7 +276,7 @@ console.log(head.code, options.code);
 
 ## `client.get<T>(url, options?)`
 
-发起 GET 请求，返回 `Promise<PromiseHttpSuccess<T>>`；`options` 可覆盖 params、headers、timeout、重试、去重和 signal 等请求配置。
+发起 GET 请求，默认返回 `Promise<PromiseHttpSuccess<T>>`，配置 `transformResponse` 后返回其处理结果；`options` 可覆盖 params、headers、timeout、重试、去重和 signal 等请求配置。
 
 ```ts
 import { PromiseHttpClient } from "@axutils/common/axios/http";

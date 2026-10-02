@@ -1,5 +1,13 @@
 # @axutils/common
 
+## 2.0.0
+
+### Major Changes
+
+- 为 `RxHttpClient` 和 `PromiseHttpClient` 的构造函数及 `create` 新增 `transformHeaders` 和 `transformResponse`。请求头处理支持动态注入 Authorization 等字段，请求级 headers 按大小写不敏感规则优先覆盖；响应处理自动推导最终类型，RxJS 客户端展开 Observable 和 Promise，Promise 客户端展开 Promise。转换错误不会触发网络重试，Observable 转换支持多次发值及取消订阅。
+
+  类型迁移：显式标注为宽泛 `HttpClientOptions` / `PromiseHttpClientOptions` 的配置变量，现在可能包含响应处理函数，因此请求结果会推导为 `unknown`。请使用 `satisfies HttpClientOptions` / `satisfies PromiseHttpClientOptions` 保留具体推导；明确不使用响应转换时，可标注为 `HttpClientOptions<undefined>` / `PromiseHttpClientOptions<undefined>`。未配置响应转换的直接构造用法仍保留原成功结果类型和运行时行为。
+
 ## 1.1.0
 
 ### Minor Changes

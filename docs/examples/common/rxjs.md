@@ -16,7 +16,7 @@ pnpm add @axutils/common rxjs axios safe-stable-stringify spark-md5
 
 | `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
 | --- | --- | --- | --- |
-| `@axutils/common/rxjs/http` | `RxHttpClient`（`create`、`request`、`get`、`post`、`put`、`patch`、`delete`）、`HttpRequestError` | `HttpMethod`、`HttpClientConfig`、`HttpClientOptions`、`HttpConfigFactory`、`HttpRequestOptions`、`HttpRequestConfig`、`HttpSuccess`、`HttpFailure`、`HttpResult`、`HttpErrorKind`、`HttpErrorInfo` | `rxjs`、`axios`、`safe-stable-stringify`、`spark-md5` |
+| `@axutils/common/rxjs/http` | `RxHttpClient`（`create`、`request`、`get`、`post`、`put`、`patch`、`delete`）、`HttpRequestError` | `HttpMethod`、`HttpClientConfig`、`HttpClientOptions`、`HttpConfigFactory`、`HttpRequestOptions`、`HttpRequestConfig`、`HttpSuccess`、`HttpFailure`、`HttpResult`、`HttpErrorKind`、`HttpErrorInfo`、`HttpResponseTransformer`、`HttpResponseResult` | `rxjs`、`axios`、`safe-stable-stringify`、`spark-md5` |
 | `@axutils/common` (`.`) | 不导出 RxJS HTTP API | 不导出上述类型 | 根入口无第三方运行时依赖 |
 
 ESM 使用精确子路径导入全部运行时 API和类型：
@@ -36,6 +36,8 @@ import type {
   HttpMethod,
   HttpRequestConfig,
   HttpRequestOptions,
+  HttpResponseResult,
+  HttpResponseTransformer,
   HttpResult,
   HttpSuccess,
 } from "@axutils/common/rxjs/http";
@@ -78,6 +80,8 @@ client.get("/health").subscribe({
 - `retryNonIdempotent`：是否允许 POST/PUT/PATCH/DELETE 重试，默认 `false`。
 - `cancelOnNoSubscribers`：最后一个订阅者取消时是否 abort 底层请求，默认 `false`。
 - `axiosInstance`：可注入提供 `request` 方法的 Axios 实例。
+- `transformHeaders`：同步处理请求头副本，适合读取最新 token；请求级 headers 优先。
+- `transformResponse`：处理统一成功结果，支持普通值、Promise 或 Observable，并自动推导最终发值类型。
 
 ```ts
 import { RxHttpClient } from "@axutils/common/rxjs/http";
@@ -104,9 +108,95 @@ const client = RxHttpClient.create(
 );
 ```
 
+## 统一处理请求头和成功结果
+
+`constructor` 的第一个参数和 `create(factory, options)` 的第二个参数都支持这两个字段。它们属于客户端选项，不放在配置工厂返回的 `HttpClientConfig` 中。
+
+```ts
+import { of } from "rxjs";
+import { RxHttpClient, type HttpSuccess, type HttpClientOptions } from "@axutils/common/rxjs/http";
+
+interface UserResponse {
+  user: { id: number; name: string };
+}
+
+let token = "initial-token";
+const options = {
+  transformHeaders: (headers) => ({
+    ...headers,
+    Authorization: `Bearer ${token}`,
+  }),
+  transformResponse: (result: HttpSuccess<UserResponse>) => result.data.user,
+} satisfies HttpClientOptions;
+
+const client = new RxHttpClient(options);
+const configured = RxHttpClient.create(() => of({ baseUrl: "/api" }), options);
+// 两者均推导为 Observable<{ id: number; name: string }>
+client.get("/user").subscribe((user) => console.log(user.name));
+configured.get("/user").subscribe((user) => console.log(user.id));
+
+token = "refreshed-token";
+client.get("/user", {
+  headers: { authorization: "Bearer request-token" },
+}).subscribe(); // 此请求使用 request-token
+```
+
+### 请求头优先级与执行时机
+
+- `transformHeaders` 收到当前请求 headers 的副本；未传 headers 时为空对象，`common` 和当前方法分组会展开。可以返回普通 headers 对象或 `AxiosHeaders`。
+- 回调在每次订阅时、配置解析完成后执行，网络重试沿用本次处理结果。构造客户端和仅创建 Observable 都不会执行回调。
+- 合并顺序为 Axios 实例默认 headers → 回调结果 → 请求级 headers。同名 header 不区分大小写，请求级 `false`、`null` 等屏蔽值也保留。
+- 回调输入不包含 Axios 实例默认 headers；未提供的字段仍由 Axios 默认配置补齐。要屏蔽默认字段，可在返回值中将它设为 `false` 或 `null`。
+- 回调中的对象和多值数组修改不会影响调用方原 headers。请求级字段始终最后覆盖，所以回调不能删除或改写调用方明确指定的同名字段。
+- 最终 headers 在自动去重前参与身份计算；不同 token 的请求会独立执行。使用显式 `dedupeKey` 且请求参数不可稳定序列化时，仍由调用方负责 key 的业务身份。
+
+### 返回类型推导
+
+没有 `transformResponse` 时，`get<T>` 等方法继续返回 `Observable<HttpSuccess<T>>`。传入后会展开处理函数的异步结果：返回 `User`、`Promise<User>` 或 `Observable<User>`，请求最终都返回 `Observable<User>`；返回 `Promise<Observable<User>>` 也会展开。普通数组仍作为单个业务值发出。`request`、`get`、`post`、`put`、`patch`、`delete` 都采用相同规则。
+
+回调只处理成功结果，网络重试结束后才执行；去重时底层请求共享，每个订阅者分别转换。Observable 转换会保留内层流的所有发值、完成和错误；空流直接完成，只展开回调返回的流，流中的值保持原样。取消订阅或使用 `signal` 会解除当前调用方对转换流的订阅，即使该流已经发过值。已启动的用户 Promise 自身不会被中止。
+
+### 使用 Observable 转换
+
+```ts
+import { type Observable, map, of } from "rxjs";
+import { RxHttpClient, type HttpSuccess } from "@axutils/common/rxjs/http";
+
+interface ApiUser {
+  user_id: number;
+  user_name: string;
+}
+
+interface User {
+  id: number;
+  name: string;
+}
+
+const client = new RxHttpClient({
+  transformHeaders: (headers) => ({ ...headers, test: "123" }),
+  transformResponse: (result: HttpSuccess<ApiUser>): Observable<User> =>
+    of(result).pipe(
+      map(({ data }) => ({ id: data.user_id, name: data.user_name })),
+    ),
+});
+
+// 自动展开转换流，结果是 Observable<User>
+client.get<ApiUser>("/user").subscribe((user) => console.log(user.name));
+```
+
+回调内可以使用 `map`、`switchMap`、`catchError` 等 RxJS 操作符，也可以返回另一个异步 Observable。`create(factory, options)` 的第二个参数接受同样的处理函数。
+
+未标注参数的回调收到 `HttpSuccess<unknown>`，其中 `code`、`success` 和 `error` 有明确类型。读取业务字段时，在回调参数上声明响应体类型，或先校验 `unknown`；这不会自动校验服务器返回的数据。
+
+将选项保存为变量时，使用上例的 `satisfies HttpClientOptions` 保留处理函数的具体返回类型。直接标注宽泛的 `HttpClientOptions` 会丢失具体返回类型，结果只能推导为 `unknown`。可选处理函数用 `HttpClientOptions<typeof transformResponse>` 描述，结果会保留转换类型与 `HttpSuccess<T>` 的联合。导出的 `HttpResponseTransformer` 和 `HttpResponseResult<T, Options>` 可用于声明处理函数和提取结果类型。
+
+TypeScript 无法把任意泛型函数重新应用到每次请求的 `T`：`<T>(result: HttpSuccess<T>) => result.data` 的返回类型会推导为 `unknown`。需要统一拆业务结构时，使用上面的具体响应体类型。请求方法的 `T` 始终表示原始响应体；传入处理函数后，最终结果由该函数决定。
+
+处理函数本身类型错误会在构造客户端时同步抛出 `TypeError`。`transformHeaders` 必须同步返回 headers 对象，执行失败走统一错误通道，`error.kind` 为 `config`，且不会发网络请求；`transformResponse` 抛错、Promise 拒绝或 Observable 发出错误也走统一错误通道，原始错误保存在 `error.cause`，不会触发网络重试。
+
 ## 结果和错误
 
-成功时请求 Observable 的 `next` 通道发出 `HttpSuccess<T>`：`{ code, success: true, data, error: null }`，`code` 是 HTTP 状态码。
+未配置 `transformResponse` 时，成功请求 Observable 的 `next` 通道发出 `HttpSuccess<T>`：`{ code, success: true, data, error: null }`，`code` 是 HTTP 状态码。
 
 类型参数 `T` 只声明预期的响应数据类型，不会按 `T` 对实际数据做结构校验或转换。调用方需要确认 `result.data` 的结构；处理不可信响应时可使用 `unknown`，在业务边界校验后再使用字段。
 
@@ -161,7 +251,7 @@ console.log(error.code, error.success, error.data); // 503 false null
 
 ## `client.request<T, D>(config)`
 
-创建通用请求 Observable，返回 `Observable<HttpSuccess<T>>`。输入必须有字符串 `url` 和 `method`，请求配置只做浅复制。网络请求、异步配置和重试都延迟到订阅时执行。
+创建通用请求 Observable，默认返回 `Observable<HttpSuccess<T>>`；配置 `transformResponse` 后返回其处理结果。输入必须有字符串 `url` 和 `method`，请求配置只做浅复制。网络请求、异步配置和重试都延迟到订阅时执行。
 
 请求级 `HttpRequestOptions` 可覆盖 `params`、`headers`、`timeout`、`retryCount`、`retryDelay`、`retryable`、`retryNonIdempotent`、`dedupe`、`cancelOnNoSubscribers`、`dedupeKey` 和 `signal`。
 

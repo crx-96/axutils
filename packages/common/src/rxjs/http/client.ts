@@ -6,16 +6,18 @@ import {
   finalize,
   first,
   from,
+  isObservable,
   map,
   of,
-  race,
   retry,
   shareReplay,
   switchMap,
+  takeUntil,
   tap,
   throwError,
   timer,
 } from "rxjs";
+import { transformRequestHeaders } from "../../internal/http/headers.js";
 import { SAFE_RETRY_METHODS, assertObject } from "../../internal/http/primitives.js";
 import { createAbortLifecycle, createCallerAbort$ } from "./abort.js";
 import {
@@ -34,6 +36,7 @@ import type {
   HttpConfigFactory,
   HttpRequestConfig,
   HttpRequestOptions,
+  HttpResponseResult,
   HttpSuccess,
   ResolvedRequest,
 } from "./types.js";
@@ -44,7 +47,7 @@ import type {
  * 所有网络动作都放在 defer 中，因此构造客户端、创建请求 Observable 以及配置工厂本身都不会立即访问网络。
  * Axios 负责浏览器/Node/Nuxt 的适配，RxJS 负责懒执行、共享、重试和错误通道。
  */
-export class RxHttpClient {
+export class RxHttpClient<O extends HttpClientOptions | undefined = object> {
   private declare readonly axiosInstance: AxiosInstance;
   private declare readonly baseConfig: HttpClientConfig;
   private declare readonly configFactory: HttpConfigFactory | undefined;
@@ -52,8 +55,22 @@ export class RxHttpClient {
   private declare cachedConfig: HttpClientConfig | undefined;
   private declare configLoading$: Observable<HttpClientConfig> | undefined;
   private declare readonly inFlight: Map<string, Observable<HttpSuccess<unknown>>>;
+  private declare readonly transformHeaders: HttpClientOptions["transformHeaders"];
+  private declare readonly transformResponse: HttpClientOptions["transformResponse"];
 
   /** 创建使用同步配置的客户端；未传 baseUrl 时默认为空字符串。 */
+  // 延迟上下文交叉类型，防止宽泛 options 被推导成 {} 而丢失可能存在的处理函数。
+  constructor(
+    options: O & (O extends unknown ? HttpClientOptions | undefined : never),
+    configFactory?: HttpConfigFactory,
+  );
+  constructor(
+    ...args: object extends O
+      ? [options?: undefined, configFactory?: HttpConfigFactory]
+      : undefined extends O
+        ? [options?: undefined, configFactory?: HttpConfigFactory]
+        : [options: never]
+  );
   constructor(options: HttpClientOptions = {}, configFactory?: HttpConfigFactory) {
     if (typeof options !== "object" || options === null || Array.isArray(options)) {
       throw new TypeError("HttpClientOptions 必须是对象");
@@ -67,6 +84,13 @@ export class RxHttpClient {
       this.axiosInstance = options.axiosInstance;
     }
 
+    for (const name of ["transformHeaders", "transformResponse"] as const) {
+      if (options[name] !== undefined && typeof options[name] !== "function") {
+        throw new TypeError(`${name} 必须是函数`);
+      }
+    }
+    this.transformHeaders = options.transformHeaders;
+    this.transformResponse = options.transformResponse;
     this.inFlight = new Map();
     this.baseConfig = normalizeConfig(getConfigOptions(options));
     this.configRetryCount = this.baseConfig.retryCount;
@@ -82,7 +106,15 @@ export class RxHttpClient {
    * 工厂不会在这里执行，只有第一次请求 Observable 被订阅时才会执行；配置首次成功后缓存在实例中，
    * 配置失败不会缓存失败结果，后续请求可以再次初始化。工厂本身必须返回 Observable，不能返回 Promise。
    */
-  static create(factory: HttpConfigFactory, options: HttpClientOptions = {}): RxHttpClient {
+  static create<O extends HttpClientOptions | undefined>(
+    factory: HttpConfigFactory,
+    options: O & (O extends unknown ? HttpClientOptions | undefined : never),
+  ): RxHttpClient<O>;
+  static create(factory: HttpConfigFactory, options?: undefined): RxHttpClient;
+  static create(
+    factory: HttpConfigFactory,
+    options: HttpClientOptions = {},
+  ): RxHttpClient<HttpClientOptions> {
     if (typeof factory !== "function") {
       throw new TypeError("HttpConfigFactory 必须是函数");
     }
@@ -94,7 +126,9 @@ export class RxHttpClient {
    * 输入校验在返回 Observable 前同步抛出 TypeError；订阅后的配置与请求失败通过 error 通道发出。
    * T 只声明预期响应类型，不对响应数据做运行时结构校验。
    */
-  request<T = unknown, D = unknown>(config: HttpRequestConfig<D>): Observable<HttpSuccess<T>> {
+  request<T = unknown, D = unknown>(
+    config: HttpRequestConfig<D>,
+  ): Observable<HttpResponseResult<T, O>> {
     assertObject(config, "HttpRequestConfig 必须是对象");
     if (typeof config.url !== "string") {
       throw new TypeError("请求 url 必须是字符串");
@@ -119,18 +153,34 @@ export class RxHttpClient {
         return this.getOrCreateInFlight<T, D>(key, request);
       }),
     );
+    const transform = this.transformResponse;
+    // 每个调用方单独转换共享的成功结果；转换失败不会重新执行网络请求。
+    const transformed$ =
+      transform === undefined
+        ? request$
+        : request$.pipe(
+            switchMap((result) => from(Promise.resolve(transform(result)))),
+            // 只展开处理函数返回的 Observable；数组、字符串等仍作为一个业务值发出。
+            switchMap((value) => (isObservable(value) ? value : of(value))),
+          );
     const callerAbort$ = createCallerAbort$(input.signal);
-    const result$ = callerAbort$ === undefined ? request$ : race(callerAbort$, request$);
+    // 转换流可能持续发值；取消监听必须保留到流结束，不能在第一次 next 后解除。
+    const result$ =
+      callerAbort$ === undefined ? transformed$ : transformed$.pipe(takeUntil(callerAbort$));
 
+    // O 保留构造时处理函数是否存在及其返回类型，运行时分支与该条件类型一致。
     return result$.pipe(
       catchError((error: unknown) =>
         throwError(() => (error instanceof HttpRequestError ? error : toHttpRequestError(error))),
       ),
-    );
+    ) as Observable<HttpResponseResult<T, O>>;
   }
 
   /** 发起 GET 请求。 */
-  get<T = unknown>(url: string, options?: HttpRequestOptions): Observable<HttpSuccess<T>> {
+  get<T = unknown>(
+    url: string,
+    options?: HttpRequestOptions,
+  ): Observable<HttpResponseResult<T, O>> {
     return this.request<T>({ ...normalizeRequestOptions(options), method: "GET", url });
   }
 
@@ -139,7 +189,7 @@ export class RxHttpClient {
     url: string,
     data?: D,
     options?: HttpRequestOptions,
-  ): Observable<HttpSuccess<T>> {
+  ): Observable<HttpResponseResult<T, O>> {
     const config: HttpRequestConfig<D> = {
       ...normalizeRequestOptions(options),
       method: "POST",
@@ -154,7 +204,7 @@ export class RxHttpClient {
     url: string,
     data?: D,
     options?: HttpRequestOptions,
-  ): Observable<HttpSuccess<T>> {
+  ): Observable<HttpResponseResult<T, O>> {
     const config: HttpRequestConfig<D> = {
       ...normalizeRequestOptions(options),
       method: "PUT",
@@ -169,7 +219,7 @@ export class RxHttpClient {
     url: string,
     data?: D,
     options?: HttpRequestOptions,
-  ): Observable<HttpSuccess<T>> {
+  ): Observable<HttpResponseResult<T, O>> {
     const config: HttpRequestConfig<D> = {
       ...normalizeRequestOptions(options),
       method: "PATCH",
@@ -180,7 +230,10 @@ export class RxHttpClient {
   }
 
   /** 发起 DELETE 请求。 */
-  delete<T = unknown>(url: string, options?: HttpRequestOptions): Observable<HttpSuccess<T>> {
+  delete<T = unknown>(
+    url: string,
+    options?: HttpRequestOptions,
+  ): Observable<HttpResponseResult<T, O>> {
     return this.request<T>({ ...normalizeRequestOptions(options), method: "DELETE", url });
   }
 
@@ -228,7 +281,19 @@ export class RxHttpClient {
     clientConfig: HttpClientConfig,
     input: HttpRequestConfig<D>,
   ): ResolvedRequest<D> {
-    return resolveRequest(clientConfig, input);
+    const request = resolveRequest(clientConfig, input);
+    if (this.transformHeaders !== undefined) {
+      try {
+        request.headers = transformRequestHeaders(
+          input.headers,
+          request.method,
+          this.transformHeaders,
+        );
+      } catch (error) {
+        throw toHttpRequestError(error, "config");
+      }
+    }
+    return request;
   }
 
   /**

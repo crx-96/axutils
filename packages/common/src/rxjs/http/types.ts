@@ -1,5 +1,6 @@
 import type { AxiosInstance, AxiosRequestConfig } from "axios";
 import type { Observable } from "rxjs";
+import type { HttpHeadersTransform } from "../../internal/http/headers.js";
 
 /** HTTP 请求允许使用的方法。 */
 export type HttpMethod =
@@ -44,9 +45,37 @@ export interface HttpClientConfig {
  * `axiosInstance` 可注入浏览器、Node.js 或 Nuxt 使用方配置好的 Axios 实例；不传时使用 Axios 默认实例。
  * 使用本模块需要按需安装 `rxjs`、`axios`、`safe-stable-stringify` 和 `spark-md5`，安装命令见包 README。
  */
-export interface HttpClientOptions extends Partial<HttpClientConfig> {
+export interface HttpClientOptions<
+  F extends HttpResponseTransformer | undefined = HttpResponseTransformer | undefined,
+> extends Partial<HttpClientConfig> {
   axiosInstance?: AxiosInstance;
+  /** 每次订阅时同步处理请求头副本；请求级 headers 始终优先，字段名不区分大小写。 */
+  transformHeaders?: HttpHeadersTransform;
+  /** 处理统一成功结果，支持普通值、Promise 或 Observable；展开异步结果并自动推导发值类型。 */
+  transformResponse?: F;
 }
+
+/**
+ * 成功结果处理函数；未标注响应体类型时 data 为 unknown。
+ * 使用方法签名允许调用方声明具体响应体，与请求泛型一样，由调用方负责保证数据结构。
+ */
+export type HttpResponseTransformer = {
+  transform(response: HttpSuccess<unknown>): unknown;
+}["transform"];
+
+/** 只展开处理函数返回的流，流内部的值保持其原类型。 */
+type ObservableValue<R> = R extends Observable<infer V> ? V : R;
+
+type TransformedResponse<T, F> = F extends (...args: never[]) => infer R
+  ? ObservableValue<Awaited<R>>
+  : HttpSuccess<T>;
+
+/** 按实际选项推导结果；处理函数可能缺省时保留原成功结果的联合类型。 */
+export type HttpResponseResult<T, O> = O extends { transformResponse: infer F }
+  ? TransformedResponse<T, F>
+  : O extends { transformResponse?: infer F }
+    ? TransformedResponse<T, F | undefined>
+    : HttpSuccess<T>;
 
 /** 延迟获取客户端配置的 RxJS 工厂。工厂只会在第一次请求订阅时执行。 */
 export type HttpConfigFactory = () => Observable<Partial<HttpClientConfig>>;

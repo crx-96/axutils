@@ -1,4 +1,5 @@
 import type { AxiosInstance, AxiosRequestConfig } from "axios";
+import type { HttpHeadersTransform } from "../../internal/http/headers.js";
 
 /** Promise HTTP 请求允许使用的方法。 */
 export type PromiseHttpMethod =
@@ -36,9 +37,34 @@ export interface PromiseHttpClientConfig {
 }
 
 /** Promise HTTP 客户端构造选项；axiosInstance 允许注入调用方配置好的 Axios 实例。 */
-export interface PromiseHttpClientOptions extends Partial<PromiseHttpClientConfig> {
+export interface PromiseHttpClientOptions<
+  F extends PromiseHttpResponseTransformer | undefined = PromiseHttpResponseTransformer | undefined,
+> extends Partial<PromiseHttpClientConfig> {
   axiosInstance?: AxiosInstance;
+  /** 每次请求时同步处理请求头副本；请求级 headers 始终优先，字段名不区分大小写。 */
+  transformHeaders?: HttpHeadersTransform;
+  /** 处理统一成功结果，可返回 Promise；在网络重试之外执行，返回类型自动推导。 */
+  transformResponse?: F;
 }
+
+/**
+ * 成功结果处理函数；未标注响应体类型时 data 为 unknown。
+ * 使用方法签名允许调用方声明具体响应体，与请求泛型一样，由调用方负责保证数据结构。
+ */
+export type PromiseHttpResponseTransformer = {
+  transform(response: PromiseHttpSuccess<unknown>): unknown;
+}["transform"];
+
+type TransformedResponse<T, F> = F extends (...args: never[]) => infer R
+  ? Awaited<R>
+  : PromiseHttpSuccess<T>;
+
+/** 按实际选项推导结果；处理函数可能缺省时保留原成功结果的联合类型。 */
+export type PromiseHttpResponseResult<T, O> = O extends { transformResponse: infer F }
+  ? TransformedResponse<T, F>
+  : O extends { transformResponse?: infer F }
+    ? TransformedResponse<T, F | undefined>
+    : PromiseHttpSuccess<T>;
 
 /** 延迟获取客户端配置的工厂；工厂可以同步返回配置，也可以返回 Promise。 */
 export type PromiseHttpConfigFactory = () =>

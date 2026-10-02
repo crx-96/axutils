@@ -14,6 +14,8 @@ export type {
   HttpMethod,
   HttpRequestConfig,
   HttpRequestOptions,
+  HttpResponseResult,
+  HttpResponseTransformer,
   HttpResult,
   HttpSuccess,
 } from "./http/types.js";

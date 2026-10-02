@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import { isCancellationError } from "../../internal/http/error-utils.js";
+import { transformRequestHeaders } from "../../internal/http/headers.js";
 import { SAFE_RETRY_METHODS, assertObject } from "../../internal/http/primitives.js";
 import { createCancellationError, raceWithSignal, throwIfAborted, waitForDelay } from "./abort.js";
 import {
@@ -18,6 +19,7 @@ import type {
   PromiseHttpConfigFactory,
   PromiseHttpRequestConfig,
   PromiseHttpRequestOptions,
+  PromiseHttpResponseResult,
   PromiseHttpSuccess,
   ResolvedRequest,
 } from "./types.js";
@@ -28,7 +30,7 @@ import type {
  * 使用本类需要安装 `axios`、`safe-stable-stringify` 和 `spark-md5`：
  * `pnpm add axios safe-stable-stringify spark-md5`。本文件不导入 RxJS。
  */
-export class PromiseHttpClient {
+export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = object> {
   private declare readonly axiosInstance: AxiosInstance;
   private declare readonly baseConfig: PromiseHttpClientConfig;
   private declare readonly configFactory: PromiseHttpConfigFactory | undefined;
@@ -36,8 +38,22 @@ export class PromiseHttpClient {
   private declare cachedConfig: PromiseHttpClientConfig | undefined;
   private declare configLoading: Promise<PromiseHttpClientConfig> | undefined;
   private declare readonly inFlight: Map<string, Promise<PromiseHttpSuccess<unknown>>>;
+  private declare readonly transformHeaders: PromiseHttpClientOptions["transformHeaders"];
+  private declare readonly transformResponse: PromiseHttpClientOptions["transformResponse"];
 
   /** 创建使用同步配置的客户端；构造函数不会执行网络请求或配置工厂。 */
+  // 延迟上下文交叉类型，防止宽泛 options 被推导成 {} 而丢失可能存在的处理函数。
+  constructor(
+    options: O & (O extends unknown ? PromiseHttpClientOptions | undefined : never),
+    configFactory?: PromiseHttpConfigFactory,
+  );
+  constructor(
+    ...args: object extends O
+      ? [options?: undefined, configFactory?: PromiseHttpConfigFactory]
+      : undefined extends O
+        ? [options?: undefined, configFactory?: PromiseHttpConfigFactory]
+        : [options: never]
+  );
   constructor(options: PromiseHttpClientOptions = {}, configFactory?: PromiseHttpConfigFactory) {
     assertObject(options, "PromiseHttpClientOptions 必须是对象");
     const clientOptions = options as PromiseHttpClientOptions;
@@ -53,6 +69,13 @@ export class PromiseHttpClient {
       this.axiosInstance = clientOptions.axiosInstance;
     }
 
+    for (const name of ["transformHeaders", "transformResponse"] as const) {
+      if (clientOptions[name] !== undefined && typeof clientOptions[name] !== "function") {
+        throw new TypeError(`${name} 必须是函数`);
+      }
+    }
+    this.transformHeaders = clientOptions.transformHeaders;
+    this.transformResponse = clientOptions.transformResponse;
     this.inFlight = new Map();
     this.baseConfig = normalizeConfig(getConfigOptions(clientOptions));
     this.configRetryCount = this.baseConfig.retryCount;
@@ -61,10 +84,15 @@ export class PromiseHttpClient {
   }
 
   /** 创建使用异步配置工厂的客户端；工厂在第一次请求时执行，并缓存成功配置。 */
+  static create<O extends PromiseHttpClientOptions | undefined>(
+    factory: PromiseHttpConfigFactory,
+    options: O & (O extends unknown ? PromiseHttpClientOptions | undefined : never),
+  ): PromiseHttpClient<O>;
+  static create(factory: PromiseHttpConfigFactory, options?: undefined): PromiseHttpClient;
   static create(
     factory: PromiseHttpConfigFactory,
     options: PromiseHttpClientOptions = {},
-  ): PromiseHttpClient {
+  ): PromiseHttpClient<PromiseHttpClientOptions> {
     if (typeof factory !== "function") throw new TypeError("PromiseHttpConfigFactory 必须是函数");
     return new PromiseHttpClient(options, factory);
   }
@@ -76,7 +104,7 @@ export class PromiseHttpClient {
    */
   request<T = unknown, D = unknown>(
     config: PromiseHttpRequestConfig<D>,
-  ): Promise<PromiseHttpSuccess<T>> {
+  ): Promise<PromiseHttpResponseResult<T, O>> {
     assertObject(config, "PromiseHttpRequestConfig 必须是对象");
     if (typeof config.url !== "string") throw new TypeError("请求 url 必须是字符串");
     if (typeof config.method !== "string") throw new TypeError("请求 method 必须是字符串");
@@ -99,16 +127,20 @@ export class PromiseHttpClient {
       return this.getOrCreateInFlight<T, D>(key, request);
     });
 
-    return raceWithSignal(operation, input.signal).catch((error: unknown) => {
+    const transform = this.transformResponse;
+    // 转换属于当前调用方，并且位于网络重试之外；Promise 返回值按标准规则展开。
+    const transformed = transform === undefined ? operation : operation.then(transform);
+    // O 保留构造时处理函数是否存在及其返回类型，运行时分支与该条件类型一致。
+    return raceWithSignal(transformed, input.signal).catch((error: unknown) => {
       throw error instanceof PromiseHttpRequestError ? error : toPromiseHttpRequestError(error);
-    });
+    }) as Promise<PromiseHttpResponseResult<T, O>>;
   }
 
   /** 发起 GET 请求。 */
   get<T = unknown>(
     url: string,
     options?: PromiseHttpRequestOptions,
-  ): Promise<PromiseHttpSuccess<T>> {
+  ): Promise<PromiseHttpResponseResult<T, O>> {
     return this.request<T>({ ...normalizeRequestOptions(options), method: "GET", url });
   }
 
@@ -117,7 +149,7 @@ export class PromiseHttpClient {
     url: string,
     data?: D,
     options?: PromiseHttpRequestOptions,
-  ): Promise<PromiseHttpSuccess<T>> {
+  ): Promise<PromiseHttpResponseResult<T, O>> {
     const config: PromiseHttpRequestConfig<D> = {
       ...normalizeRequestOptions(options),
       method: "POST",
@@ -132,7 +164,7 @@ export class PromiseHttpClient {
     url: string,
     data?: D,
     options?: PromiseHttpRequestOptions,
-  ): Promise<PromiseHttpSuccess<T>> {
+  ): Promise<PromiseHttpResponseResult<T, O>> {
     return this.request<T, D>({
       ...normalizeRequestOptions(options),
       method: "PUT",
@@ -146,7 +178,7 @@ export class PromiseHttpClient {
     url: string,
     data?: D,
     options?: PromiseHttpRequestOptions,
-  ): Promise<PromiseHttpSuccess<T>> {
+  ): Promise<PromiseHttpResponseResult<T, O>> {
     return this.request<T, D>({
       ...normalizeRequestOptions(options),
       method: "PATCH",
@@ -159,7 +191,7 @@ export class PromiseHttpClient {
   delete<T = unknown>(
     url: string,
     options?: PromiseHttpRequestOptions,
-  ): Promise<PromiseHttpSuccess<T>> {
+  ): Promise<PromiseHttpResponseResult<T, O>> {
     return this.request<T>({ ...normalizeRequestOptions(options), method: "DELETE", url });
   }
 
@@ -216,7 +248,19 @@ export class PromiseHttpClient {
     clientConfig: PromiseHttpClientConfig,
     input: PromiseHttpRequestConfig<D>,
   ): ResolvedRequest<D> {
-    return resolveRequest(clientConfig, input);
+    const request = resolveRequest(clientConfig, input);
+    if (this.transformHeaders !== undefined) {
+      try {
+        request.headers = transformRequestHeaders(
+          input.headers,
+          request.method,
+          this.transformHeaders,
+        );
+      } catch (error) {
+        throw toPromiseHttpRequestError(error, "config");
+      }
+    }
+    return request;
   }
 
   /**

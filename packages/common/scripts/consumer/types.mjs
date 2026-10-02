@@ -59,9 +59,48 @@ export function consumerTypes(manifest, subpaths, format) {
     }
     if (key === "./axios/http" || key === "./rxjs/http") {
       const prefix = key === "./axios/http" ? "PromiseHttp" : "Http";
+      const client = key === "./axios/http" ? "PromiseHttpClient" : "RxHttpClient";
+      const wrapper = key === "./axios/http" ? "Promise" : 'import("rxjs").Observable';
       statements.push(
         `const result${index}: ${api}.${prefix}Result<{ value: number }> = {} as ${api}.${prefix}Result<{ value: number }>;`,
         `if (result${index}.success) { const value: number = result${index}.data.value; void value; }`,
+        "{",
+        "type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;",
+        "type Assert<T extends true> = T;",
+        `const legacy = new ${api}.${client}();`,
+        'const original = legacy.get<{ id: number }>("/users/1");',
+        `type Original = Assert<Equal<typeof original, ${wrapper}<${api}.${prefix}Success<{ id: number }>>>>;`,
+        `const transformResponse = (result: ${api}.${prefix}Success<{ id: number }>) => ({ id: result.data.id, status: result.code });`,
+        `const options = { transformHeaders: (headers) => ({ ...headers, Authorization: "Bearer token" }), transformResponse } satisfies ${api}.${prefix}ClientOptions;`,
+        `const mapped = new ${api}.${client}(options).get("/users/1");`,
+        `type Mapped = Assert<Equal<typeof mapped, ${wrapper}<{ id: number; status: number }>>>;`,
+        "// @ts-expect-error 转换结果不能回退为原 HttpSuccess 或 any",
+        `const wrong: ${wrapper}<${api}.${prefix}Success<{ id: number }>> = mapped; void wrong;`,
+        `const asyncMapped = new ${api}.${client}({ transformResponse: async () => "ready" }).get("/users/1");`,
+        `type AsyncMapped = Assert<Equal<typeof asyncMapped, ${wrapper}<string>>>;`,
+        `const factory: ${api}.${prefix}ConfigFactory = () => { throw new Error("只做类型检查"); };`,
+        `const created = ${api}.${client}.create(factory, options).get("/users/1");`,
+        `type Created = Assert<Equal<typeof created, ${wrapper}<{ id: number; status: number }>>>;`,
+        `type Result = Assert<Equal<${api}.${prefix}ResponseResult<unknown, typeof options>, { id: number; status: number }>>;`,
+        `const transformer: ${api}.${prefix}ResponseTransformer = transformResponse; void transformer;`,
+        "}",
+      );
+    }
+    if (key === "./rxjs/http") {
+      statements.push(
+        "{",
+        "type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;",
+        "type Assert<T extends true> = T;",
+        'const output = (): import("rxjs").Observable<{ id: number }> => { throw new Error("只做类型检查"); };',
+        `const streamOptions = { transformResponse: (result: ${api}.HttpSuccess<{ id: number }>) => { void result; return output(); } };`,
+        `const streamed = new ${api}.RxHttpClient(streamOptions).get("/user");`,
+        'type Streamed = Assert<Equal<typeof streamed, import("rxjs").Observable<{ id: number }>>>;',
+        `const factory: ${api}.HttpConfigFactory = () => { throw new Error("只做类型检查"); };`,
+        `const createdStream = ${api}.RxHttpClient.create(factory, streamOptions).get("/user");`,
+        'type CreatedStream = Assert<Equal<typeof createdStream, import("rxjs").Observable<{ id: number }>>>;',
+        `const promisedStream = new ${api}.RxHttpClient({ transformResponse: async () => output() }).get("/user");`,
+        'type PromisedStream = Assert<Equal<typeof promisedStream, import("rxjs").Observable<{ id: number }>>>;',
+        "}",
       );
     }
     if (key === "./date") {
