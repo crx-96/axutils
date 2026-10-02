@@ -1,7 +1,6 @@
 import { HTTP_METHODS, assertObject, resolveUrl } from "../../internal/http/primitives.js";
 import type {
   HttpClientConfig,
-  HttpClientOptions,
   HttpMethod,
   HttpRequestConfig,
   HttpRequestOptions,
@@ -19,7 +18,7 @@ const DEFAULT_CONFIG: HttpClientConfig = {
 };
 
 /** 只提取同步配置，避免把 Axios 实例意外合并进异步配置对象。 */
-export const getConfigOptions = (options: HttpClientOptions): Partial<HttpClientConfig> => {
+export const getConfigOptions = (options: Partial<HttpClientConfig>): Partial<HttpClientConfig> => {
   const config: Partial<HttpClientConfig> = {};
   if (options.baseUrl !== undefined) config.baseUrl = options.baseUrl;
   if (options.retryCount !== undefined) config.retryCount = options.retryCount;

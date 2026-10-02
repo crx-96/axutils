@@ -1,5 +1,15 @@
 # @axutils/common
 
+## 2.0.1
+
+### Patch Changes
+
+- 完善 RxJS HTTP 客户端的统一转换能力：新增实例级 `transformError`，在重试结束后处理请求、配置和转换异常，并保留错误原因及取消语义。
+
+  新增 `RxHttpClient.withTypes` 响应类型映射，使成功和错误转换结果保留单次请求泛型，支持直接使用各请求方法返回业务结果，同时保留原有客户端用法。
+
+  补充运行时、编译期和打包消费测试，以及动态 Bearer Token、统一响应和错误转换的完整使用示例。
+
 ## 2.0.0
 
 ### Major Changes
