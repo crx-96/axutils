@@ -61,7 +61,7 @@ describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind)
     expect(context.configs[0]?.url).toBe(useFactory ? "/api/users" : "/users");
     expect(context.configs[0]?.headers.get("Authorization")).toBe("Bearer shared-token");
     expect(transformHeaders).toHaveBeenCalledOnce();
-    expect(transformResponse).toHaveBeenCalledWith({
+    expect(transformResponse.mock.calls[0]?.[0]).toEqual({
       code: 201,
       data: { name: "Ada" },
       error: null,

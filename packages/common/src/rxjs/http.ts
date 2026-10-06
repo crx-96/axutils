@@ -16,6 +16,8 @@ export type {
   HttpMappedClientOptions,
   HttpMethod,
   HttpRequestConfig,
+  HttpRequestContext,
+  HttpRequestHeaders,
   HttpRequestOptions,
   HttpResponseResult,
   HttpResponseTransformer,

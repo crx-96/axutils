@@ -1,4 +1,9 @@
-import { AxiosHeaders, type AxiosRequestConfig, type RawAxiosRequestHeaders } from "axios";
+import {
+  AxiosHeaders,
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type RawAxiosRequestHeaders,
+} from "axios";
 import { HTTP_METHODS, assertObject } from "./primitives.js";
 
 /** 两种客户端共用的同步请求头处理契约；回调可修改收到的副本。 */
@@ -21,7 +26,7 @@ function setHeaders(target: AxiosHeaders, headers: RawAxiosRequestHeaders | unde
 
 /** 在计算去重身份前处理请求头，最后以大小写不敏感的方式应用请求级覆盖。 */
 export function transformRequestHeaders(
-  headers: AxiosRequestConfig["headers"],
+  headers: AxiosRequestConfig["headers"] | AxiosInstance["defaults"]["headers"],
   method: string,
   transform: HttpHeadersTransform,
 ): RawAxiosRequestHeaders {
@@ -30,7 +35,8 @@ export function transformRequestHeaders(
   setHeaders(requested, headers?.common);
   setHeaders(requested, headers?.[method.toLowerCase()]);
   setHeaders(requested, headers);
-  requested.delete(["common", ...Array.from(HTTP_METHODS, (name) => name.toLowerCase())]);
+  // Axios 默认配置还包含 query 分组，即使本库不提供 QUERY 请求入口也不能将它发送为字段。
+  requested.delete(["common", "query", ...Array.from(HTTP_METHODS, (name) => name.toLowerCase())]);
   const transformed = transform(copyHeaders(requested));
   assertObject(transformed, "transformHeaders 必须同步返回 headers 对象");
   const prototype: unknown = Object.getPrototypeOf(transformed);

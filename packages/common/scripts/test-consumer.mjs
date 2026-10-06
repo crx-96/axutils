@@ -91,8 +91,21 @@ try {
     const env = { ...process.env, NODE_PATH: "" };
     run(runtime, [join(fixture, "runtime.mjs")], fixture, env);
     run(runtime, [join(fixture, "runtime.cjs")], fixture, env);
+    const typeFiles = ["types.mts", "types.cts"];
     for (const format of ["mts", "cts"]) {
       writeFileSync(join(fixture, `types.${format}`), consumerTypes(manifest, subpaths, format));
+      // 与文档共用原始示例，在真实 tarball 的 ESM/CJS 声明下检查直接消费，无源码别名。
+      if (subpaths.includes("./rxjs/http")) {
+        const example = `rxjs-context-example.${format}`;
+        writeFileSync(
+          join(fixture, example),
+          readFileSync(
+            new URL("../../../docs/examples/common/rxjs-context.ts", import.meta.url),
+            "utf8",
+          ),
+        );
+        typeFiles.push(example);
+      }
     }
     writeFileSync(
       join(fixture, "tsconfig.json"),
@@ -107,7 +120,7 @@ try {
           target: "ES2020",
           types: [],
         },
-        files: ["types.mts", "types.cts"],
+        files: typeFiles,
       }),
     );
     run(process.execPath, [tsc, "-p", join(fixture, "tsconfig.json")], fixture, env);

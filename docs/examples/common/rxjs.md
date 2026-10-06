@@ -16,7 +16,7 @@ pnpm add @axutils/common rxjs axios safe-stable-stringify spark-md5
 
 | `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
 | --- | --- | --- | --- |
-| `@axutils/common/rxjs/http` | `RxHttpClient`（`create`、`withTypes`、`request`、`get`、`post`、`put`、`patch`、`delete`）、`HttpRequestError` | `HttpMethod`、`HttpClientConfig`、`HttpClientOptions`、`HttpConfigFactory`、`HttpRequestOptions`、`HttpRequestConfig`、`HttpSuccess`、`HttpFailure`、`HttpResult`、`HttpErrorKind`、`HttpErrorInfo`、`HttpResponseTransformer`、`HttpErrorTransformer`、`HttpResponseResult`、`HttpResponseTypeMap`、`HttpMappedClientOptions`、`HttpTransformValue`、`HttpTypedClientFactory` | `rxjs`、`axios`、`safe-stable-stringify`、`spark-md5` |
+| `@axutils/common/rxjs/http` | `RxHttpClient`（`create`、`withTypes`、`request`、`get`、`post`、`put`、`patch`、`delete`）、`HttpRequestError` | `HttpMethod`、`HttpClientConfig`、`HttpClientOptions`、`HttpConfigFactory`、`HttpRequestOptions`、`HttpRequestConfig`、`HttpRequestContext`、`HttpRequestHeaders`、`HttpSuccess`、`HttpFailure`、`HttpResult`、`HttpErrorKind`、`HttpErrorInfo`、`HttpResponseTransformer`、`HttpErrorTransformer`、`HttpResponseResult`、`HttpResponseTypeMap`、`HttpMappedClientOptions`、`HttpTransformValue`、`HttpTypedClientFactory` | `rxjs`、`axios`、`safe-stable-stringify`、`spark-md5` |
 | `@axutils/common` (`.`) | 不导出 RxJS HTTP API | 不导出上述类型 | 根入口无第三方运行时依赖 |
 
 ESM 使用精确子路径导入全部运行时 API和类型：
@@ -37,6 +37,8 @@ import type {
   HttpMappedClientOptions,
   HttpMethod,
   HttpRequestConfig,
+  HttpRequestContext,
+  HttpRequestHeaders,
   HttpRequestOptions,
   HttpResponseResult,
   HttpResponseTransformer,
@@ -85,7 +87,8 @@ client.get("/health").subscribe({
 - `retryNonIdempotent`：是否允许 POST/PUT/PATCH/DELETE 重试，默认 `false`。
 - `cancelOnNoSubscribers`：最后一个订阅者取消时是否 abort 底层请求，默认 `false`。
 - `axiosInstance`：可注入提供 `request` 方法的 Axios 实例。
-- `transformHeaders`：同步处理请求头副本，适合读取最新 token；请求级 headers 优先。
+- `createContext`：可选的同步工厂，在每次订阅开始、等待配置之前捕获使用方状态，返回值不被克隆或修改。
+- `transformHeaders`：同步处理请求头副本，第二参数包含本次订阅的上下文；请求级 headers 优先。
 - `transformResponse`：处理统一成功结果，支持普通值、Promise 或 Observable，并自动推导最终发值类型。
 - `transformError`：在请求最终失败后，将 `HttpRequestError` 转成普通结果；也覆盖配置、请求头和响应转换异常，支持与 `transformResponse` 相同的返回形式。
 
@@ -152,9 +155,64 @@ client.get("/user", {
 - `transformHeaders` 收到当前请求 headers 的副本；未传 headers 时为空对象，`common` 和当前方法分组会展开。可以返回普通 headers 对象或 `AxiosHeaders`。
 - 回调在每次订阅时、配置解析完成后执行，网络重试沿用本次处理结果。构造客户端和仅创建 Observable 都不会执行回调。
 - 合并顺序为 Axios 实例默认 headers → 回调结果 → 请求级 headers。同名 header 不区分大小写，请求级 `false`、`null` 等屏蔽值也保留。
-- 回调输入不包含 Axios 实例默认 headers；未提供的字段仍由 Axios 默认配置补齐。要屏蔽默认字段，可在返回值中将它设为 `false` 或 `null`。
+- 回调输入不包含 Axios 实例默认 headers；库在本次解析时补齐实例默认头，再计算去重身份。要屏蔽默认字段，可在返回值中将它设为 `false` 或 `null`。
+- 内部重试复用解析时确定的默认头与请求级覆盖，不重新混入之后新增或修改的实例默认字段；请求级显式值也能覆盖默认分组中的 `false`。
 - 回调中的对象和多值数组修改不会影响调用方原 headers。请求级字段始终最后覆盖，所以回调不能删除或改写调用方明确指定的同名字段。
 - 最终 headers 在自动去重前参与身份计算；不同 token 的请求会独立执行。使用显式 `dedupeKey` 且请求参数不可稳定序列化时，仍由调用方负责 key 的业务身份。
+
+### 每次订阅的上下文与最终请求头
+
+需要隔离身份、语言等状态时，使用 `createContext`，不要在配置等待结束后重新读取这些外部状态。三个现有转换回调统一增加第二个参数 `request: HttpRequestContext<C>`：
+
+```ts
+interface HttpRequestContext<C> {
+  readonly context: C | undefined;
+  readonly headers: HttpRequestHeaders | undefined;
+}
+```
+
+- `createContext()` 在订阅开始时同步调用；创建客户端或请求 Observable 时不调用。同一 Observable 重新订阅会重新调用，包括通过外部 `retry` 重新订阅；客户端内部的配置重试和网络重试不重新创建上下文。
+- `context` 保留工厂返回的原始值和引用。库不复制、冻结或修改业务对象。如果需要身份快照，由应用在工厂内复制所需字段；返回 Promise 也只会被当作上下文值，不会等待它。
+- `transformHeaders(headers, request)` 在配置就绪后执行，此时 `request.context` 已可用，`request.headers` 尚未生成。回调提供默认凭据和语言；请求级 `common` → 方法级 → 直接字段依次覆盖，大小写不敏感，显式空字符串、`null`、`false`、`undefined` 保留各自语义。
+- `transformResponse(response, request)` 与 `transformError(error, request)` 读取该订阅的上下文及只读请求头快照。`headers` 的字段和多值数组均不可修改，采用 Axios 的标准字段名形式，例如 `Authorization`、`Accept-Language`。
+- 请求解析成功后已有“库交给 Axios 的头”。成功响应或携带 `config` 的 Axios 错误到达时，快照更新为其实际 `config.headers`，因此结果转换能看到 Axios 序列化或请求拦截器产生的字段；不伪称能读取浏览器/代理自行添加的线缆级 Header。响应拦截器应保留 Axios 的 `config`，避免丢失传输事实。
+- 早于传输结果的取消，使用已解析的头；在配置等待或 Header 转换完成前取消则没有头。自定义 Axios 拦截器仍按 Axios 规则运行；与凭据相关的动态默认值应放在 `createContext` / `transformHeaders` 中，这样内部重试才会复用已捕获状态。
+- 网络去重只共享传输结果；每个订阅分别执行转换并持有自己的业务上下文。上下文不会被序列化、传给 Axios 或加入去重 key；会改变网络语义的最终请求头继续参与去重。
+
+旧的单参数回调、无上下文选项、`HttpClientOptions<F, E>`、`withTypes<M>()` 和所有请求方法的 `T/D` 泛型保持可用。内联选项从 `createContext` 推导 `C`；映射模式也可以使用 `withTypes<M, C>()` 显式指定。提取选项时可用 `satisfies HttpMappedClientOptions<M, C>` 保留具体回调和映射关系。`HttpClientOptions` 追加第三个泛型 `C`，`HttpResponseTransformer<C>`、`HttpErrorTransformer<C>` 和 `HttpTypedClientFactory<M, C>` 也支持指定上下文。
+
+成功回调仍允许按接口契约标注具体响应体类型，但上下文参数必须接受工厂可能返回的全部值，不能把可选字段自行标注为必填字段。
+
+#### 初始化和失败行为
+
+| 阶段 | 上下文和 Header | 错误通道与重试 |
+| --- | --- | --- |
+| 客户端构造选项非法（含非函数 createContext） | 不创建上下文 | 同步抛错，保持原构造校验行为 |
+| 请求参数非法且没有 transformError | 不创建上下文，也没有可订阅请求 | 调用请求方法时同步抛错，兼容旧 API |
+| 请求参数非法且配置了 transformError | 订阅时仍先创建上下文；headers 为 undefined | 一次 config 错误转换，不加载配置或发请求 |
+| createContext 抛错 | context、headers 都为 undefined | 订阅的 config 错误；配置了 transformError 则交给它一次；不内部重试 |
+| 配置加载最终失败 | 保留上下文，headers 为 undefined | 配置按既有规则重试，结束后只转换一次 |
+| Header 转换失败 | 保留上下文，headers 为 undefined | config 错误，只转换一次，不网络重试 |
+| 网络最终失败或成功转换失败 | 保留上下文和已确定的请求头 | 一次错误转换；业务转换失败不重发网络请求 |
+| transformError 自身失败 | 保留原始 cause | 直接进入 Observable.error，不递归转换或重试 |
+| 主动 unsubscribe | 不执行最终错误转换 | 保持原有取消、共享请求和资源释放语义 |
+
+如果请求参数错误与上下文工厂错误同时存在，订阅先遇到的上下文工厂错误进入转换。已取消的 `signal` 仍先创建上下文，然后遵循现有取消通道；未配置工厂时 `context` 为 `undefined`。工厂可选且可能失败，因此公开类型始终保留 `C | undefined`，应用回调必须处理缺失情况。
+
+#### 可编译的应用示例
+
+完整示例见 [rxjs-context.ts](./rxjs-context.ts)。文件直接导出 `RxHttpClient.withTypes<ApiResponseTypeMap, RequestContext>().create(...)` 产生的 `httpUtils`，可以直接调用：
+
+```ts
+httpUtils.get<User>("/user");
+httpUtils.post<LoginResult, LoginRequest>("/login", body, {
+  headers: { Authorization: null },
+});
+```
+
+示例把会话版本、凭据快照和语言放在应用上下文中；成功和错误回调先丢弃旧会话结果，再同时核对当前缓存与实际 `Authorization`，决定是否允许处理 401 或 token 续期。显式使用其他凭据或屏蔽凭据的请求无权修改当前凭据缓存。登录、退出、切换身份必须推进应用会话版本；token 续期保持版本并核对旧 token，以防并发旧响应覆盖新 token。以上都是示例应用策略，公共库不包含登录、token 或国际化业务。
+
+`pnpm test:consumer` 会将同一示例放入工作区外，以真实打包产物的 ESM/CJS 声明进行 NodeNext、`skipLibCheck: false` 编译检查，不依赖源码别名或请求方法包装。
 
 ### 固定返回类型与异步展开
 
@@ -375,7 +433,7 @@ api.get<UserVO>("/users/me", {
 }).subscribe();
 ```
 
-这个例子面向浏览器，SSR 项目应在 `transformHeaders` 中改用当前请求可访问的 Token 来源。映射不校验服务器实际数据；HTTP 200 的 `ApiResult<T>` 仍基于项目的接口契约，需要运行时校验时应在成功回调中完成。错误回调可根据 `error.error.kind` 区分超时、取消等场景；修改业务失败码、通知或跳转策略也由使用方完成。
+这个例子面向浏览器，展示不使用上下文的旧 API；它在配置就绪后读取 token，没有实现会话隔离。需要跨配置等待保持身份、处理 401 或续期时，使用前面的 [上下文示例](./rxjs-context.ts)。SSR 项目应从当前应用请求的作用域捕获凭据。映射不校验服务器实际数据；HTTP 200 的 `ApiResult<T>` 仍基于项目的接口契约，需要运行时校验时应在成功回调中完成。错误回调可根据 `error.error.kind` 区分超时、取消等场景；修改业务失败码、通知或跳转策略也由使用方完成。
 
 ## 结果和错误
 
