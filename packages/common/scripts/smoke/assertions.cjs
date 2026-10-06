@@ -13,6 +13,39 @@ module.exports = function verify(modules) {
     const name = key === "." ? "@axutils/common" : `@axutils/common${key.slice(1)}`;
     assert.deepEqual(Object.keys(modules[name]).sort(), names, `${name} 导出契约`);
   }
+  const root = modules["@axutils/common"];
+  assert.equal(root.createActionGate, modules["@axutils/common/object/timing"].createActionGate);
+  assert.equal(root.mixRgbColor, modules["@axutils/common/color/rgb"].mixRgbColor);
+  assert.equal(root.findTreePath, modules["@axutils/common/object/tree"].findTreePath);
+  let time = 0;
+  const gate = root.createActionGate(100, () => time);
+  assert.equal(gate(true), false);
+  assert.equal(gate(), true);
+  time = 99;
+  assert.equal(gate(), false);
+  time = 100;
+  assert.equal(gate(), true);
+  assert.equal(root.createActionGate(0)(), true);
+  assert.throws(() => root.createActionGate(-1), RangeError);
+  assert.equal(root.mixRgbColor("#23745b", "#ffffff", 0.1), "#39826b");
+  assert.throws(() => root.mixRgbColor("#fff", "#ffffff", 0), TypeError);
+  const leaf = Object.freeze({ id: 2 });
+  const branch = Object.freeze({ children: Object.freeze([leaf]), id: 1 });
+  const path = root.findTreePath(
+    Object.freeze([branch]),
+    (node) => node.id === 2,
+    (node) => node.children,
+  );
+  assert.deepEqual(path, [branch, leaf]);
+  assert.equal(path[1], leaf);
+  assert.deepEqual(
+    root.findTreePath(
+      [branch],
+      () => false,
+      (node) => node.children,
+    ),
+    [],
+  );
   const {
     StorageUtils: CommonStorageUtils,
     debounce: debounceFromEntry,

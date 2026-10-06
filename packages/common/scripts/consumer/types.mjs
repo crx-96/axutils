@@ -9,6 +9,43 @@ export function consumerTypes(manifest, subpaths, format) {
   subpaths.forEach((key, index) => {
     const api = `api${index}`;
     statements.push(`void ${api};`);
+    if ([".", "./object/timing"].includes(key)) {
+      statements.push(
+        "{",
+        `const gate = ${api}.createActionGate(100, () => 0);`,
+        "const allowed: boolean = gate(); void allowed; gate(true);",
+        "// @ts-expect-error 间隔必须显式传入",
+        `${api}.createActionGate();`,
+        "// @ts-expect-error 时钟必须返回数字",
+        `${api}.createActionGate(100, () => '0');`,
+        "// @ts-expect-error 禁用标志必须为布尔值",
+        "gate('false');",
+        "}",
+      );
+    }
+    if ([".", "./color/rgb"].includes(key)) {
+      statements.push(
+        "{",
+        `const color: string = ${api}.mixRgbColor('#000000', '#ffffff', 0.5); void color;`,
+        "// @ts-expect-error 比例不接受字符串",
+        `${api}.mixRgbColor('#000000', '#ffffff', '0.5');`,
+        "}",
+      );
+    }
+    if ([".", "./object/tree"].includes(key)) {
+      statements.push(
+        "{",
+        "interface Branch { readonly id: number; readonly children?: readonly Branch[] | null; }",
+        "const nodes: readonly Branch[] = [{ children: [{ id: 2 }], id: 1 }];",
+        `const path = ${api}.findTreePath(nodes, node => node.id === 2, node => node.children);`,
+        "const ids: number[] = path.map(node => node.id); void ids;",
+        "// @ts-expect-error 泛型结果不能退化为 any",
+        "const invalid: string = path[0].id; void invalid;",
+        "// @ts-expect-error 子节点访问器必须返回相同节点类型",
+        `${api}.findTreePath<Branch>(nodes, node => node.id === 2, () => ['invalid']);`,
+        "}",
+      );
+    }
     if (key === ".") {
       statements.push(
         `const copy = ${api}.deepClone({ value: 1 });`,

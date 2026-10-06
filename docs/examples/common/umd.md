@@ -34,7 +34,8 @@ AxutilsCommon
 | UMD API 组 | 对应 ESM/CJS 入口 | ESM/CJS 所需 peer | UMD 产物 |
 | --- | --- | --- | --- |
 | 检查方法：`isNumber`、`isEmail`、`isBrowser` 等 | `@axutils/common`、`@axutils/common/check/type`、`@axutils/common/check/reg`、`@axutils/common/check/platform` | 无 | `AxutilsCommon` 已内置，无第三方依赖 |
-| 无依赖对象工具：`deepClone`、`StorageUtils`、`debounce`、`throttle`、`objectToQuery`、`queryToObject` | `@axutils/common`、`@axutils/common/object/object`、`@axutils/common/object/storage`、`@axutils/common/object/timing`、`@axutils/common/object/url` | 无 | `AxutilsCommon` 已内置，无第三方依赖 |
+| 无依赖对象工具：`deepClone`、`StorageUtils`、`createActionGate`、`debounce`、`throttle`、`findTreePath`、`objectToQuery`、`queryToObject` | `@axutils/common`、`@axutils/common/object/object`、`@axutils/common/object/storage`、`@axutils/common/object/timing`、`@axutils/common/object/tree`、`@axutils/common/object/url` | 无 | `AxutilsCommon` 已内置，无第三方依赖 |
+| RGB 颜色混合：`mixRgbColor` | `@axutils/common`、`@axutils/common/color/rgb` | 无 | `AxutilsCommon` 已内置，无第三方依赖 |
 | JSON 工具：`jsonStringify`、`jsonParse`、`jsonStringifySafe`、`jsonParseSafe` | `@axutils/common/object/json` | `safe-stable-stringify` | `safe-stable-stringify` 已打包进 UMD |
 | 通用 MD5：`Md5` | `@axutils/common/crypto/md5` | `spark-md5` | `spark-md5` 已打包进 UMD |
 | 通用字节转换：`decodeHex`、`bytesToHex` 等 | `@axutils/common/crypto/convert` | 无 | 已随通用加密 API 内置 |
@@ -58,6 +59,7 @@ console.log(AxutilsCommon.objectToQuery({ page: 1 }));
 
 - [类型、格式与运行时检查](https://github.com/crx-96/axutils/blob/main/docs/examples/common/check.md)
 - [对象、JSON、缓存、定时与 URL 工具](https://github.com/crx-96/axutils/blob/main/docs/examples/common/object.md)
+- [RGB 颜色混合](https://github.com/crx-96/axutils/blob/main/docs/examples/common/color.md)
 - [摘要与编码转换](https://github.com/crx-96/axutils/blob/main/docs/examples/common/crypto.md)
 - [Axios Promise HTTP](https://github.com/crx-96/axutils/blob/main/docs/examples/common/axios.md)
 - [RxJS HTTP](https://github.com/crx-96/axutils/blob/main/docs/examples/common/rxjs.md)

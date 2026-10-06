@@ -7,8 +7,10 @@
     "SECONDS_PER_HOUR",
     "SECONDS_PER_MINUTE",
     "StorageUtils",
+    "createActionGate",
     "debounce",
     "deepClone",
+    "findTreePath",
     "isArray",
     "isArrowFunction",
     "isAsyncArrowFunction",
@@ -35,6 +37,7 @@
     "isServer",
     "isString",
     "isWebWorker",
+    "mixRgbColor",
     "objectToQuery",
     "queryToObject",
     "throttle"
@@ -65,6 +68,7 @@
     "isPlainObject",
     "isString"
   ],
+  "./color/rgb": ["mixRgbColor"],
   "./crypto/convert": [
     "binaryStringToBytes",
     "bytesToBase64",
@@ -117,7 +121,8 @@
   ],
   "./object/object": ["deepClone"],
   "./object/storage": ["StorageUtils"],
-  "./object/timing": ["debounce", "throttle"],
+  "./object/timing": ["createActionGate", "debounce", "throttle"],
+  "./object/tree": ["findTreePath"],
   "./object/url": ["objectToQuery", "queryToObject"],
   "./rxjs/http": ["HttpRequestError", "RxHttpClient"]
 }

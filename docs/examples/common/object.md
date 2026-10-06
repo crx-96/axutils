@@ -1,12 +1,13 @@
 # `@axutils/common` 对象工具
 
-本文档对应 `packages/common/src/object`，包含对象复制、JSON、缓存、计时器和 query 工具。公共导入路径如下：
+本文档对应 `packages/common/src/object`，包含对象复制、JSON、缓存、计时与间隔控制、树路径和 query 工具。公共导入路径如下：
 
-- `@axutils/common`：`deepClone`、`StorageUtils`、`debounce`、`throttle`、`objectToQuery`、`queryToObject`。
+- `@axutils/common`：`deepClone`、`StorageUtils`、`createActionGate`、`debounce`、`throttle`、`findTreePath`、`objectToQuery`、`queryToObject`。
 - `@axutils/common/object/object`：`deepClone`。
 - `@axutils/common/object/json`：JSON 方法和 `JsonCircularReferenceError`。
 - `@axutils/common/object/storage`：通用 `StorageUtils`。
-- `@axutils/common/object/timing`：`debounce`、`throttle`。
+- `@axutils/common/object/timing`：`createActionGate`、`debounce`、`throttle`。
+- `@axutils/common/object/tree`：`findTreePath`。
 - `@axutils/common/object/url`：query 方法。
 
 基础对象工具不需要额外运行时依赖：
@@ -31,17 +32,20 @@ pnpm add safe-stable-stringify
 
 | `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
 | --- | --- | --- | --- |
-| `@axutils/common` (`.`) | `deepClone`、`StorageUtils`、`debounce`、`throttle`、`objectToQuery`、`queryToObject` | `StorageType`、`StorageKeyHandler`、`StorageOptions`、`DebouncedFunction`、`ThrottledFunction` | 无 |
+| `@axutils/common` (`.`) | `deepClone`、`StorageUtils`、`createActionGate`、`debounce`、`throttle`、`findTreePath`、`objectToQuery`、`queryToObject` | `StorageType`、`StorageKeyHandler`、`StorageOptions`、`DebouncedFunction`、`ThrottledFunction` | 无 |
 | `@axutils/common/object/object` | `deepClone` | 无 | 无 |
 | `@axutils/common/object/json` | `jsonStringify`、`jsonParse`、`jsonStringifySafe`、`jsonParseSafe`、`JsonCircularReferenceError` | `JsonStringifyOptions`、`JsonParseOptions` | `safe-stable-stringify` |
 | `@axutils/common/object/storage` | `StorageUtils` | `StorageType`、`StorageKeyHandler`、`StorageOptions` | 无 |
-| `@axutils/common/object/timing` | `debounce`、`throttle` | `DebouncedFunction`、`ThrottledFunction` | 无 |
+| `@axutils/common/object/timing` | `createActionGate`、`debounce`、`throttle` | `DebouncedFunction`、`ThrottledFunction` | 无 |
+| `@axutils/common/object/tree` | `findTreePath` | 无 | 无 |
 | `@axutils/common/object/url` | `objectToQuery`、`queryToObject` | `QueryScalar`、`QueryValue`、`QueryRecord`、`SortQueryKeysOption`、`ObjectToQueryOptions`、`QueryObject` | 无 |
 
 ESM 的合法导入方式如下；表中没有列出的目录入口（例如 `@axutils/common/object`）没有被 `package.json#exports` 声明：
 
 ```ts
 import {
+  createActionGate,
+  findTreePath,
   deepClone,
   StorageUtils,
   debounce,
@@ -59,9 +63,11 @@ import {
 } from "@axutils/common/object/json";
 import { StorageUtils as StorageUtilsFromObject } from "@axutils/common/object/storage";
 import {
+  createActionGate as createActionGateFromTiming,
   debounce as debounceFromTiming,
   throttle as throttleFromTiming,
 } from "@axutils/common/object/timing";
+import { findTreePath as findTreePathFromTree } from "@axutils/common/object/tree";
 import {
   objectToQuery as objectToQueryFromUrl,
   queryToObject as queryToObjectFromUrl,
@@ -72,6 +78,8 @@ import {
 
 ```js
 const {
+  createActionGate,
+  findTreePath,
   deepClone,
   StorageUtils,
   debounce,
@@ -89,9 +97,11 @@ const {
 } = require("@axutils/common/object/json");
 const { StorageUtils: StorageUtilsFromObject } = require("@axutils/common/object/storage");
 const {
+  createActionGate: createActionGateFromTiming,
   debounce: debounceFromTiming,
   throttle: throttleFromTiming,
 } = require("@axutils/common/object/timing");
+const { findTreePath: findTreePathFromTree } = require("@axutils/common/object/tree");
 const {
   objectToQuery: objectToQueryFromUrl,
   queryToObject: queryToObjectFromUrl,
@@ -165,7 +175,32 @@ const cyclicCopy = deepClone(cyclic);
 console.log(cyclicCopy.self === cyclicCopy); // true
 ```
 
-## 防抖与节流：`object/timing`
+## 间隔控制、防抖与节流：`object/timing`
+
+### `createActionGate(interval, now?)`
+
+创建独立的同步守卫，返回 `(disabled?: boolean) => boolean`。`interval` 必须显式传入，单位为毫秒，接受非负有限数字和小数；`0` 允许同一时刻连续放行，且没有定时器的 32 位延迟上限。创建时非数字、`NaN` 或无穷抛 `TypeError`，负数抛 `RangeError`。
+
+首次未禁用的尝试返回 `true`；距上次成功不足 `interval` 时返回 `false`，恰好达到间隔即可再次放行。`disabled` 默认为 `false`，传 `true` 时直接拒绝，不读取时钟；非布尔值同步抛 `TypeError`。被拒绝的尝试都不更新上次成功时间。守卫只判断是否放行，调用方根据结果执行操作，不会保存回调、创建定时器或安排 trailing 补执行；现有 `throttle` 仍然保留 leading + trailing 行为。
+
+`now` 是可选的 `() => number` 毫秒时钟，默认在 `performance.now` 可调用时使用它；`performance` 缺失、为 `null`，或没有可调用的 `now` 时使用 `Date.now()`。非函数时钟在创建时抛 `TypeError`，非有限时钟结果在调用时抛 `TypeError`，时钟自身的异常原样传播，均不改变成功时间。时钟应保持单调；时间倒退时仍以原成功时间计算，直到间隔重新满足。各实例的状态独立。
+
+```ts
+import { createActionGate } from "@axutils/common/object/timing";
+
+let time = 0;
+const canAct = createActionGate(500, () => time);
+console.log(canAct()); // true
+time = 499;
+console.log(canAct()); // false，不延长间隔
+time = 500;
+console.log(canAct(true)); // false，禁用不更新时间
+console.log(canAct()); // true
+
+// 应用实际调用时可省略时钟；守卫应创建一次，由同一组操作入口复用。
+const canSubmit = createActionGate(500);
+if (canSubmit(false)) console.log("执行本次操作");
+```
 
 ### `debounce(fn, wait)`
 
@@ -219,6 +254,45 @@ refresh(); // 重新作为一个周期的 leading 调用
 ```
 
 `DebouncedFunction<T>` 和 `ThrottledFunction<T>` 是公开类型导出，只描述包装函数参数、`this`、返回值和 `cancel()`；它们不对应额外的运行时对象。
+
+## 树节点路径：`object/tree`
+
+### `findTreePath<T>(nodes, matches, getChildren): T[]`
+
+从只读或可变根数组 `nodes` 开始，按数组原顺序先检查节点再深入子树，返回从根到第一个满足 `matches(node)` 的节点路径，包含目标节点。匹配后立即返回，不访问其子节点或后续分支；不是按最短路径查找。`getChildren(node)` 返回同类型的只读或可变子数组，`null`、`undefined` 或空数组表示叶节点。
+
+结果是新数组，其中节点保持原引用；不会修改、排序或复制输入节点。空树或未找到返回 `[]`。使用显式栈遍历深树，辅助空间随树深度增长；输入应为有限无环树，回调不得在遍历期间修改输入。库不检测环，不规定节点类型、目标键或匹配规则。
+
+根集合非数组、回调非函数，以及实际访问到的子集合既非数组也非 `null`/`undefined` 时，同步抛 `TypeError`；回调自身异常原样传播。
+
+```ts
+import { findTreePath } from "@axutils/common/object/tree";
+
+/** 示例树节点；子节点可以缺失，表示叶节点。 */
+interface Item {
+  /** 调用方自己的标识。 */
+  readonly id: string;
+  /** 原顺序的子节点；缺失时为叶节点。 */
+  readonly children?: readonly Item[];
+}
+
+const nodes: readonly Item[] = [
+  { id: "root", children: [{ id: "branch", children: [{ id: "leaf" }] }] },
+];
+const path = findTreePath(nodes, (node) => node.id === "leaf", (node) => node.children);
+console.log(path.map((node) => node.id)); // ["root", "branch", "leaf"]
+console.log(findTreePath(nodes, (node) => node.id === "missing", (node) => node.children)); // []
+
+// 只查找可展开节点：此规则由调用方的匹配条件表达。
+const expanded = findTreePath(
+  nodes,
+  (node) => node.id === "branch" && !!node.children?.length,
+  (node) => node.children,
+);
+console.log(expanded.map((node) => node.id)); // ["root", "branch"]
+```
+
+应用替换时，将 `findNavigationTrail` 中原有的路由判断原样放入 `matches`，访问器使用 `node => node.children`，最后以 `.map(node => node.key)` 转为键路径。`findExpandedNavigationTrail` 则使用 `node.key === key && !!node.children?.length` 作为条件，再映射键。路由规范化、菜单结构和展开规则继续归应用所有。`useActionGate()` 可替换为 `createActionGate(500)`，原来显式传入间隔的调用保持该值；每个使用方保留原守卫的生命周期。
 
 ## URL query：`object/url`
 

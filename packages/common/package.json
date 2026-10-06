@@ -1,6 +1,6 @@
 {
   "name": "@axutils/common",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "axutils 的公共工具子包",
   "homepage": "https://github.com/crx-96/axutils/tree/main/packages/common#readme",
   "bugs": {
@@ -103,6 +103,26 @@
       "require": {
         "types": "./dist/object/url.d.cts",
         "default": "./dist/object/url.cjs"
+      }
+    },
+    "./object/tree": {
+      "import": {
+        "types": "./dist/object/tree.d.ts",
+        "default": "./dist/object/tree.js"
+      },
+      "require": {
+        "types": "./dist/object/tree.d.cts",
+        "default": "./dist/object/tree.cjs"
+      }
+    },
+    "./color/rgb": {
+      "import": {
+        "types": "./dist/color/rgb.d.ts",
+        "default": "./dist/color/rgb.js"
+      },
+      "require": {
+        "types": "./dist/color/rgb.d.cts",
+        "default": "./dist/color/rgb.cjs"
       }
     },
     "./crypto/md5": {

@@ -20,7 +20,8 @@ pnpm add @axutils/common
 
 - [UMD 浏览器接入](https://github.com/crx-96/axutils/blob/main/docs/examples/common/umd.md)
 - [类型、格式与运行时检查](https://github.com/crx-96/axutils/blob/main/docs/examples/common/check.md)
-- [对象、JSON、缓存、定时与 URL 工具](https://github.com/crx-96/axutils/blob/main/docs/examples/common/object.md)
+- [对象、JSON、缓存、间隔控制、树路径与 URL 工具](https://github.com/crx-96/axutils/blob/main/docs/examples/common/object.md)
+- [RGB 颜色混合](https://github.com/crx-96/axutils/blob/main/docs/examples/common/color.md)
 - [浏览器与通用环境的摘要、编码转换](https://github.com/crx-96/axutils/blob/main/docs/examples/common/crypto.md)
 - [Axios Promise HTTP](https://github.com/crx-96/axutils/blob/main/docs/examples/common/axios.md)
 - [RxJS HTTP](https://github.com/crx-96/axutils/blob/main/docs/examples/common/rxjs.md)

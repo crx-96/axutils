@@ -23,6 +23,7 @@ export {
   isPlainObject,
   isString,
 } from "./check/type.js";
+export { mixRgbColor } from "./color/rgb.js";
 export {
   MS_PER_DAY,
   MS_PER_HOUR,
@@ -35,5 +36,6 @@ export { deepClone } from "./object/object.js";
 export type { StorageKeyHandler, StorageOptions, StorageType } from "./object/storage.js";
 export { StorageUtils } from "./object/storage.js";
 export type { DebouncedFunction, ThrottledFunction } from "./object/timing.js";
-export { debounce, throttle } from "./object/timing.js";
+export { createActionGate, debounce, throttle } from "./object/timing.js";
+export { findTreePath } from "./object/tree.js";
 export { objectToQuery, queryToObject } from "./object/url.js";

@@ -4,6 +4,7 @@
   "./check/platform": [],
   "./check/reg": [],
   "./check/type": [],
+  "./color/rgb": [],
   "./crypto/convert": [],
   "./crypto/md5": ["spark-md5"],
   "./date": ["date-fns", "date-fns-tz"],
@@ -15,6 +16,7 @@
   "./object/object": [],
   "./object/storage": [],
   "./object/timing": [],
+  "./object/tree": [],
   "./object/url": [],
   "./rxjs/http": ["axios", "rxjs", "safe-stable-stringify", "spark-md5"]
 }

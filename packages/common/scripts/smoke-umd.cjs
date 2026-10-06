@@ -12,6 +12,30 @@ const bundlePath = join(__dirname, "..", "dist", "index.umd.cjs");
 vm.runInContext(readFileSync(bundlePath, "utf8"), browserContext, { filename: bundlePath });
 const BrowserAxutilsCommon = browserContext.AxutilsCommon;
 
+// 两种 UMD 加载分支都消费新增无依赖 API；浏览器沙箱没有 performance，覆盖时钟回退。
+for (const api of [AxutilsCommon, BrowserAxutilsCommon]) {
+  let time = 0;
+  const gate = api.createActionGate(100, () => time);
+  if (!gate() || gate()) throw new Error("UMD 同步间隔守卫首次或间隔内行为错误。");
+  time = 100;
+  if (gate(true) || !gate() || !api.createActionGate(0)()) {
+    throw new Error("UMD 同步间隔守卫禁用或边界行为错误。");
+  }
+  if (api.mixRgbColor("#000000", "#ffffff", 0.5) !== "#808080") {
+    throw new Error("UMD RGB 混合结果错误。");
+  }
+  const leaf = { id: 2 };
+  const root = { children: [leaf], id: 1 };
+  const path = api.findTreePath(
+    [root],
+    (node) => node.id === 2,
+    (node) => node.children,
+  );
+  if (path.length !== 2 || path[0] !== root || path[1] !== leaf) {
+    throw new Error("UMD 树路径结果或引用错误。");
+  }
+}
+
 if (typeof BrowserAxutilsCommon?.isNumber !== "function") {
   throw new Error("UMD 浏览器全局分支缺失 AxutilsCommon.isNumber 导出。");
 }

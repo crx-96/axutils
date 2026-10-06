@@ -1,5 +1,13 @@
 # @axutils/common
 
+## 2.1.0
+
+### Minor Changes
+
+- 新增无第三方运行时依赖的同步操作间隔守卫 `createActionGate`、RGB 颜色混合 `mixRgbColor` 和树节点路径查找 `findTreePath`，支持根入口、对应功能子路径及 UMD 消费。
+
+  完善默认时钟能力检测，在 `performance.now` 不可用时回退到 `Date.now()`；补充参数与边界测试、ESM/CJS 类型及打包消费验证、真实浏览器用例和使用文档。
+
 ## 2.0.2
 
 ### Patch Changes

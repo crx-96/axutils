@@ -43,6 +43,47 @@ for (const format of ["esm", "umd"] as const) {
       });
     });
 
+    test("同步间隔守卫、RGB 混合及树路径可直接消费", async ({ page }) => {
+      const result = await page.evaluate(() => {
+        const { createActionGate, findTreePath, mixRgbColor } = window.AxutilsTest;
+        let time = 0;
+        const gate = createActionGate(100, () => time);
+        const first = gate();
+        const denied = gate();
+        time = 100;
+        const disabled = gate(true);
+        const boundary = gate();
+        const leaf = { id: 2 };
+        const root = { children: [leaf], id: 1 };
+        const nodes: readonly { children?: readonly { id: number }[]; id: number }[] = [root];
+        const path = findTreePath(
+          nodes,
+          (node) => node.id === 2,
+          (node) => node.children,
+        );
+        return {
+          boundary,
+          color: mixRgbColor("#000000", "#ffffff", 0.5),
+          defaultClock: createActionGate(0)(),
+          denied,
+          disabled,
+          first,
+          path: path.map((node) => node.id),
+          sameReferences: path[0] === root && path[1] === leaf,
+        };
+      });
+      expect(result).toEqual({
+        boundary: true,
+        color: "#808080",
+        defaultClock: true,
+        denied: false,
+        disabled: false,
+        first: true,
+        path: [1, 2],
+        sameReferences: true,
+      });
+    });
+
     test("真实 localStorage/sessionStorage 持久化与标签页隔离", async ({ page, context }) => {
       await page.evaluate(() => {
         const { StorageUtils } = window.AxutilsTest;
