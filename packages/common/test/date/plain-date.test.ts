@@ -63,4 +63,23 @@ describe("date/PlainDate", () => {
     expect(() => PlainDate.from(null as never)).toThrow(RangeError);
     expect(() => PlainDate.from(undefined as never)).toThrow(RangeError);
   });
+
+  it("公元 0 年按闰年计算月长和年月加减，空时长保留原日期", () => {
+    expect(PlainDate.daysInMonth("0000-02-01")).toBe(29);
+    expect(PlainDate.toString(PlainDate.add("0000-02-29", {}))).toBe("0000-02-29");
+    expect(PlainDate.toString(PlainDate.add("0000-01-31", { months: 1 }))).toBe("0000-02-29");
+    expect(PlainDate.toString(PlainDate.subtract("0001-02-28", { years: 1 }))).toBe("0000-02-28");
+    expect(PlainDate.toString(PlainDate.subtract("0000-03-31", { months: 1 }))).toBe("0000-02-29");
+    expect(PlainDate.daysInMonth(new Date(8_640_000_000_000_000))).toBe(30);
+  });
+
+  it("拒绝无效目标时区，不产生 NaN 时间点", () => {
+    expect(() => PlainDate.toZonedDateTime("2024-01-01", "Mars/Phobos")).toThrow(RangeError);
+    expect(() => PlainDate.toZonedDateTime("2024-01-01", "")).toThrow(RangeError);
+  });
+
+  it("负年与扩展年份序列化为带符号的 ISO 日期", () => {
+    expect(PlainDate.toString({ day: 1, month: 1, year: -1 })).toBe("-000001-01-01");
+    expect(PlainDate.toString({ day: 1, month: 1, year: 10000 })).toBe("+010000-01-01");
+  });
 });

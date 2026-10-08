@@ -26,4 +26,10 @@ describe("date/PlainTime", () => {
       seconds: 1,
     });
   });
+
+  it("拒绝小数时间字段，仍忽略日期字段", () => {
+    expect(() => PlainTime.add("12:00:00", { milliseconds: 0.5 })).toThrow(RangeError);
+    expect(() => PlainTime.subtract("12:00:00", { hours: 0.5 })).toThrow(RangeError);
+    expect(PlainTime.toString(PlainTime.add("12:00:00", { days: 0.5, hours: 1 }))).toBe("13:00:00");
+  });
 });

@@ -187,6 +187,23 @@ describe("object/storage", () => {
     expect(store.getItem("foreign-key")).toBe("plain business data");
   });
 
+  it.each([
+    '{"marker":"@axutils/common/storage","prefix":"","expiresAt":0}',
+    '{"marker":"@axutils/common/storage","prefix":"","expiresAt":1e999,"data":"value"}',
+    '{"marker":"@axutils/common/storage","prefix":"","expiresAt":-1e999,"data":"value"}',
+    '{"marker":"@axutils/common/storage","prefix":"","expiresAt":1.5,"data":"value"}',
+    '{"marker":"@axutils/common/storage","prefix":"","expiresAt":9007199254740992,"data":"value"}',
+  ])("损坏记录视为未命中且不删除原值：%s", (record) => {
+    const store = new TestStorage();
+    store.setItem("damaged", record);
+    vi.stubGlobal("localStorage", store);
+    const storage = new StorageUtils();
+
+    expect(storage.get("damaged")).toBeNull();
+    expect(storage.getSafe("damaged")).toBeNull();
+    expect(store.getItem("damaged")).toBe(record);
+  });
+
   it("get 不读取或删除转换后 key 相同的其他 prefix 记录", () => {
     const store = new TestStorage();
     vi.stubGlobal("localStorage", store);

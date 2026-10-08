@@ -107,7 +107,7 @@ console.log(md5 instanceof Md5); // true
 
 ### `md5.update(input, encoding?)`
 
-追加字符串、`number[]` 或 `Uint8Array`，返回实例自身以支持链式调用。字符串默认 `utf8`，也可传 `"hex"` 或 `"base64"`；摘要生成后调用会抛 `Error`。
+追加字符串、`number[]` 或 `Uint8Array`，返回实例自身以支持链式调用。字符串默认 `utf8`，也可传 `"hex"` 或 `"base64"`；未知字符串编码抛 `TypeError`，摘要生成后调用会抛 `Error`。
 
 ```ts
 import { Md5 } from "@axutils/common/crypto/md5";
@@ -156,7 +156,7 @@ console.log(new Md5().update("hello").toBase64()); // XUFAKrxLKna5cZ2REBfFkg==
 
 ### `normalizeMd5Input(input, encoding?)`
 
-把 MD5 输入统一为新的 `Uint8Array`。字符串按指定编码解码；数组和 `Uint8Array` 会复制为独立的字节数组，因此修改原输入不会影响返回值。
+把 MD5 输入统一为新的 `Uint8Array`。字符串按 `utf8`（默认）、`hex` 或 `base64` 解码，未知编码抛 `TypeError`；数组和 `Uint8Array` 忽略编码选项并复制为独立的字节数组，因此修改原输入不会影响返回值。
 
 ```ts
 import { normalizeMd5Input } from "@axutils/common/crypto/convert";
@@ -189,7 +189,7 @@ console.log(binaryStringToBytes("\x00\xff")); // [0, 255]
 
 ### `decodeHex(value)`
 
-解码连续标准十六进制字符串为 `Uint8Array`。不支持 `0x` 前缀、分隔符或奇数长度；非法输入抛 `TypeError`。
+解码连续标准十六进制字符串为 `Uint8Array`，空字符串返回空字节数组，可与 `bytesToHex` 往返。不支持 `0x` 前缀、分隔符或奇数长度；非法输入抛 `TypeError`。
 
 ```ts
 import { decodeHex } from "@axutils/common/crypto/convert";

@@ -15,6 +15,37 @@ afterEach(() => {
 });
 
 describe("axios/http 取消生命周期", () => {
+  it("配置工厂同步取消当前调用时，已处理的请求失败不会产生额外未处理拒绝", async () => {
+    const controller = new AbortController();
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const client = PromiseHttpClient.create(
+        () => {
+          controller.abort();
+          return {};
+        },
+        { axiosInstance: instance },
+      );
+
+      const error = await expectRequestError(
+        client.get("/cancel-in-factory", {
+          signal: controller.signal,
+        }),
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(error.error.kind).toBe("cancel");
+      expect(context.calls).toBe(0);
+      expect(unhandled).not.toHaveBeenCalled();
+      await client.get("/after-cancel");
+      expect(context.calls).toBe(1);
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
   it("AbortSignal 可以取消调用前、retry delay 和 Axios 请求中的 Promise", async () => {
     vi.useFakeTimers();
     const before = createAxiosInstance((config) => response(config));

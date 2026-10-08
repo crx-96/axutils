@@ -19,7 +19,9 @@ import type {
   ZonedDateTimeValue,
 } from "./types.js";
 
+/** 将 Date、完整日期时间文本或字段对象规范为 UTC 对齐 Date，并保留毫秒字段。 */
 function fromInput(input: PlainDateTimeInput): Date {
+  // Date 按 UTC 字段复制；文本偏移仍按原契约归一化为 UTC，不经过宿主本地解析。
   if (input instanceof Date) {
     const fields = dateToUtcFields(input);
     return createUtcDate(
@@ -38,6 +40,7 @@ function fromInput(input: PlainDateTimeInput): Date {
   if (input === null || typeof input !== "object") {
     invalid("PlainDateTime 输入无效");
   }
+  // 字段对象缺省秒和毫秒为 0，其余日历及时间边界由构造器统一校验。
   return createUtcDate(
     input.year,
     input.month,
@@ -49,6 +52,7 @@ function fromInput(input: PlainDateTimeInput): Date {
   );
 }
 
+/** 先执行年月日历夹紧，再增加日及以下的整数毫秒，最后校验结果可表示。 */
 function addDateTime(date: Date, duration: DurationFields): Date {
   let result = addYearMonths(date, duration.years ?? 0, duration.months ?? 0);
   result = new Date(
@@ -73,6 +77,7 @@ function addDateTime(date: Date, duration: DurationFields): Date {
   );
 }
 
+/** 规范化两端后比较 UTC 对齐毫秒值。 */
 function compareDateTimes(first: PlainDateTimeInput, second: PlainDateTimeInput): -1 | 0 | 1 {
   const difference = fromInput(first).getTime() - fromInput(second).getTime();
   return difference < 0 ? -1 : difference > 0 ? 1 : 0;
@@ -169,12 +174,10 @@ export const PlainDateTime = {
     );
   },
 
-  /** 输出 ISO 日期时间，毫秒非零时追加三位毫秒。 */
+  /** 输出 ISO 日期时间，保留带符号扩展年份；毫秒非零时追加三位毫秒，不输出时区后缀。 */
   toString(dateTime: PlainDateTimeInput): string {
-    const fields = dateToUtcFields(fromInput(dateTime));
-    const base = `${String(fields.year).padStart(4, "0")}-${String(fields.month).padStart(2, "0")}-${String(fields.day).padStart(2, "0")}T${String(fields.hour).padStart(2, "0")}:${String(fields.minute).padStart(2, "0")}:${String(fields.second).padStart(2, "0")}`;
-    return fields.millisecond === 0
-      ? base
-      : `${base}.${String(fields.millisecond).padStart(3, "0")}`;
+    // 使用 Date 的年份序列化，只去掉纯值不需要的 Z 和可省略的零毫秒。
+    const iso = fromInput(dateTime).toISOString();
+    return iso.endsWith(".000Z") ? iso.slice(0, -5) : iso.slice(0, -1);
   },
 };

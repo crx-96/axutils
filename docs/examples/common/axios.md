@@ -142,9 +142,9 @@ await client.get("/user", {
 - `transformHeaders` 收到当前请求 headers 的副本；未传 headers 时为空对象，`common` 和当前方法分组会展开。可以返回普通 headers 对象或 `AxiosHeaders`。
 - 回调在每次调用请求方法后、配置解析完成后执行，网络重试沿用本次处理结果。构造客户端不会执行回调。
 - 合并顺序为 Axios 实例默认 headers → 回调结果 → 请求级 headers。同名 header 不区分大小写，请求级 `false`、`null` 等屏蔽值也保留。
-- 回调输入不包含 Axios 实例默认 headers；未提供的字段仍由 Axios 默认配置补齐。要屏蔽默认字段，可在返回值中将它设为 `false` 或 `null`。
+- 回调输入不包含 Axios 实例默认 headers；未提供的字段由配置解析时的 Axios 默认头补齐。默认头、回调结果和请求级字段合并后固定到本次请求，内部重试不重新读取其值，也不加入期间新增的默认字段。要屏蔽默认字段，可在返回值中将它设为 `false` 或 `null`。
 - 回调中的对象和多值数组修改不会影响调用方原 headers。请求级字段始终最后覆盖，所以回调不能删除或改写调用方明确指定的同名字段。
-- 最终 headers 在自动去重前参与身份计算；不同 token 的请求会独立执行。使用显式 `dedupeKey` 且请求参数不可稳定序列化时，仍由调用方负责 key 的业务身份。
+- 最终 headers（包括 Axios 实例默认头）在自动去重前参与身份计算；不同 token 的请求会独立执行。使用显式 `dedupeKey` 且请求参数不可稳定序列化时，仍由调用方负责 key 的业务身份。
 
 ### 返回类型推导
 
@@ -248,7 +248,7 @@ console.log(error.code, error.success, error.data); // 503 false null
 
 ## `client.request<T, D>(config)`
 
-发起通用请求，默认返回 `Promise<PromiseHttpSuccess<T>>`；配置 `transformResponse` 后返回其处理结果。调用时立即开始配置解析和请求。`config` 必须包含字符串 `url` 和 `method`；`data` 是请求体，`params`/`headers` 交给 Axios。输入只做浅复制，不会修改调用方的对象。
+发起通用请求，默认返回 `Promise<PromiseHttpSuccess<T>>`；配置 `transformResponse` 后返回其处理结果。调用时立即开始配置解析和请求。`config` 必须包含字符串 `url` 和 `method`；`data` 是请求体，`params` 交给 Axios。请求头会合并实例默认值、转换回调和请求级覆盖，生成参与去重且在内部重试间复用的快照；显式将 `common` 或当前方法分组设为 `null`、`false` 或 `undefined` 会屏蔽该默认组。其余输入做浅复制，请求头及多值数组独立复制，不会修改调用方的对象。
 
 可覆盖的 `PromiseHttpRequestOptions`：`params`、`headers`、`timeout`、`retryCount`、`retryDelay`、`retryable`、`retryNonIdempotent`、`dedupe`、`dedupeKey`、`signal`。
 

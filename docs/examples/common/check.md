@@ -223,6 +223,8 @@ console.log(isFunction(class Example {})); // true
 
 判断普通非箭头、非 `async`、非生成器、非 `class` 的函数形态，也支持对象方法简写。该方法依赖 `Function.prototype.toString` 做轻量源码扫描，bound 函数和 native 函数无法识别，会返回 `false`。
 
+`class()`、`classic()` 等普通方法名不会被当作 class 声明；函数体里出现 `"[native code]"` 字符串也不会被当作 native 函数。
+
 ```ts
 import { isNormalFunction } from "@axutils/common/check/type";
 
@@ -237,6 +239,8 @@ console.log(isNormalFunction(arrow)); // false
 ### `isArrowFunction(value)`
 
 判断箭头函数，包含 `async` 箭头函数。它同样依赖源码扫描，bound/native 函数返回 `false`；函数体中的 `=>` 不会被当作声明头部。
+
+单参数可以命名为 `async`，也支持 Unicode 标识符（包含补充平面码点及源码中的 Unicode 转义）。识别仍是轻量函数头部扫描，不提供完整 JavaScript 语法分析，也不能恢复编译或 bind 后丢失的原始语法。
 
 ```ts
 import { isArrowFunction } from "@axutils/common/check/type";

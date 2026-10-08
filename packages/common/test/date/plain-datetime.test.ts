@@ -45,4 +45,32 @@ describe("date/PlainDateTime", () => {
     expect(PlainDateTime.isBefore(b, a)).toBe(true);
     expect(PlainDateTime.isAfter(a, b)).toBe(true);
   });
+
+  it("公元 0 年的年月运算保留闰日和时间字段", () => {
+    expect(PlainDateTime.add("0000-02-29T10:30:00.123", {}).toISOString()).toBe(
+      "0000-02-29T10:30:00.123Z",
+    );
+    expect(PlainDateTime.add("0000-01-31T10:30:00.123", { months: 1 }).toISOString()).toBe(
+      "0000-02-29T10:30:00.123Z",
+    );
+    expect(PlainDateTime.subtract("0000-03-31T10:30:00.123", { months: 1 }).toISOString()).toBe(
+      "0000-02-29T10:30:00.123Z",
+    );
+  });
+
+  it("拒绝无效时区和小数时长", () => {
+    const value = "2024-01-01T00:00:00";
+    expect(() => PlainDateTime.toZonedDateTime(value, "Mars/Phobos")).toThrow(RangeError);
+    expect(() => PlainDateTime.add(value, { hours: 0.5 })).toThrow(RangeError);
+    expect(() => PlainDateTime.subtract(value, { milliseconds: 0.5 })).toThrow(RangeError);
+  });
+
+  it("负年与扩展年份输出合法 ISO，按需保留毫秒", () => {
+    expect(PlainDateTime.toString({ day: 1, hour: 1, minute: 2, month: 1, year: -1 })).toBe(
+      "-000001-01-01T01:02:00",
+    );
+    expect(
+      PlainDateTime.toString({ day: 1, hour: 1, millisecond: 3, minute: 2, month: 1, year: 10000 }),
+    ).toBe("+010000-01-01T01:02:00.003");
+  });
 });

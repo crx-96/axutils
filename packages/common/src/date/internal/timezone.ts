@@ -1,19 +1,23 @@
 import type { Locale } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import type { Timezone } from "../format.js";
-import { invalid } from "./validation.js";
+import { invalid, toEpochMilliseconds } from "./validation.js";
 
+/** 模块加载时捕获的宿主默认 IANA 时区；宿主未提供时使用 UTC。 */
 export const LOCAL_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
+/** 仅在调用方传入 locale 时构造格式化选项，保留 peer 的默认 locale 行为。 */
 export function formatOptions(locale?: Locale): { locale?: Locale } {
   return locale === undefined ? {} : { locale };
 }
 
+/** 使用运行时 IANA 支持检查时区，失败统一转换为日期 API 的 RangeError。 */
 export function assertTimezone(timezone: string): string {
   if (typeof timezone !== "string" || timezone.length === 0) {
     invalid("timezone 必须是非空字符串");
   }
   try {
+    // Intl 检查可用时区，避免 peer 以 Invalid Date 隐式表示无效名称。
     new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format();
   } catch {
     invalid(`无效的 IANA 时区：${timezone}`);
@@ -21,6 +25,7 @@ export function assertTimezone(timezone: string): string {
   return timezone;
 }
 
+/** 解析可选时区；缺省时沿用模块加载时的宿主默认值。 */
 export function getTimezone(timezone?: string): Timezone {
   return assertTimezone(timezone ?? LOCAL_TIMEZONE) as Timezone;
 }
@@ -35,6 +40,7 @@ export function getTimezone(timezone?: string): Timezone {
  */
 export function dateToZonedDate(date: Date, timezone: string): Date {
   const seconds = date.toISOString().slice(0, -5);
-  const zoned = fromZonedTime(seconds, timezone);
-  return new Date(zoned.getTime() + date.getUTCMilliseconds());
+  const zoned = fromZonedTime(seconds, assertTimezone(timezone));
+  // peer 的无效结果或加回毫秒后的越界不能泄漏成 NaN epoch。
+  return new Date(toEpochMilliseconds(zoned.getTime() + date.getUTCMilliseconds()));
 }

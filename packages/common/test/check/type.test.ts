@@ -222,6 +222,57 @@ describe("type", () => {
     expect(isAsyncArrowFunction("async () => {}")).toBe(false);
   });
 
+  it.each([
+    "async => async",
+    "async /* parameter */ => async",
+    "值 => 值",
+    "𐐀 => 𐐀",
+    "_值 => _值",
+    "$值 => $值",
+    "a\u200cb => a\u200cb",
+    "a\u200db => a\u200db",
+    "\\u503c => \\u503c",
+    "\\u{10400} => \\u{10400}",
+    "\\u{00000061} => \\u{00000061}",
+    "async值 => async值",
+    "async𐐀 => async𐐀",
+  ])("识别原始单参数箭头源码 %s", (source) => {
+    const candidate: unknown = new Function(`return (${source});`)();
+
+    expect(isArrowFunction(candidate)).toBe(true);
+    expect(isNormalFunction(candidate)).toBe(false);
+    expect(isAsyncFunction(candidate)).toBe(false);
+    expect(isAsyncArrowFunction(candidate)).toBe(false);
+  });
+
+  it.each([
+    "async 值 => 值",
+    "async 𐐀 => 𐐀",
+    "async \\u503c => \\u503c",
+  ])("识别原始 Unicode 异步箭头源码 %s", (source) => {
+    const candidate: unknown = new Function(`return (${source});`)();
+
+    expect(isArrowFunction(candidate)).toBe(true);
+    expect(isAsyncArrowFunction(candidate)).toBe(true);
+    expect(isNormalFunction(candidate)).toBe(false);
+  });
+
+  it("普通方法名和函数体文本不会被当成 class 或 native 占位源码", () => {
+    const methods = {
+      class() {},
+      classic() {},
+      class值() {},
+    };
+    const withNativeText = function nativeText() {
+      return "[native code]";
+    };
+
+    for (const candidate of [...Object.values(methods), withNativeText]) {
+      expect(isNormalFunction(candidate)).toBe(true);
+      expect(isArrowFunction(candidate)).toBe(false);
+    }
+  });
+
   it("判断有效日期", () => {
     expect(isDate(new Date())).toBe(true);
     expect(isDate(new Date("2024-01-01"))).toBe(true);

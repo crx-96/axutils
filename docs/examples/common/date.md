@@ -95,14 +95,18 @@ console.log(AxutilsCommon.DATE_FORMAT.DATE, AxutilsCommon.TIMEZONE.UTC);
 - `ZonedDateTimeInput`：ISO 字符串或 `Date`。
 - `DurationFields`：可选的 `years`、`months`、`days`、`hours`、`minutes`、`seconds`、`milliseconds` 字段，所有字段必须是有限整数。
 - `DateFormatOptions`：`locale?: Locale` 和 `timezone?: Timezone`。
-- `ZonedDateTimeValue`：`{ epochMs: number; timezone: Timezone }`。
+- `ZonedDateTimeValue`：`{ epochMs: number; timezone: Timezone }`，epochMs 为 Date 可表示范围内的整数毫秒（包含 ±8,640,000,000,000,000 边界）。
 - `Timezone`：允许 `TIMEZONE` 中的常用值，也允许自定义 IANA 时区字符串；不要使用 `CST`、`IST` 等歧义缩写。
 
 纯日期、纯时间和无时区日期时间从 `Date` 提取 UTC 字段，以避免调用方机器时区影响结果。字符串日期时间支持 `T`、`t` 或空格作为分隔符。所有无效输入统一抛 `RangeError`。
 
+文本解析的年份为四位数字；负年份与超过 9999 的年份请通过字段对象或 `Date` 输入。`PlainDate.toString` 和 `PlainDateTime.toString` 对这些年份输出带符号的六位 ISO 扩展年份，例如 `-000001` 和 `+010000`。
+
 ### 时区转换边界
 
 将无偏移日期时间解释为指定时区时，先保留完整日历字段，再交给 date-fns-tz；不先构造宿主本地 Date。因此宿主处于夏令时缺失时段或跳过某一天时，不会在转换前改写原始字段。秒以下精度以整数毫秒保留。
+
+`PlainDate.toZonedDateTime` 和 `PlainDateTime.toZonedDateTime` 会校验目标 IANA 时区；名称无效或转换结果超出 Date 范围时抛 `RangeError`，不会返回包含 NaN 的时间点。纯日期的月长与年月运算采用前推公历，公元 0 年为闰年；这与下述目标时区转换的 peer 限制分别处理。
 
 目标时区本身的重复时间、缺失时间及公元 0 年/BCE 仍遵从 date-fns-tz 的现有行为，并非完整 Temporal 消歧实现。例如目标纽约的 2024-11-03T01:30 仍可能受其宿主相关的消歧选择影响；需要指定唯一时间点时传入明确 UTC 偏移或 epoch。
 
@@ -274,7 +278,7 @@ console.log(Instant.epochMilliseconds(1_700_000_000_000));
 
 ### `Instant.add(instant, duration)`
 
-按实际毫秒数相加，可使用 days/hours/minutes/seconds/milliseconds；非零 years/months 抛 `RangeError`。
+按实际毫秒数相加，可使用整数 days/hours/minutes/seconds/milliseconds；非零 years/months、小数字段或结果超出 Date 可表示范围时抛 `RangeError`。`subtract` 使用相同边界。
 
 ```ts
 import { Instant } from "@axutils/common/date";
@@ -804,7 +808,7 @@ console.log(
   PlainDateTime.toString(
     PlainDateTime.subtract("2024-02-01T00:30:00", { hours: 1 }),
   ),
-); // 2024-02-01T00:00:00
+); // 2024-01-31T23:30:00
 ```
 
 ### `PlainDateTime.since(dateTime, other)`
@@ -987,7 +991,7 @@ console.log(newYork.epochMs === shanghai.epochMs); // true
 
 ### `ZonedDateTime.add(zdt, duration)`
 
-按实际经过的天、时、分、秒、毫秒相加；非零 years/months 抛 `RangeError`，需要日历年月运算时先转为 `PlainDateTime`。
+按实际经过的整数天、时、分、秒、毫秒相加；非零 years/months、小数字段或运算结果超出 Date 可表示范围时抛 `RangeError`，需要日历年月运算时先转为 `PlainDateTime`。`subtract` 使用相同边界。
 
 ```ts
 import { PlainDateTime, ZonedDateTime } from "@axutils/common/date";

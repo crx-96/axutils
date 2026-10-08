@@ -5,6 +5,7 @@ import {
   createUtcDate,
   dateToUtcFields,
   dateToZonedDate,
+  daysInGregorianMonth,
   formatOptions,
   invalid,
   parseDateString,
@@ -16,7 +17,9 @@ import type {
   ZonedDateTimeValue,
 } from "./types.js";
 
+/** 将支持的日期输入规范为当天 UTC 午夜；Date 输入只读取 UTC 字段并生成副本。 */
 function fromInput(input: PlainDateInput): Date {
+  // Date 和文本分别走字段提取与严格解析，不借助宿主本地日期解析。
   if (input instanceof Date) {
     const fields = dateToUtcFields(input);
     return createUtcDate(fields.year, fields.month, fields.day);
@@ -28,9 +31,11 @@ function fromInput(input: PlainDateInput): Date {
   if (input === null || typeof input !== "object") {
     invalid("PlainDate 输入无效");
   }
+  // 字段对象的整数、实际月长及可表示范围统一由日历构造器检查。
   return createUtcDate(input.year, input.month, input.day);
 }
 
+/** 读取日期运算所需字段，缺省为 0；时间字段由此调用方有意忽略。 */
 function durationValue(duration: DurationFields, name: keyof DurationFields): number {
   const value = duration[name] ?? 0;
   if (!Number.isInteger(value) || !Number.isFinite(value)) {
@@ -39,6 +44,7 @@ function durationValue(duration: DurationFields, name: keyof DurationFields): nu
   return value;
 }
 
+/** 先进行年月夹紧，再增加整日；最终构造再次检查 Date 范围。 */
 function addDate(date: Date, duration: DurationFields): Date {
   const years = durationValue(duration, "years");
   const months = durationValue(duration, "months");
@@ -48,6 +54,7 @@ function addDate(date: Date, duration: DurationFields): Date {
   return createUtcDate(result.getUTCFullYear(), result.getUTCMonth() + 1, result.getUTCDate());
 }
 
+/** 比较两个日期的 UTC 午夜毫秒值，忽略输入 Date 的时间部分。 */
 function compareDates(first: Date, second: Date): -1 | 0 | 1 {
   const difference = fromInput(first).getTime() - fromInput(second).getTime();
   return difference < 0 ? -1 : difference > 0 ? 1 : 0;
@@ -151,13 +158,20 @@ export const PlainDate = {
   /** 获取月份天数。 */
   daysInMonth(date: PlainDateInput): number {
     const value = fromInput(date);
-    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + 1, 0)).getUTCDate();
+    return daysInGregorianMonth(value.getUTCFullYear(), value.getUTCMonth() + 1);
   },
 
   /** 获取所在周的第一天，默认以周一为每周起点。 */
-  startOfWeek(date: PlainDateInput, options: { weekStartsOn?: number } = {}): Date {
+  startOfWeek(
+    date: PlainDateInput,
+    options: {
+      /** 一周起点采用 Date 编码：0 为周日，1 为周一；默认 1。 */
+      weekStartsOn?: number;
+    } = {},
+  ): Date {
     const value = fromInput(date);
     const weekStartsOn = options.weekStartsOn ?? 1;
+    // 周起点使用 Date 的星期编码（周日为 0），先校验再回退到本周起点。
     if (!Number.isInteger(weekStartsOn) || weekStartsOn < 0 || weekStartsOn > 6) {
       invalid("weekStartsOn 必须是 0 到 6 的整数");
     }
@@ -168,14 +182,21 @@ export const PlainDate = {
   },
 
   /** 获取所在周的最后一天。 */
-  endOfWeek(date: PlainDateInput, options: { weekStartsOn?: number } = {}): Date {
+  endOfWeek(
+    date: PlainDateInput,
+    options: {
+      /** 一周起点采用 Date 编码：0 为周日，1 为周一；默认 1。 */
+      weekStartsOn?: number;
+    } = {},
+  ): Date {
     return new Date(PlainDate.startOfWeek(date, options).getTime() + 6 * 86_400_000);
   },
 
-  /** 输出 YYYY-MM-DD。 */
+  /** 输出 ISO 日期；0–9999 年使用四位年份，其余年份使用带符号的六位扩展年份。 */
   toString(date: PlainDateInput): string {
-    const fields = dateToUtcFields(fromInput(date));
-    return `${String(fields.year).padStart(4, "0")}-${String(fields.month).padStart(2, "0")}-${String(fields.day).padStart(2, "0")}`;
+    // Date 的 ISO 序列化已处理负年和扩展年份，只截取日期部分，避免负号被错误补零。
+    const iso = fromInput(date).toISOString();
+    return iso.slice(0, iso.indexOf("T"));
   },
 
   /**

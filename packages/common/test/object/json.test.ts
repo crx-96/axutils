@@ -152,6 +152,112 @@ describe("object/json", () => {
     expect(() => jsonStringify(arrayCycle, { sortKeys: true })).toThrow(JsonCircularReferenceError);
   });
 
+  it("配置化序列化按排序后的访问顺序读取 getter，每次实际出现只读取一次", () => {
+    const reads: string[] = [];
+    const source = {};
+    Object.defineProperty(source, "z", {
+      enumerable: true,
+      get: () => {
+        reads.push("z");
+        return reads.length;
+      },
+    });
+    Object.defineProperty(source, "a", {
+      enumerable: true,
+      get: () => {
+        reads.push("a");
+        return reads.length;
+      },
+    });
+
+    expect(jsonStringify(source, { sortKeys: true })).toBe('{"a":1,"z":2}');
+    expect(reads).toEqual(["a", "z"]);
+  });
+
+  it("toJSON 可以消除原对象的循环引用，且转换只执行一次", () => {
+    let calls = 0;
+    const source: Record<string, unknown> = {
+      toJSON() {
+        calls += 1;
+        return { ok: true };
+      },
+    };
+    source.self = source;
+
+    expect(jsonStringify(source, { onCycle: "throw" })).toBe('{"ok":true}');
+    expect(calls).toBe(1);
+  });
+
+  it("toJSON 新生成的循环对象抛出公开循环错误", () => {
+    let calls = 0;
+    const source = {
+      toJSON() {
+        calls += 1;
+        const cycle: Record<string, unknown> = {};
+        cycle.self = cycle;
+        return cycle;
+      },
+    };
+
+    expect(() => jsonStringify(source, { sortKeys: true })).toThrow(JsonCircularReferenceError);
+    expect(calls).toBe(1);
+  });
+
+  it("嵌套 toJSON 返回正在序列化的父容器时识别为循环", () => {
+    const source = {
+      child: {
+        toJSON() {
+          return source;
+        },
+      },
+    };
+
+    expect(() => jsonStringify(source, { filterNullish: true })).toThrow(
+      JsonCircularReferenceError,
+    );
+  });
+
+  it("离开深层分支后可以在兄弟分支中复用同一个 toJSON 结果", () => {
+    const shared = { value: 1 };
+    const source = {
+      first: {
+        nested: {
+          toJSON: () => shared,
+        },
+      },
+      second: [{ toJSON: () => shared }, shared],
+      third: shared,
+    };
+
+    expect(jsonStringify(source, { sortKeys: true })).toBe(JSON.stringify(source));
+  });
+
+  it("数组不参与 JSON 的额外属性不会触发循环错误", () => {
+    const source = [1];
+    Object.defineProperty(source, "metadata", { enumerable: true, value: source });
+
+    expect(jsonStringify(source, { sortKeys: true })).toBe("[1]");
+  });
+
+  it("用户 getter 异常原样传播，不按错误消息误认循环", () => {
+    const failure = new TypeError("Converting circular structure to JSON");
+    const source = {
+      get value() {
+        throw failure;
+      },
+    };
+
+    expect(() => jsonStringify(source, { sortKeys: true })).toThrow(failure);
+    expect(jsonStringifySafe(source, { sortKeys: true })).toBeNull();
+  });
+
+  it("skip 产生的循环 null 占位不被 nullish 字段过滤删除", () => {
+    const source: Record<string, unknown> = { empty: null };
+    source.self = source;
+
+    expect(jsonStringify(source, { filterNullish: true, onCycle: "skip" })).toBe('{"self":null}');
+  });
+
   it("基本反序列化", () => {
     expect(jsonParse('{"a":1,"b":"x"}')).toEqual({ a: 1, b: "x" });
     expect(jsonParse("[1,2,3]")).toEqual([1, 2, 3]);

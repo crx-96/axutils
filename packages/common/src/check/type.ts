@@ -1,3 +1,9 @@
+import {
+  isArrowSource,
+  isClassSource,
+  isNativeFunctionSource,
+} from "./internal/function-source.js";
+
 /**
  * 判断传入值是否为可直接参与数值运算的 number。
  *
@@ -107,6 +113,10 @@ export const isFunction = (value: unknown): value is (...args: never[]) => unkno
  *   因为 bound function 的原型链会继承 `AsyncFunction.prototype` 上的 `Symbol.toStringTag`。
  * - 这是防御性类型守卫而非安全边界：若调用方主动伪造原型链，结果仍不应作为安全决策依据。
  */
+export const isAsyncFunction = (value: unknown): value is (...args: never[]) => Promise<unknown> =>
+  typeof value === "function" && hasAsyncFunctionTag(value);
+
+/** 检查 async 函数的原型标签，同时拒绝函数自身伪造的标签。 */
 const hasAsyncFunctionTag = (value: object): boolean => {
   // 保留 bound async 函数从 AsyncFunction.prototype 继承标签的兼容性，
   // 但不信任函数自身可被任意伪造的 Symbol.toStringTag。
@@ -114,324 +124,8 @@ const hasAsyncFunctionTag = (value: object): boolean => {
     return false;
   }
 
+  // 标签读取保留原生行为；原型链被主动伪造的函数不属于安全识别承诺。
   return Object.prototype.toString.call(value) === "[object AsyncFunction]";
-};
-
-export const isAsyncFunction = (value: unknown): value is (...args: never[]) => Promise<unknown> =>
-  typeof value === "function" && hasAsyncFunctionTag(value);
-
-/**
- * 跳过源码中的空白和注释，返回下一个有效字符下标。
- *
- * 这里只处理箭头函数声明头部常见的空白、块注释和行注释，
- * 供后续的轻量源码扫描使用，不尝试实现完整的 JavaScript 词法分析。
- */
-const skipWhitespaceAndComments = (source: string, start: number): number => {
-  let index = start;
-
-  while (index < source.length) {
-    const char = source[index];
-    const next = source[index + 1];
-
-    if (char === undefined) {
-      return index;
-    }
-
-    if (/\s/.test(char)) {
-      index += 1;
-      continue;
-    }
-
-    if (char === "/" && next === "*") {
-      index += 2;
-
-      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) {
-        index += 1;
-      }
-
-      if (index >= source.length) {
-        return index;
-      }
-
-      index += 2;
-      continue;
-    }
-
-    if (char === "/" && next === "/") {
-      index += 2;
-
-      while (index < source.length && source[index] !== "\n") {
-        index += 1;
-      }
-
-      continue;
-    }
-
-    break;
-  }
-
-  return index;
-};
-
-/**
- * 判断字符是否可作为 JavaScript 标识符的起始字符。
- *
- * 这里刻意只覆盖 ASCII 范围的常见标识符，足以支持本仓库当前测试与文档中的函数写法。
- * 如果后续要支持 Unicode 标识符，需要升级为更完整的词法判断。
- */
-const isIdentifierStart = (char: string | undefined): boolean =>
-  char !== undefined && /[$A-Z_a-z]/.test(char);
-
-/**
- * 判断字符是否可作为 JavaScript 标识符的后续字符。
- */
-const isIdentifierPart = (char: string | undefined): boolean =>
-  char !== undefined && /[$0-9A-Z_a-z]/.test(char);
-
-/**
- * 跳过单引号或双引号字符串，转义字符不会结束当前字面量。
- */
-const skipQuotedLiteral = (source: string, start: number): number => {
-  const quote = source[start];
-  let index = start + 1;
-
-  while (index < source.length) {
-    if (source[index] === "\\") {
-      index += 2;
-      continue;
-    }
-    if (source[index] === quote) {
-      return index + 1;
-    }
-    index += 1;
-  }
-
-  return index;
-};
-
-/**
- * 判断当前位置的斜杠是否可作为正则字面量起始符。
- * 覆盖参数默认值中常见的标点与关键字表达式起始位置，避免把除法误当作正则。
- */
-const isRegularExpressionStart = (source: string, start: number): boolean => {
-  let index = start - 1;
-
-  while (index >= 0 && /\s/.test(source[index] ?? "")) {
-    index -= 1;
-  }
-
-  const previous = source[index];
-  if (previous === undefined || "=([{,:;!&|?~*%^<>".includes(previous)) {
-    return true;
-  }
-
-  let wordStart = index;
-  while (wordStart >= 0 && isIdentifierPart(source[wordStart])) {
-    wordStart -= 1;
-  }
-
-  const previousWord = source.slice(wordStart + 1, index + 1);
-  return (
-    previousWord === "return" ||
-    previousWord === "throw" ||
-    previousWord === "case" ||
-    previousWord === "delete" ||
-    previousWord === "void" ||
-    previousWord === "typeof" ||
-    previousWord === "yield" ||
-    previousWord === "await"
-  );
-};
-
-/**
- * 跳过正则字面量及其字符类；调用方先保证当前位置确实是正则起始斜杠。
- */
-const skipRegularExpressionLiteral = (source: string, start: number): number => {
-  let index = start + 1;
-  let inCharacterClass = false;
-
-  while (index < source.length) {
-    const char = source[index];
-
-    if (char === "\\") {
-      index += 2;
-      continue;
-    }
-    if (char === "[") {
-      inCharacterClass = true;
-    } else if (char === "]") {
-      inCharacterClass = false;
-    } else if (char === "/" && !inCharacterClass) {
-      index += 1;
-      while (/[A-Za-z]/.test(source[index] ?? "")) {
-        index += 1;
-      }
-      return index;
-    }
-    index += 1;
-  }
-
-  return index;
-};
-
-/**
- * 跳过模板插值表达式。这里只需识别其边界，插值内部的圆括号不应影响外层参数列表深度。
- */
-const skipTemplateExpression = (source: string, start: number): number => {
-  let index = start;
-  let depth = 1;
-
-  while (index < source.length) {
-    const char = source[index];
-    const next = source[index + 1];
-
-    if (char === "'" || char === '"') {
-      index = skipQuotedLiteral(source, index);
-      continue;
-    }
-    if (char === "`") {
-      index = skipTemplateLiteral(source, index);
-      continue;
-    }
-    if (char === "/" && (next === "*" || next === "/")) {
-      index = skipWhitespaceAndComments(source, index);
-      continue;
-    }
-    if (char === "/" && isRegularExpressionStart(source, index)) {
-      index = skipRegularExpressionLiteral(source, index);
-      continue;
-    }
-    if (char === "{") {
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return index + 1;
-      }
-    }
-    index += 1;
-  }
-
-  return index;
-};
-
-/**
- * 跳过模板字面量及其插值；模板中的字符不会参与外层参数括号计数。
- */
-const skipTemplateLiteral = (source: string, start: number): number => {
-  let index = start + 1;
-
-  while (index < source.length) {
-    const char = source[index];
-
-    if (char === "\\") {
-      index += 2;
-      continue;
-    }
-    if (char === "`") {
-      return index + 1;
-    }
-    if (char === "$" && source[index + 1] === "{") {
-      index = skipTemplateExpression(source, index + 2);
-      continue;
-    }
-    index += 1;
-  }
-
-  return index;
-};
-
-/**
- * 检测函数源码文本是否以箭头函数语法开头。
- *
- * 这是判断箭头函数的核心依据：箭头函数在 JavaScript 运行时没有专属的
- * `Symbol.toStringTag`（`Object.prototype.toString` 对箭头函数和普通 `function` 声明
- * 都返回 `"[object Function]"`），也没有独有属性或内部槽，
- * 唯一能区分箭头函数与普通 `function` 声明的手段是读取其源码文本、检测箭头语法 `=>`。
- *
- * 这里不再依赖单个大正则，而是按以下步骤做轻量源码扫描：
- * 1. 跳过源码开头的空白和注释
- * 2. 识别可选的 `async` 前缀
- * 3. 读取单标识符参数，或扫描括号包裹的参数列表
- * 4. 只把参数列表之后出现的 `=>` 视为箭头语法
- *
- * 这种方式能覆盖注释、默认值、解构参数和参数中的嵌套圆括号，
- * 但仍不是完整语法解析器。bound/native 函数等源码特征缺失的场景依旧无法识别。
- *
- * 这是文件内部辅助函数，不对外导出。
- */
-const isArrowSource = (source: string): boolean => {
-  let index = skipWhitespaceAndComments(source, 0);
-
-  if (source.startsWith("async", index)) {
-    const afterAsync = index + 5;
-
-    if (!isIdentifierPart(source[afterAsync])) {
-      index = skipWhitespaceAndComments(source, afterAsync);
-    }
-  }
-
-  if (source[index] === "(") {
-    let depth = 0;
-
-    while (index < source.length) {
-      const char = source[index];
-      const next = source[index + 1];
-
-      if (char === "/" && (next === "*" || next === "/")) {
-        index = skipWhitespaceAndComments(source, index);
-        continue;
-      }
-
-      if (char === "'" || char === '"') {
-        index = skipQuotedLiteral(source, index);
-        continue;
-      }
-
-      if (char === "`") {
-        index = skipTemplateLiteral(source, index);
-        continue;
-      }
-
-      if (char === "/" && isRegularExpressionStart(source, index)) {
-        index = skipRegularExpressionLiteral(source, index);
-        continue;
-      }
-
-      if (char === "(") {
-        depth += 1;
-      } else if (char === ")") {
-        depth -= 1;
-
-        if (depth === 0) {
-          index += 1;
-          break;
-        }
-      }
-
-      index += 1;
-    }
-
-    if (depth !== 0) {
-      return false;
-    }
-
-    index = skipWhitespaceAndComments(source, index);
-    return source[index] === "=" && source[index + 1] === ">";
-  }
-
-  if (!isIdentifierStart(source[index])) {
-    return false;
-  }
-
-  index += 1;
-
-  while (isIdentifierPart(source[index])) {
-    index += 1;
-  }
-
-  index = skipWhitespaceAndComments(source, index);
-  return source[index] === "=" && source[index + 1] === ">";
 };
 
 /**
@@ -452,20 +146,21 @@ const isArrowSource = (source: string): boolean => {
  *   源码特征丢失，会返回 `false`（无法识别 bound 后的普通函数）。
  * - native 函数（如 `parseInt`）同样返回 `[native code]`，返回 `false`。
  * - 对象方法简写 `{ f() {} }` 和 `class` 方法 `class A { f() {} }` 的源码形如 `f() {}`，
- *   既不以 `class` 开头也不含 `=>`，会被视为普通函数返回 `true`。
+ *   不属于 class 声明或箭头语法，会被视为普通函数返回 `true`，方法名也可以是 class。
  *   如需严格区分 `function` 关键字定义与方法简写，本方法不支持。
  *
  * 类型层面：收窄后的类型为 `(...args: never[]) => unknown`，调用约束同 {@link isFunction}。
  */
 export const isNormalFunction = (value: unknown): value is (...args: never[]) => unknown => {
+  // 先收窄可读取函数源码的值；普通非函数不会触发任何标签或源码访问。
   if (typeof value !== "function") return false;
   // 排除 async 函数和生成器函数（含异步生成器）
   if (Object.prototype.toString.call(value) !== "[object Function]") return false;
   const source = Function.prototype.toString.call(value);
   // bound 包装或 native 函数的源码为 "function ... { [native code] }"，无源码特征，无法识别
-  if (source.includes("[native code]")) return false;
+  if (isNativeFunctionSource(source)) return false;
   // 排除 class 声明（源码以 class 关键字开头）和箭头函数（源码匹配箭头语法头部）
-  return !source.trimStart().startsWith("class") && !isArrowSource(source);
+  return !isClassSource(source) && !isArrowSource(source);
 };
 
 /**
@@ -485,6 +180,7 @@ export const isNormalFunction = (value: unknown): value is (...args: never[]) =>
  *   任何方案都无法恢复。
  * - 这里只扫描源码头部，不尝试解析完整函数体，因此目标是轻量分类而非完整语法识别。
  * - 本方法只匹配参数列表之后的 `=>`，函数体内的 `=>`（如字符串字面量）不会干扰判断。
+ * - 单参数标识符支持 Unicode 码点及转义；同步箭头的参数名 async 不会被当作异步前缀。
  *
  * 本方法对 `async` 箭头函数（`async () => {}`）也返回 `true`，
  * 即与 {@link isAsyncFunction} 存在交集；
@@ -552,9 +248,11 @@ export const isDate = (value: unknown): value is Date =>
  * 因此对跨 realm 创建的对象，此判断可能不符合预期。
  */
 export const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  // 排除 null 和非对象值后再访问原型，保持原型探测的运行时前提。
   if (typeof value !== "object" || value === null) {
     return false;
   }
+  // 只接受当前 Realm 的 Object.prototype 或 null，不递归寻找其他 Realm 的原型。
   const proto = Object.getPrototypeOf(value);
   return proto === null || proto === Object.prototype;
 };

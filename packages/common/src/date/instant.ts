@@ -6,24 +6,17 @@ import {
   invalid,
   millisecondsToDuration,
   parseDateTimeString,
+  toEpochMilliseconds,
 } from "./internal.js";
 import type { DurationFields, ZonedDateTimeValue } from "./types.js";
 
+/** Instant 文本必须带明确偏移，避免绝对时间点依赖宿主默认时区。 */
 const INSTANT_PATTERN =
   /^\d{4}[-/]\d{2}[-/]\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/u;
 
-function toEpoch(value: number): number {
-  if (!Number.isFinite(value) || !Number.isInteger(value)) {
-    invalid("epoch 毫秒必须是有限整数");
-  }
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) {
-    invalid("epoch 毫秒超出 Date 可表示范围");
-  }
-  return value;
-}
-
+/** 严格解析有偏移文本并返回整数 epoch 毫秒，保留 ISO 字段与偏移的边界校验。 */
 function normalize(value: string): number {
+  // 先要求偏移，再由共用解析器验证实际日期和偏移范围。
   if (!INSTANT_PATTERN.test(value)) {
     invalid("Instant 字符串必须包含 Z 或 UTC 偏移");
   }
@@ -47,42 +40,43 @@ export const Instant = {
 
   /** 从整数 Unix epoch 毫秒创建绝对时间点。 */
   fromEpochMilliseconds(milliseconds: number): number {
-    return toEpoch(milliseconds);
+    return toEpochMilliseconds(milliseconds);
   },
 
   /** 将绝对时间点关联到指定 IANA 时区。 */
   toZonedDateTime(epochMs: number, timezone: Timezone): ZonedDateTimeValue {
-    return { epochMs: toEpoch(epochMs), timezone: getTimezone(timezone) };
+    return { epochMs: toEpochMilliseconds(epochMs), timezone: getTimezone(timezone) };
   },
 
   /** 读取绝对时间点的 epoch 毫秒。 */
   epochMilliseconds(instant: number): number {
-    return toEpoch(instant);
+    return toEpochMilliseconds(instant);
   },
 
-  /** 按实际毫秒数相加；years/months 无法从绝对时间点推导，传入非零值会抛错。 */
+  /** 按整数毫秒相加；非零 years/months 或结果超出 Date 范围时抛 RangeError。 */
   add(instant: number, duration: DurationFields): number {
-    return toEpoch(instant) + durationMilliseconds(duration);
+    // 输入有效并不保证结果有效；输出遵守与 fromEpochMilliseconds 相同的范围。
+    return toEpochMilliseconds(toEpochMilliseconds(instant) + durationMilliseconds(duration));
   },
 
   /** 按实际毫秒数相减。 */
   subtract(instant: number, duration: DurationFields): number {
-    return toEpoch(instant) - durationMilliseconds(duration);
+    return toEpochMilliseconds(toEpochMilliseconds(instant) - durationMilliseconds(duration));
   },
 
   /** 返回 instant - other 的分解结果。 */
   since(instant: number, other: number): DurationFields {
-    return millisecondsToDuration(toEpoch(instant) - toEpoch(other));
+    return millisecondsToDuration(toEpochMilliseconds(instant) - toEpochMilliseconds(other));
   },
 
   /** 判断两个绝对时间点是否相等。 */
   equals(first: number, second: number): boolean {
-    return toEpoch(first) === toEpoch(second);
+    return toEpochMilliseconds(first) === toEpochMilliseconds(second);
   },
 
   /** 比较两个绝对时间点，返回 -1、0 或 1。 */
   compare(first: number, second: number): -1 | 0 | 1 {
-    const difference = toEpoch(first) - toEpoch(second);
+    const difference = toEpochMilliseconds(first) - toEpochMilliseconds(second);
     return difference < 0 ? -1 : difference > 0 ? 1 : 0;
   },
 };

@@ -347,6 +347,8 @@ console.log(queryToObject("?q=a%20b")); // { q: "a b" }
 
 无配置时根值为 `undefined`、函数或 Symbol 会像原生一样返回 `undefined`；FastPath 遇到 `BigInt` 会抛原生 `TypeError`。配置化路径底层 `safe-stable-stringify` 会把 `BigInt` 序列化为数字。如需稳定排序或循环引用策略，务必显式传对应配置。
 
+配置化路径在实际序列化的同一次遍历中检测循环，不预先读取属性。可枚举业务字段的 getter 按最终排序顺序读取；共享对象在每次实际出现时正常序列化。循环判断使用 `toJSON` 转换后的值：被转换消除的自引用不会误报，转换新生成的循环或返回父容器则抛 `JsonCircularReferenceError`。用户 getter、`toJSON` 或比较器的异常原样传播。`onCycle: "skip"` 生成的 `null` 占位仍会保留，即使同时开启 `filterNullish`。
+
 ```ts
 import { jsonStringify } from "@axutils/common/object/json";
 
@@ -474,6 +476,8 @@ storage.set("token", { value: "abc" }, 60);
 ### `storage.get<T>(key)`
 
 读取并 JSON 解码缓存；不存在、命名空间不匹配、过期或数据损坏时返回 `null`。过期条目会在读取时删除。类型参数只用于调用方声明预期结构，不会运行时校验。
+
+损坏记录包括缺失业务值或元数据字段，以及到期时间不是安全整数毫秒时间戳的情况。损坏记录视为未命中，不返回 `undefined`，也不在读取时删除原始字符串。
 
 ```ts
 import { StorageUtils } from "@axutils/common/object/storage";

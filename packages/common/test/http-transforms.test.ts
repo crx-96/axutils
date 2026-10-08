@@ -32,6 +32,41 @@ function resultOf(request: Promise<unknown> | Observable<unknown>): Promise<unkn
 describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind) => {
   const ErrorClass = kind === "Promise" ? PromiseHttpRequestError : HttpRequestError;
 
+  it.each([
+    ["common", null],
+    ["common", false],
+    ["common", undefined],
+    ["get", null],
+    ["get", false],
+    ["get", undefined],
+  ] as const)("%s 分组显式为 %s 时不恢复该组默认鉴权头", async (group, value) => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    instance.defaults.headers.common["X-Common"] = "common";
+    instance.defaults.headers.get["X-Method"] = "method";
+    instance.defaults.headers[group].Authorization = "must-not-send";
+    instance.defaults.headers["X-Direct"] = "direct";
+    const headers = new AxiosHeaders();
+    headers.set(group, value);
+
+    const plain = createClient(kind, { axiosInstance: instance });
+    const transformed = createClient(kind, {
+      axiosInstance: instance,
+      transformHeaders: () => ({ "X-Callback": "callback" }),
+    });
+    await resultOf(plain.get("/suppressed", { headers }));
+    await resultOf(transformed.get("/suppressed-with-transform", { headers }));
+
+    for (const config of context.configs) {
+      expect(config.headers.get("Authorization")).toBeUndefined();
+      expect(config.headers.get("X-Common")).toBe(group === "common" ? undefined : "common");
+      expect(config.headers.get("X-Method")).toBe(group === "get" ? undefined : "method");
+      expect(config.headers.get("X-Direct")).toBe("direct");
+    }
+    expect(context.configs[1]?.headers.get("X-Callback")).toBe("callback");
+    expect(instance.defaults.headers[group].Authorization).toBe("must-not-send");
+    expect(headers.get(group)).toBe(value);
+  });
+
   it.each([false, true])("构造或 create 同时接入两个处理函数（create=%s）", async (useFactory) => {
     const { context, instance } = createAxiosInstance((config) =>
       response(config, { name: "Ada" }, 201),

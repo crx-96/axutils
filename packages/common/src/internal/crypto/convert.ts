@@ -1,11 +1,16 @@
-const HEX_PATTERN = /^[\da-f]+$/iu;
+/** 标准十六进制字符；空字符串表示零字节，长度约束由解码入口检查。 */
+const HEX_PATTERN = /^[\da-f]*$/iu;
 
+/** RFC 4648 标准 Base64 字母表，位置即六位编码值。 */
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+/** Base64 字符的反向映射；不接受 URL-safe 字母或未知字符。 */
 const BASE64_LOOKUP = new Map<string, number>(
   [...BASE64_ALPHABET].map((char, index) => [char, index]),
 );
 
+/** 摘要支持的文本或字节输入；数值数组元素必须是 0–255 的整数。 */
 export type Md5Input = string | readonly number[] | Uint8Array;
+/** 字符串解码方式，默认 UTF-8；字节输入忽略此选项。 */
 export type Md5StringEncoding = "utf8" | "hex" | "base64";
 
 /**
@@ -19,6 +24,7 @@ export const normalizeMd5Input = (
   input: Md5Input,
   encoding: Md5StringEncoding = "utf8",
 ): Uint8Array => {
+  // JavaScript 调用者不受联合类型限制；未知编码必须失败，不能静默按 Base64 解码。
   if (typeof input === "string") {
     if (encoding === "utf8") {
       return new TextEncoder().encode(input);
@@ -26,9 +32,13 @@ export const normalizeMd5Input = (
     if (encoding === "hex") {
       return decodeHex(input);
     }
-    return decodeBase64(input);
+    if (encoding === "base64") {
+      return decodeBase64(input);
+    }
+    throw new TypeError("MD5 字符串编码只支持 utf8、hex 或 base64。");
   }
 
+  // 字节输入已经有明确编码，只校验与复制，不解释 encoding。
   return toByteArray(input);
 };
 
@@ -44,13 +54,15 @@ export const toByteArray = (input: readonly number[] | Uint8Array): Uint8Array =
     return new Uint8Array(input);
   }
 
+  // 在同一次迭代中校验并保存，避免 getter 改变数值；for-of 仍拒绝非迭代的错误输入。
+  const bytes: number[] = [];
   for (const byte of input) {
     if (!Number.isInteger(byte) || byte < 0 || byte > 255) {
       throw new TypeError("MD5 update 只接受 0-255 的字节值。");
     }
+    bytes.push(byte);
   }
-
-  return Uint8Array.from(input);
+  return Uint8Array.from(bytes);
 };
 
 /**
@@ -64,9 +76,10 @@ export const binaryStringToBytes = (value: string): number[] =>
 /**
  * 把十六进制字符串解码为字节数组。
  *
- * 只接受连续的标准 hex，不支持分隔符、`0x` 前缀或奇数字符长度。
+ * 只接受连续的标准 hex，不支持分隔符、`0x` 前缀或奇数字符长度；空字符串返回空字节数组。
  */
 export const decodeHex = (value: string): Uint8Array => {
+  // 先验证完整文本，再分配结果，避免接受被 parseInt 部分解析的字符。
   if (value.length % 2 !== 0) {
     throw new TypeError("hex 字符串长度必须为偶数。");
   }
@@ -74,6 +87,7 @@ export const decodeHex = (value: string): Uint8Array => {
     throw new TypeError("hex 字符串包含非法字符。");
   }
 
+  // 每两个 hex 字符对应一个字节，空输入自然得到零长度的独立数组。
   const bytes = new Uint8Array(value.length / 2);
 
   for (let index = 0; index < value.length; index += 2) {
@@ -90,6 +104,7 @@ export const decodeHex = (value: string): Uint8Array => {
  * 以兼容多行或带空格的展示字符串。
  */
 export const decodeBase64 = (value: string): Uint8Array => {
+  // 展示用空白不属于编码数据；清理后按完整四字符分组校验。
   const sanitized = value.replace(/\s+/gu, "");
 
   if (sanitized.length === 0) {
@@ -99,6 +114,7 @@ export const decodeBase64 = (value: string): Uint8Array => {
     throw new TypeError("base64 字符串长度必须是 4 的倍数。");
   }
 
+  /** 按完整分组追加的有效字节，末组 padding 不产生输出字节。 */
   const bytes: number[] = [];
 
   for (let index = 0; index < sanitized.length; index += 4) {
@@ -107,6 +123,7 @@ export const decodeBase64 = (value: string): Uint8Array => {
       throw new TypeError("base64 字符串 padding 只能出现在末个分组。");
     }
 
+    // padding 只能连续位于末组末尾，其他字符必须来自标准字母表。
     const values = [...chars].map((char, charIndex) => {
       if (char === "=") {
         if (
@@ -130,6 +147,7 @@ export const decodeBase64 = (value: string): Uint8Array => {
       return decoded;
     });
 
+    // 缺失位及未使用的低位都必须规范，拒绝多种文本表示同一字节的非标准输入。
     const [first, second, third, fourth] = values;
 
     if (
@@ -147,6 +165,7 @@ export const decodeBase64 = (value: string): Uint8Array => {
       throw new TypeError("base64 字符串包含非规范未使用位。");
     }
 
+    // 四组六位值拼成最多三个字节，依 padding 数量决定输出长度。
     const chunk = (first << 18) | (second << 12) | (third << 6) | fourth;
 
     bytes.push((chunk >> 16) & 0xff);
@@ -171,6 +190,7 @@ export const bytesToHex = (bytes: readonly number[] | Uint8Array): string => {
   const normalizedBytes = toByteArray(bytes);
   let result = "";
 
+  // 每个字节固定输出两位，保留前导零并统一使用小写。
   for (const byte of normalizedBytes) {
     result += byte.toString(16).padStart(2, "0");
   }
@@ -190,6 +210,7 @@ export const bytesToBase64 = (bytes: readonly number[] | Uint8Array): string => 
   let result = "";
   let index = 0;
 
+  // 三字节组成一组二十四位整数，末组不足三字节时补零位并输出 =。
   while (index < normalizedBytes.length) {
     const first = normalizedBytes[index];
     const second = normalizedBytes[index + 1];

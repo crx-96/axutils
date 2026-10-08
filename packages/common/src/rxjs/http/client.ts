@@ -21,7 +21,7 @@ import {
   throwError,
   timer,
 } from "rxjs";
-import { transformRequestHeaders } from "../../internal/http/headers.js";
+import { createAttemptHeaders, resolveRequestHeaders } from "../../internal/http/headers.js";
 import { SAFE_RETRY_METHODS, assertObject } from "../../internal/http/primitives.js";
 import { createAbortLifecycle } from "./abort.js";
 import {
@@ -435,17 +435,16 @@ export class RxHttpClient<
   ): ResolvedRequest<D> & { headers: RawAxiosRequestHeaders } {
     const request = resolveRequest(clientConfig, input);
     try {
-      // 沿用共享规范化与覆盖逻辑；回调仍只看到请求头副本，不包含 Axios 默认头。
-      const requested = transformRequestHeaders(input.headers, request.method, (headers) =>
-        this.transformHeaders === undefined ? headers : this.transformHeaders(headers, context),
-      );
-      // 提前展开实例默认值，使自动去重和所有重试使用同一份最终 Header。
-      const defaults = transformRequestHeaders(
+      // 两客户端共享最终头解析，但上下文和业务回调仍属于当前订阅。
+      const headers = resolveRequestHeaders(
         this.axiosInstance.defaults?.headers,
+        input.headers,
         request.method,
-        (headers) => headers,
+        (inputHeaders) =>
+          this.transformHeaders === undefined
+            ? inputHeaders
+            : this.transformHeaders(inputHeaders, context),
       );
-      const headers = transformRequestHeaders(requested, request.method, () => defaults);
       return { ...request, headers };
     } catch (error) {
       throw toHttpRequestError(error, "config");
@@ -504,16 +503,11 @@ export class RxHttpClient<
         request.retryable && (SAFE_RETRY_METHODS.has(request.method) || request.retryNonIdempotent);
 
       return defer(() => {
-        // 已在 resolveRequest 合并过默认头。用显式 undefined 覆盖当前默认头的所有顶层键，
-        // 阻止 Axios 再展开 common/方法分组（其中的 false 会锁住字段）或补入重试期间新增的头。
-        // 每次只读取默认键名并建立新的请求配置，不修改实例默认值或已解析的请求头。
-        const suppressedDefaults: RawAxiosRequestHeaders = Object.fromEntries(
-          Object.keys(this.axiosInstance.defaults?.headers ?? {}).map((name) => [name, undefined]),
-        );
+        // 每次重新屏蔽默认键名，防止实例配置的后续变化改变已锁定的请求头。
         return from(
           this.axiosInstance.request<T, AxiosResponse<T>, D>({
             ...axiosConfig,
-            headers: { ...suppressedDefaults, ...request.headers },
+            headers: createAttemptHeaders(this.axiosInstance.defaults?.headers, request.headers),
           }),
         );
       }).pipe(

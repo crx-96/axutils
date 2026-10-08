@@ -30,4 +30,45 @@ describe("date/Instant", () => {
       timezone: "Asia/Shanghai",
     });
   });
+
+  it.each([
+    "days",
+    "hours",
+    "minutes",
+    "seconds",
+    "milliseconds",
+  ])("拒绝 %s 的小数字段而不返回小数毫秒或静默截断", (field) => {
+    expect(() => Instant.add(0, { [field]: 0.5 })).toThrow(RangeError);
+    expect(() => Instant.subtract(0, { [field]: 0.5 })).toThrow(RangeError);
+  });
+
+  it("允许时间值边界，拒绝加减后超出 Date 范围的结果", () => {
+    const maximum = 8_640_000_000_000_000;
+    expect(Instant.add(maximum - 1, { milliseconds: 1 })).toBe(maximum);
+    expect(Instant.subtract(-maximum + 1, { milliseconds: 1 })).toBe(-maximum);
+    expect(() => Instant.add(maximum, { milliseconds: 1 })).toThrow(RangeError);
+    expect(() => Instant.subtract(-maximum, { milliseconds: 1 })).toThrow(RangeError);
+    expect(() => Instant.add(0, { days: Number.MAX_VALUE })).toThrow(RangeError);
+  });
+
+  it.each(["add", "subtract"] as const)("%s 的时长 getter 只读取一次", (method) => {
+    let reads = 0;
+    const duration = {
+      get seconds() {
+        reads += 1;
+        return reads === 1 ? 1 : 0.5;
+      },
+    };
+
+    expect(Instant[method](0, duration)).toBe(method === "add" ? 1_000 : -1_000);
+    expect(reads).toBe(1);
+  });
+
+  it.each(["add", "subtract"] as const)("%s 也校验非枚举和继承的时长字段", (method) => {
+    const hidden = Object.defineProperty({}, "seconds", { value: 0.5 });
+    const inherited = Object.create({ hours: 0.5 });
+
+    expect(() => Instant[method](0, hidden)).toThrow(RangeError);
+    expect(() => Instant[method](0, inherited)).toThrow(RangeError);
+  });
 });
