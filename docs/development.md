@@ -97,6 +97,8 @@ Zed 对应使用根目录和 common 的 `.zed/settings.json`，需已安装 Biom
 
 包顶层 `playwright.config.ts` 归属 common/tsconfig.json，复用已有 Node 类型；test-browser/tsconfig.json 负责浏览器测试。编辑器项目归属问题可从现有 tsconfig 与类型配置排查；TypeScript 7 的 native 包与传统 JS tsserver 的 tsdk 接口不同，配置时按实际工具类型选择。
 
+Zed 的 JavaScript、JSX、TypeScript、TSX 使用 [TypeScript Language Server 扩展](https://zed.dev/extensions/tsgo)（扩展 ID 为 `tsgo`，语言服务器名为 `typescript-ls`）。根目录和 common 的项目配置均通过 Node 启动仓库本地 `typescript/bin/tsc --lsp --stdio`，使编辑器与命令行使用同一份 TypeScript；同时禁用 `typescript-language-server` 和 `vtsls`，避免旧服务寻找 `tsserver.js` 后回退到 TypeScript 6。恢复依赖并安装扩展后，执行 `editor: restart language server` 重新加载。
+
 修改配置后，编辑器通常会自动更新；若仍显示旧诊断，执行 `Biome: Restart` 或 `Developer: Reload Window` 重新加载工作区。以本地 `pnpm lint` 和相应 tsconfig 的检查结果核对实际错误。
 
 Zed 若仍保留旧排序诊断，可执行 `editor: restart language server` 后保存文件；从仓库根目录和包目录运行本地 Biome 应得到相同排序结果。若仍有差异，核对 Zed 实际使用的 Biome 版本与配置路径，以及是否存在额外的内联配置覆盖。
