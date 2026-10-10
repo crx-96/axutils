@@ -1,0 +1,2 @@
+# 文本文件统一以 LF 检出，与 Biome 一致，避免 Windows 的 core.autocrlf 引发 CI 格式错误。
+* text=auto eol=lf

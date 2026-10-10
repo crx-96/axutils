@@ -4,27 +4,54 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# 检查只需读取源码；同一分支或 PR 的新提交替换尚未结束的旧检查。
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
+    name: ${{ matrix.name }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          # 保留原有检查名称，兼容已配置的分支保护；两端均验证最低消费运行时。
+          - os: ubuntu-latest
+            node: "24"
+            name: verify (ubuntu-latest)
+          - os: windows-latest
+            node: "24"
+            name: verify (windows-latest)
+          # 在 Linux 补充开发版本下限与当前新版，不重复展开整个操作系统矩阵。
+          - os: ubuntu-latest
+            node: "22.12.0"
+            name: verify (ubuntu-latest, Node 22.12.0)
+          - os: ubuntu-latest
+            node: "26"
+            name: verify (ubuntu-latest, Node 26)
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: workspace/中文路径/axutils
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: workspace/中文路径/axutils
-      - uses: pnpm/action-setup@v4
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
         with:
-          version: latest
-      - uses: actions/setup-node@v4
+          # CI 使用已验证的版本，避免 latest 漂移；不限制本地 packageManager。
+          version: 12.10.1
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
           cache: pnpm
           cache-dependency-path: workspace/中文路径/axutils/pnpm-lock.yaml
       - name: Install locked dependencies
@@ -32,18 +59,39 @@ jobs:
       - name: Install test Chromium
         run: node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Full verification (one package build)
+        id: verification
+        env:
+          # 浏览器脚本使用系统临时目录；统一到 runner.temp，便于失败时收集诊断。
+          TMPDIR: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          AXUTILS_KEEP_BROWSER_ARTIFACTS: "1"
         run: pnpm check
+      - name: Upload failed browser diagnostics
+        if: failure() && steps.verification.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-failure-${{ matrix.os }}-node-${{ matrix.node }}
+          path: ${{ runner.temp }}/axutils-browser-*/results/
+          # 格式、类型或单元测试提前失败时，浏览器尚未运行，没有诊断文件。
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Locate minimum consumer runtime
-        uses: actions/setup-node@v4
+        if: matrix.node == '24'
+        uses: actions/setup-node@v7
         with:
           node-version: 14.18.0
       - name: Remember consumer runtime
+        if: matrix.node == '24'
         run: node -e "require('fs').appendFileSync(process.env.GITHUB_ENV, 'AXUTILS_TEST_NODE=' + process.execPath + '\n')"
       - name: Restore development runtime
-        uses: actions/setup-node@v4
+        if: matrix.node == '24'
+        uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
       - name: Same artifacts on Node 14.18.0
+        if: matrix.node == '24'
         run: pnpm test:runtime
       - name: Packed consumers on Node 14.18.0
+        if: matrix.node == '24'
         run: pnpm test:consumer
