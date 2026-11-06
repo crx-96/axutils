@@ -52,7 +52,8 @@ try {
     packageRoot,
     { ...process.env, npm_config_cache: join(temporary, "npm-cache") },
   );
-  run("tar", ["-xf", archive, "-C", temporary], temporary);
+  // 使用相对路径，避免 GNU tar 将 Windows 盘符解析为远程主机。
+  run("tar", ["-xf", "common.tgz"], temporary);
   const groups = new Map();
   for (const [subpath, dependencies] of Object.entries(peers)) {
     const key = dependencies.join(",");
