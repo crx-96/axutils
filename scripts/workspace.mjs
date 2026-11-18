@@ -1,23 +1,38 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const required = ["build", "typecheck", "test", "test:dist", "test:consumer", "publint"];
 
+/** 识别 exports 的嵌套 browser 条件，包括子路径和条件数组中的分支。 */
+function hasBrowserExport(target) {
+  if (target === null || typeof target !== "object") return false;
+  return Object.hasOwn(target, "browser") || Object.values(target).some(hasBrowserExport);
+}
+
 /** 仅调度可发布包；缺少脚本直接失败，避免新包未被验证却显示全仓通过。 */
 function packages() {
   return readdirSync(join(root, "packages"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) =>
-      JSON.parse(readFileSync(join(root, "packages", entry.name, "package.json"), "utf8")),
-    )
-    .filter((manifest) => !manifest.private)
-    .map((manifest) => {
+    .map((entry) => {
+      const directory = join(root, "packages", entry.name);
+      const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+      return { directory, manifest };
+    })
+    .filter(({ manifest }) => !manifest.private)
+    .map(({ directory, manifest }) => {
       if (!/^@axutils\/[a-z0-9-]+$/u.test(manifest.name)) throw new Error("无效的发布包名");
-      for (const name of required) {
-        if (!manifest.scripts?.[name]) throw new Error(`${manifest.name} 缺少 ${name}`);
+      // CDN、browser 字段和浏览器测试目录均独立于脚本；删除脚本不会让包退出验证。
+      const browser =
+        manifest.unpkg ||
+        manifest.jsdelivr ||
+        manifest.browser ||
+        hasBrowserExport(manifest.exports) ||
+        existsSync(join(directory, "test-browser"));
+      for (const name of browser ? [...required, "test:browser"] : required) {
+        if (!manifest.scripts?.[name]?.trim()) throw new Error(`${manifest.name} 缺少 ${name}`);
       }
       return manifest;
     });

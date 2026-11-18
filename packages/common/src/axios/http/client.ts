@@ -6,7 +6,13 @@ import axios, {
 } from "axios";
 import { isCancellationError } from "../../internal/http/error-utils.js";
 import { createAttemptHeaders, resolveRequestHeaders } from "../../internal/http/headers.js";
-import { SAFE_RETRY_METHODS, assertObject } from "../../internal/http/primitives.js";
+import {
+  SAFE_RETRY_METHODS,
+  assertObject,
+  canReplayRequestBody,
+  snapshotRequestInput,
+} from "../../internal/http/primitives.js";
+import { type TransportSnapshot, snapshotTransport } from "../../internal/http/request-identity.js";
 import { createCancellationError, raceWithSignal, throwIfAborted, waitForDelay } from "./abort.js";
 import {
   getConfigOptions,
@@ -28,6 +34,14 @@ import type {
   PromiseHttpSuccess,
   ResolvedRequest,
 } from "./types.js";
+
+/** 解析后的调用同时携带最终头与计算共享身份时使用的传输快照。 */
+type TransportRequest<D> = ResolvedRequest<D> & {
+  /** 本次请求合并后的头。 */
+  headers: RawAxiosRequestHeaders;
+  /** 执行和重试使用同一份实例默认选项快照。 */
+  transport: TransportSnapshot;
+};
 
 /**
  * 跨浏览器、Node.js 与 Nuxt 的 Axios Promise HTTP 客户端。
@@ -125,13 +139,7 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
   ): Promise<PromiseHttpResponseResult<T, O>> {
     // 只快照请求配置顶层；保留既有同步校验与调用方嵌套值的引用语义。
     assertObject(config, "PromiseHttpRequestConfig 必须是对象");
-    if (typeof config.url !== "string") throw new TypeError("请求 url 必须是字符串");
-    if (typeof config.method !== "string") throw new TypeError("请求 method 必须是字符串");
-
-    const input: PromiseHttpRequestConfig<D> = {
-      ...config,
-      method: normalizeMethod(config.method),
-    };
+    const input = snapshotRequestInput(config, normalizeMethod);
     validateRequestInput(input);
 
     // 已取消调用不启动共享配置工厂，也不进入网络或响应转换阶段。
@@ -141,8 +149,10 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
 
     // 配置初始化属于客户端共享状态；signal 只竞速当前调用方的等待，不应进入共享 Promise。
     const operation = this.getConfigPromise().then((clientConfig) => {
+      // 等待配置时取消的调用已退出，不能再执行其请求头回调。
+      throwIfAborted(input.signal);
       const request = this.resolveRequest(clientConfig, input);
-      const key = getDedupeKey(request);
+      const key = getDedupeKey(request, request.transport.identity);
       if (key === undefined) return this.executeRequest<T, D>(request);
       return this.getOrCreateInFlight<T, D>(key, request);
     });
@@ -226,21 +236,24 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
       return Promise.resolve(this.cachedConfig);
     }
 
-    // 缓存当前初始化身份，清理时只修改仍属于本次加载的槽位。
-    const loading = this.initializeConfig();
-    this.configLoading = loading;
-    void loading.then(
+    // Promise 的执行器同步登记启动函数，先发布共享槽位再调用工厂，供其 abort 监听器重入。
+    let start!: () => void;
+    const loading = new Promise<PromiseHttpClientConfig>((resolve) => {
+      start = () => resolve(this.initializeConfig());
+    }).then(
       (config) => {
-        if (this.configLoading === loading) {
-          // 配置初始化属于客户端级状态；只要共享初始化成功，就可以缓存供所有请求复用。
-          this.cachedConfig = config;
-          this.configLoading = undefined;
-        }
+        this.cachedConfig = config;
+        this.configLoading = undefined;
+        return config;
       },
-      () => {
-        if (this.configLoading === loading) this.configLoading = undefined;
+      (error: unknown) => {
+        // 先释放失败的初始化，再通知等待者，允许下一次请求重新启动工厂。
+        this.configLoading = undefined;
+        throw error;
       },
     );
+    this.configLoading = loading;
+    start();
     return loading;
   }
 
@@ -269,7 +282,7 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
   private resolveRequest<D>(
     clientConfig: PromiseHttpClientConfig,
     input: PromiseHttpRequestConfig<D>,
-  ): ResolvedRequest<D> & { headers: RawAxiosRequestHeaders } {
+  ): TransportRequest<D> {
     const request = resolveRequest(clientConfig, input);
     try {
       // 默认鉴权头也属于请求身份；解析后固定到本次请求，防止换账号后错误共享旧响应。
@@ -281,7 +294,12 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
         // 未设置转换时保持 Axios 原本保留字段名大小写的行为。
         this.transformHeaders !== undefined,
       );
-      return { ...request, headers };
+      const transport = snapshotTransport(
+        this.axiosInstance.defaults,
+        request.params,
+        request.timeout,
+      );
+      return { ...request, headers, transport };
     } catch (error) {
       throw toPromiseHttpRequestError(error, "config");
     }
@@ -290,7 +308,7 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
   /** 创建或复用同 key 的 in-flight Promise；成功、失败、取消后都会清理 Map。 */
   private getOrCreateInFlight<T, D>(
     key: string,
-    request: ResolvedRequest<D> & { headers: RawAxiosRequestHeaders },
+    request: TransportRequest<D>,
   ): Promise<PromiseHttpSuccess<T>> {
     // 相同身份共享传输成功值和错误实例，调用方的响应转换仍各自执行。
     const existing = this.inFlight.get(key);
@@ -314,17 +332,14 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
   }
 
   /** 通过显式循环接入 Axios Promise，并按规则进行请求级重试和统一错误转换。 */
-  private async executeRequest<T, D>(
-    request: ResolvedRequest<D> & { headers: RawAxiosRequestHeaders },
-  ): Promise<PromiseHttpSuccess<T>> {
+  private async executeRequest<T, D>(request: TransportRequest<D>): Promise<PromiseHttpSuccess<T>> {
     // 非请求头字段在所有尝试之间复用；请求头每次复制，以遮蔽期间变化的实例默认值。
     const axiosConfig: AxiosRequestConfig<D> = {
+      ...request.transport.config,
       method: request.method.toLowerCase(),
       url: request.url,
     };
-    if (request.params !== undefined) axiosConfig.params = request.params;
     if (request.data !== undefined) axiosConfig.data = request.data;
-    if (request.timeout !== undefined) axiosConfig.timeout = request.timeout;
     if (request.signal !== undefined) axiosConfig.signal = request.signal;
 
     // 只有允许的方法及可重试错误才能进入下一次尝试，取消在每次发送前重新检查。
@@ -341,8 +356,18 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
       } catch (error) {
         // 重试等待同样接受取消；最终失败保持该客户端独有的错误分类。
         const canRetry = attempt < request.retryCount && retryAllowed && isRetryableError(error);
-        if (!canRetry) throw toPromiseHttpRequestError(error);
+        if (
+          !canRetry ||
+          !canReplayRequestBody(request.data) ||
+          !request.transport.canReplay(this.axiosInstance.defaults)
+        ) {
+          throw toPromiseHttpRequestError(error);
+        }
         await waitForDelay(request.retryDelay, request.signal);
+        // 等待期间仍可能新增默认参数，发送前保留上一次真实错误。
+        if (!request.transport.canReplay(this.axiosInstance.defaults)) {
+          throw toPromiseHttpRequestError(error);
+        }
       }
     }
     throw new Error("HTTP 请求执行流程异常");

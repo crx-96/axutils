@@ -1,12 +1,71 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  rmdirSync,
+  unlinkSync,
+} from "node:fs";
 import { createRequire, isBuiltin } from "node:module";
 import { dirname, join, resolve, sep } from "node:path";
 import { build } from "vite";
 import { emitCommonJsDeclarations } from "./declarations.mjs";
 import { readPackageEntries } from "./entries.mjs";
 
+/** 共享构建工具从根工具链定位 TypeScript。 */
 const require = createRequire(import.meta.url);
+
+/** 按实际 CJS 输出生成 Node 的 ESM 命名门面，两种加载器共享同一模块缓存。 */
+function nodeFacades(manifest) {
+  const entries = Object.values(manifest.exports).filter((entry) => entry.import.node);
+  return {
+    generateBundle(options, bundle) {
+      if (options.format !== "cjs") return;
+      for (const entry of entries) {
+        const filename = entry.require.default.slice("./dist/".length);
+        const chunk = bundle[filename];
+        if (chunk?.type !== "chunk") throw new Error(`找不到 Node 门面的 CJS 入口：${filename}`);
+        // 默认导入读取真实 module.exports，不依赖不同 Node 版本对 CJS 命名导出的静态识别。
+        const imports = `import api from "./${filename.split("/").at(-1)}";\n`;
+        const exports = chunk.exports.map(
+          (name, index) =>
+            `const v${index} = api[${JSON.stringify(name)}]; export { v${index} as ${name} };`,
+        );
+        this.emitFile({
+          fileName: entry.import.node.slice("./dist/".length),
+          source: `${imports}${exports.join("\n")}\n`,
+          type: "asset",
+        });
+      }
+    },
+    name: "axutils-node-esm-facades",
+  };
+}
+
+/** 把 Vite 从 UMD 实际模块收集的许可正文附在脚本末尾，单文件 CDN 分发也携带版权声明。 */
+function includeUmdLicenses(packageRoot, manifest, outDir) {
+  const ownLicense = join(outDir, "LICENSE");
+  copyFileSync(
+    existsSync(join(packageRoot, "LICENSE"))
+      ? join(packageRoot, "LICENSE")
+      : new URL("../../LICENSE", import.meta.url),
+    ownLicense,
+  );
+  const records = JSON.parse(readFileSync(join(outDir, "THIRD-PARTY-LICENSES.json"), "utf8"));
+  const notices = [manifest.name, readFileSync(ownLicense, "utf8")];
+  for (const { name, version, text } of records) {
+    if (!text?.trim()) throw new Error(`UMD 捆绑依赖缺少许可正文：${name}@${version}`);
+    notices.push(`${name}@${version}`, text);
+  }
+  // 附加在输出末尾不改变原有代码的 sourcemap 行号；上游许可证可能自带注释结束符。
+  appendFileSync(
+    resolve(packageRoot, manifest.unpkg),
+    `\n/*!\n${notices.join("\n\n").replaceAll("*/", "* /")}\n*/\n`,
+  );
+}
 
 // 保留经过中文 Windows 路径验证的逐项清理；符号链接只删链接，绝不递归目标。
 function removeDirectory(directory) {
@@ -51,6 +110,7 @@ export async function buildPackage(packageRoot, { umd } = {}) {
           externalPackages.some((name) => id === name || id.startsWith(`${name}/`)),
       },
     },
+    plugins: [nodeFacades(manifest)],
   });
   if (umd) {
     if (
@@ -68,8 +128,10 @@ export async function buildPackage(packageRoot, { umd } = {}) {
           formats: ["umd"],
           name: umd.name,
         },
+        license: { fileName: "THIRD-PARTY-LICENSES.json" },
       },
     });
+    includeUmdLicenses(packageRoot, manifest, outDir);
   }
   const tsc = join(dirname(require.resolve("typescript/package.json")), "bin", "tsc");
   const result = spawnSync(process.execPath, [tsc, "-p", "tsconfig.build.json"], {

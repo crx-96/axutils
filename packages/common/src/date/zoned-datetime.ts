@@ -1,15 +1,22 @@
-import { formatInTimeZone } from "date-fns-tz";
+import { MS_PER_MINUTE } from "./constant.js";
 import type { DateFormatPattern, Timezone } from "./format.js";
 import {
+  MAX_ISO_OFFSET_MINUTES,
+  assertTimezone,
   createUtcDate,
+  dateTimeToUtcDate,
   dateToZonedDate,
   durationMilliseconds,
-  formatOptions,
+  durationValue,
+  formatZonedDate,
   getTimezone,
   invalid,
+  isDateObject,
+  isoDateTimeString,
   millisecondsToDuration,
   parseDateTimeString,
   toEpochMilliseconds,
+  zonedWallDate,
 } from "./internal.js";
 import type {
   DateFormatOptions,
@@ -29,67 +36,33 @@ function fromInput(
   input: ZonedDateTimeInput,
   options: ZonedDateTimeOptions = {},
 ): ZonedDateTimeValue {
-  const defaultTimezone = getTimezone(options.timezone);
-  // Date 已代表绝对时刻，只关联时区而不重新解释其本地字段。
-  if (input instanceof Date) {
-    if (!Number.isFinite(input.getTime())) {
-      invalid("Date 必须是有效日期");
-    }
-    return { epochMs: input.getTime(), timezone: defaultTimezone };
+  // 显式选项仍需有效，即使文本内另有优先级更高的关联时区。
+  const optionZone = options.timezone;
+  const defaultTimezone = getTimezone(optionZone);
+  if (isDateObject(input)) {
+    return {
+      epochMs: toEpochMilliseconds(Date.prototype.getTime.call(input)),
+      timezone: defaultTimezone,
+    };
   }
   if (typeof input !== "string") {
     invalid("ZonedDateTime 输入无效");
   }
   const parsed = parseDateTimeString(input);
   const timezone = getTimezone(
-    parsed.timezone ?? options.timezone ?? (parsed.offsetMinutes !== undefined ? "UTC" : undefined),
+    parsed.timezone ?? optionZone ?? (parsed.offsetMinutes !== undefined ? "UTC" : defaultTimezone),
   );
-  // IANA 后缀或无偏移文本走 peer 的墙上时间转换；单独偏移文本按偏移直接计算。
-  const epochMs =
-    parsed.timezone || parsed.offsetMinutes === undefined
-      ? dateToZonedDate(
-          createUtcDate(
-            parsed.year,
-            parsed.month,
-            parsed.day,
-            parsed.hour,
-            parsed.minute,
-            parsed.second,
-            parsed.millisecond,
-          ),
-          timezone,
-        ).getTime()
-      : createUtcDate(
-          parsed.year,
-          parsed.month,
-          parsed.day,
-          parsed.hour,
-          parsed.minute,
-          parsed.second,
-          parsed.millisecond,
-        ).getTime() -
-        parsed.offsetMinutes * 60_000;
+  // 明确偏移（包括 Z）唯一确定时刻。只有无偏移的墙上字段才需要时区消歧。
+  const date = dateTimeToUtcDate(parsed);
+  const epochMs = (
+    parsed.offsetMinutes === undefined ? dateToZonedDate(date, timezone) : date
+  ).getTime();
   return { epochMs: toEpochMilliseconds(epochMs), timezone };
 }
 
 /** 提取关联时区的墙上字段，并用 UTC 对齐 Date 承载，避免泄漏宿主本地时区。 */
 function toLocalDate(zdt: ZonedDateTimeValue): Date {
-  const text = formatInTimeZone(
-    new Date(toEpochMilliseconds(zdt.epochMs)),
-    zdt.timezone,
-    "yyyy-MM-dd-HH-mm-ss-SSS",
-  );
-  // 固定数值格式不受 locale 影响；历史年份语义仍由 date-fns-tz 决定。
-  const [
-    year = NaN,
-    month = NaN,
-    day = NaN,
-    hour = NaN,
-    minute = NaN,
-    second = NaN,
-    millisecond = NaN,
-  ] = text.split("-").map(Number);
-  return createUtcDate(year, month, day, hour, minute, second, millisecond);
+  return zonedWallDate(new Date(toEpochMilliseconds(zdt.epochMs)), zdt.timezone);
 }
 
 /** 比较两个有效绝对时刻；拒绝 NaN，避免无效输入被误判为相等。 */
@@ -100,7 +73,7 @@ function compareEpoch(first: ZonedDateTimeValue, second: ZonedDateTimeValue): -1
 
 /** 校验此命名空间不支持的年月字段，再将日及以下整数时长换算为毫秒。 */
 function addMilliseconds(duration: DurationFields): number {
-  if ((duration.years ?? 0) !== 0 || (duration.months ?? 0) !== 0) {
+  if (durationValue(duration, "years") !== 0 || durationValue(duration, "months") !== 0) {
     invalid(
       "ZonedDateTime 的加法不支持 years 或 months；如需日历计算请先通过 toPlainDateTime 转为无时区值",
     );
@@ -202,23 +175,39 @@ export const ZonedDateTime = {
     pattern: DateFormatPattern,
     options: DateFormatOptions = {},
   ): string {
-    return formatInTimeZone(
+    return formatZonedDate(
       new Date(toEpochMilliseconds(zdt.epochMs)),
-      getTimezone(options.timezone ?? zdt.timezone),
+      options.timezone ?? zdt.timezone,
       pattern,
-      formatOptions(options.locale),
+      options.locale,
     );
   },
 
-  /** 输出 ISO 日期时间与 UTC 偏移，例如 +05:45；不附加 IANA 方括号。 */
+  /** 输出精确到毫秒的 ISO 日期时间。墙上字段或偏移超出公开文本语法时改用 UTC。 */
   toString(zdt: ZonedDateTimeValue): string {
-    const pattern =
-      zdt.epochMs % 1_000 === 0 ? "yyyy-MM-dd'T'HH:mm:ssXXX" : "yyyy-MM-dd'T'HH:mm:ss.SSSXXX";
-    return formatInTimeZone(
-      new Date(toEpochMilliseconds(zdt.epochMs)),
-      getTimezone(zdt.timezone),
-      pattern,
-    );
+    const date = new Date(toEpochMilliseconds(zdt.epochMs));
+    const timezone = assertTimezone(zdt.timezone);
+    const year = date.getUTCFullYear();
+    // 合法偏移最多跨一个日界。保留紧邻四位年的跨年机会，更远的年份直接输出 UTC，避免墙上 Date 越界。
+    if (timezone === "UTC" || year < -1 || year > 10_000) return isoDateTimeString(date, "Z");
+
+    const wall = zonedWallDate(date, timezone);
+    const wallYear = wall.getUTCFullYear();
+    const offset = (wall.getTime() - date.getTime()) / MS_PER_MINUTE;
+    // 公开解析器只接受四位年和 ±14:00 以内的整分钟偏移。截断历史偏移会改变回读的时间点。
+    if (
+      wallYear < 0 ||
+      wallYear > 9999 ||
+      !Number.isInteger(offset) ||
+      Math.abs(offset) > MAX_ISO_OFFSET_MINUTES ||
+      offset === 0
+    ) {
+      return isoDateTimeString(date, "Z");
+    }
+    const minutes = Math.abs(offset);
+    const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
+    const mm = String(minutes % 60).padStart(2, "0");
+    return isoDateTimeString(wall, `${offset < 0 ? "-" : "+"}${hh}:${mm}`);
   },
 };
 

@@ -10,21 +10,13 @@ import {
 } from "./internal.js";
 import type { DurationFields, ZonedDateTimeValue } from "./types.js";
 
-/** Instant 文本必须带明确偏移，避免绝对时间点依赖宿主默认时区。 */
-const INSTANT_PATTERN =
-  /^\d{4}[-/]\d{2}[-/]\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/u;
-
-/** 严格解析有偏移文本并返回整数 epoch 毫秒，保留 ISO 字段与偏移的边界校验。 */
+/** 共用日期时间分隔符和字段边界，Instant 仅接受以明确偏移结尾的文本。 */
 function normalize(value: string): number {
-  // 先要求偏移，再由共用解析器验证实际日期和偏移范围。
-  if (!INSTANT_PATTERN.test(value)) {
-    invalid("Instant 字符串必须包含 Z 或 UTC 偏移");
+  const parsed = parseDateTimeString(value);
+  if (parsed.offsetMinutes === undefined || parsed.timezone !== undefined) {
+    invalid("Instant 字符串必须以 Z 或 UTC 偏移结尾");
   }
-  const epoch = dateTimeToUtcDate(parseDateTimeString(value)).getTime();
-  if (!Number.isFinite(epoch)) {
-    invalid("无效的 Instant 字符串");
-  }
-  return epoch;
+  return toEpochMilliseconds(dateTimeToUtcDate(parsed).getTime());
 }
 
 /** 绝对时间点命名空间，内部统一使用 Unix epoch 毫秒表示。 */

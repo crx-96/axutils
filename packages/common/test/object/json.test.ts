@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import * as CommonEntry from "../../src/index";
 import {
@@ -258,6 +259,110 @@ describe("object/json", () => {
     expect(jsonStringify(source, { filterNullish: true, onCycle: "skip" })).toBe('{"self":null}');
   });
 
+  it("配置化路径按内部槽处理跨 Realm 包装值并保留 BigInt 数字原文", () => {
+    const boxes: unknown = runInNewContext(
+      '[Object(42), Object(false), Object("{}"), Object(-900719925474099312345n), Object(Symbol()), Object(NaN)]',
+    );
+    expect(jsonStringify(boxes, { filterNullish: true })).toBe(
+      '[42,false,"{}",-900719925474099312345,{},null]',
+    );
+    expect(jsonStringify(Object.setPrototypeOf(Object(false), null), { onCycle: "skip" })).toBe(
+      "false",
+    );
+    expect(jsonStringify({ toJSON: () => Object(42) }, { sortKeys: true })).toBe("42");
+    expect(jsonStringify(900719925474099312345n, { sortKeys: true })).toBe("900719925474099312345");
+  });
+
+  it("数字包装对象只执行一次自定义转换，转换异常原样传播", () => {
+    let calls = 0;
+    const failure = new Error("转换失败");
+    const number = Object.assign(Object(1), {
+      [Symbol.toPrimitive]() {
+        if (++calls > 1) throw failure;
+        return 42;
+      },
+    });
+    expect(jsonStringify(number, { sortKeys: true })).toBe("42");
+    expect(() => jsonStringify(number, { sortKeys: true })).toThrow(failure);
+    expect(calls).toBe(2);
+  });
+
+  it.each(["object", "callable"])("%s 的 toJSON getter 每次出现只读取并调用一次", (kind) => {
+    const value = kind === "object" ? {} : () => undefined;
+    const keys: string[] = [];
+    let reads = 0;
+    Object.defineProperty(value, "toJSON", {
+      get() {
+        if (++reads !== keys.length + 1) throw new Error("重复读取钩子");
+        return function (this: unknown, key: string) {
+          expect(this).toBe(value);
+          keys.push(key);
+          return key;
+        };
+      },
+    });
+    expect(jsonStringify(value, { onCycle: "throw" })).toBe('""');
+    expect(jsonStringify({ a: value, b: [value] }, { onCycle: "skip", sortKeys: "desc" })).toBe(
+      '{"b":["0"],"a":"a"}',
+    );
+    expect(keys).toEqual(["", "0", "a"]);
+    expect(reads).toBe(3);
+  });
+
+  it("toJSON 返回的函数不再执行转换，普通函数依所在位置省略或占位", () => {
+    const callable = Object.assign(() => undefined, { toJSON: () => 1 });
+    const converted = { toJSON: () => callable };
+    expect(jsonStringify(converted, { sortKeys: true })).toBeUndefined();
+    expect(jsonStringify({ a: converted, b: [converted] }, { sortKeys: true })).toBe(
+      '{"b":[null]}',
+    );
+  });
+
+  it("对象只枚举一次，按比较器顺序读取任意键并转义，不探测 Symbol 或原型", () => {
+    const names = ["constructor", "__proto__", "2", "10", '"\n\ud800', ""];
+    const visits: string[] = [];
+    let enumerations = 0;
+    const value = new Proxy(Object.fromEntries(names.map((key) => [key, true])), {
+      get(target, key, receiver) {
+        if (typeof key === "symbol") throw new Error("意外读取 Symbol");
+        visits.push(key);
+        return Reflect.get(target, key, receiver);
+      },
+      getPrototypeOf() {
+        throw new Error("意外读取原型");
+      },
+      ownKeys(target) {
+        enumerations++;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const sortKeys = (a: string, b: string) => names.indexOf(a) - names.indexOf(b);
+    expect(jsonStringify(value, { sortKeys })).toBe(
+      `{${names.map((key) => `${JSON.stringify(key)}:true`).join(",")}}`,
+    );
+    expect(enumerations).toBe(1);
+    expect(visits).toEqual(["toJSON", ...names]);
+  });
+
+  it("按快照长度访问代理数组，过滤后保留数组占位", () => {
+    const reads: string[] = [];
+    const value = new Proxy([2, null, 1], {
+      get(target, key, receiver) {
+        reads.push(String(key));
+        return key === "length" ? 2.9 : Reflect.get(target, key, receiver);
+      },
+    });
+    expect(jsonStringify(value, { filterNullish: true })).toBe("[2,null]");
+    expect(reads).toEqual(["toJSON", "length", "0", "1"]);
+  });
+
+  it("解析结果中的数组索引键优先按数值升序枚举", () => {
+    const text = '{"a":1,"10":2,"2":3,"b":4}';
+    const value = jsonParse<object>(text, { sortKeys: "desc" });
+    expect(Object.keys(value)).toEqual(["2", "10", "b", "a"]);
+    expect(jsonStringify(value, { sortKeys: "asc" })).toBe('{"10":2,"2":3,"a":1,"b":4}');
+  });
+
   it("基本反序列化", () => {
     expect(jsonParse('{"a":1,"b":"x"}')).toEqual({ a: 1, b: "x" });
     expect(jsonParse("[1,2,3]")).toEqual([1, 2, 3]);
@@ -347,6 +452,16 @@ describe("object/json", () => {
     expect(Object.keys(CommonEntry)).not.toContain("jsonStringify");
     expect(Object.keys(CommonEntry)).not.toContain("jsonParse");
     expect(Object.keys(CommonEntry)).not.toContain("JsonCircularReferenceError");
+  });
+
+  it("无效排序模式由普通入口抛错、安全入口返回 null", () => {
+    // @ts-expect-error 验证未经过类型检查的调用方传入未知模式。
+    const options: { sortKeys: "asc" } = { sortKeys: "ascending" };
+    const text = '{"b":2,"a":1}';
+    expect(() => jsonParse(text, options)).toThrow(TypeError);
+    expect(() => jsonStringify(JSON.parse(text), options)).toThrow(TypeError);
+    expect(jsonParseSafe(text, options)).toBeNull();
+    expect(jsonStringifySafe(JSON.parse(text), options)).toBeNull();
   });
 
   it("jsonStringifySafe 正常输入返回与 jsonStringify 一致", () => {

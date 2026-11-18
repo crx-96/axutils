@@ -93,12 +93,12 @@ console.log(AxutilsCommon.DATE_FORMAT.DATE, AxutilsCommon.TIMEZONE.UTC);
 - `PlainTimeInput`：时间字符串、`Date` 或 `{ hour, minute, second?, millisecond? }`。
 - `PlainDateTimeInput`：日期时间字符串、`Date` 或日期时间字段对象。
 - `ZonedDateTimeInput`：ISO 字符串或 `Date`。
-- `DurationFields`：可选的 `years`、`months`、`days`、`hours`、`minutes`、`seconds`、`milliseconds` 字段，所有字段必须是有限整数。
+- `DurationFields`：可选单位为 `years`、`months`、`days`、`hours`、`minutes`、`seconds`、`milliseconds`。加减法只读取参与运算或需要校验的单位。例如，`PlainDate` 仅读取年月日，`ZonedDateTime` 还会检查年月是否为零。读取的单位仅在缺省或为 `undefined` 时按零处理，传入 `null` 或其他非整数会抛 `RangeError`。
 - `DateFormatOptions`：`locale?: Locale` 和 `timezone?: Timezone`。
 - `ZonedDateTimeValue`：`{ epochMs: number; timezone: Timezone }`，epochMs 为 Date 可表示范围内的整数毫秒（包含 ±8,640,000,000,000,000 边界）。
 - `Timezone`：允许 `TIMEZONE` 中的常用值，也允许自定义 IANA 时区字符串；不要使用 `CST`、`IST` 等歧义缩写。
 
-纯日期、纯时间和无时区日期时间从 `Date` 提取 UTC 字段，以避免调用方机器时区影响结果。字符串日期时间支持 `T`、`t` 或空格作为分隔符。所有无效输入统一抛 `RangeError`。
+纯日期、纯时间和无时区日期时间从 `Date` 提取 UTC 字段，也接受来自 iframe 或 Node `vm` 的 `Date`。纯时间和日期时间的字段对象必须提供 `hour`、`minute`，仅 `second`、`millisecond` 可省略。字符串日期时间支持 `T`、`t` 或空格作为分隔符。所有无效输入统一抛 `RangeError`。
 
 文本解析的年份为四位数字；负年份与超过 9999 的年份请通过字段对象或 `Date` 输入。`PlainDate.toString` 和 `PlainDateTime.toString` 对这些年份输出带符号的六位 ISO 扩展年份，例如 `-000001` 和 `+010000`。
 
@@ -123,7 +123,7 @@ console.log(new Date(value.epochMs).toISOString()); // 2024-03-10T02:30:00.000Z
 
 ### `DATE_FORMAT`
 
-从 `@axutils/common/date` 导入常用 date-fns 格式：`DATE`、`DATE_TIME`、`DATE_TIME_MS`、`SLASH_DATE`、`SLASH_DATE_TIME`、`CN_DATE`、`CN_DATE_TIME`、`TIME`、`TIME_MS`、`ISO_OFFSET` 和 `ISO_UTC`。也可以直接传自定义 date-fns token 字符串。
+从 `@axutils/common/date` 导入常用 date-fns 格式：`DATE`、`DATE_TIME`、`DATE_TIME_MS`、`SLASH_DATE`、`SLASH_DATE_TIME`、`CN_DATE`、`CN_DATE_TIME`、`TIME`、`TIME_MS`、`ISO_OFFSET` 和 `ISO_UTC`。`ISO_UTC` 始终输出该时刻的 UTC ISO 字符串，即使指定了其他显示时区。预设本身是字符串，传入完全相同的格式串也采用这一规则。其他自定义格式里的 `'Z'` 仍是普通字面量。`t`、`T` 分别输出原始 Unix 秒和毫秒。单独使用任一 token 时只校验显示时区，即使该时区的墙上日期超出 `Date` 范围也能格式化。`X`、`x`、`O` 和 `z` 使用显示时区在该时刻的偏移或名称。
 
 ```ts
 import { DATE_FORMAT, PlainDate } from "@axutils/common/date";
@@ -159,7 +159,7 @@ console.log(MS_PER_DAY, SECONDS_PER_HOUR); // 86400000 3600
 
 ### `Duration.from(fields)`
 
-从字段对象创建新的 duration 字段副本；未传字段不会自动补零，也不做字段归约。字段必须是有限整数。
+按年、月、日、时、分、秒、毫秒读取已支持的字段，每个字段只读一次并校验为有限整数。支持继承和非枚举 getter，包括 `Temporal.Duration` 的原型 getter。结果只包含值已定义的支持单位，保留显式的 `0`。`weeks`、`microseconds`、`nanoseconds` 等额外字段会被忽略。
 
 ```ts
 import { Duration } from "@axutils/common/date";
@@ -236,7 +236,7 @@ console.log(Duration.subtract({ days: 3, hours: 1 }, { days: 1, hours: 2 }));
 
 ### `Instant.from(value)`
 
-从带 `Z` 或 UTC 偏移的 ISO 字符串创建 epoch 毫秒。没有时区信息的字符串会抛 `RangeError`。
+从以 `Z` 或数值偏移结尾的日期时间创建 epoch 毫秒，日期和时间之间接受 `T`、`t` 或空格。缺少偏移或附带 `[IANA]` 后缀时抛 `RangeError`。带方括号的文本使用 `ZonedDateTime.from`。
 
 ```ts
 import { Instant } from "@axutils/common/date";
@@ -577,7 +577,7 @@ console.log(PlainDate.toString(monday)); // 2024-01-01
 
 ### `PlainDate.endOfWeek(date, options?)`
 
-返回所在周的最后一天，使用与 `startOfWeek` 相同的 `weekStartsOn` 配置。
+返回所在周的最后一天，使用与 `startOfWeek` 相同的 `weekStartsOn` 配置。周首和周末分别检查结果是否在 `Date` 范围内。例如，在最小可表示日期调用 `endOfWeek` 仍可得到该周的周末，而请求实际越界的周首会抛 `RangeError`。
 
 ```ts
 import { PlainDate } from "@axutils/common/date";
@@ -914,7 +914,9 @@ console.log(PlainDateTime.toString("2024-01-02T03:04:05.006")); // 2024-01-02T03
 
 ### `ZonedDateTime.from(input, options?)`
 
-接受含时区/偏移的 ISO 字符串或 `Date`。无时区字符串可通过 `options.timezone` 指定解释时区；含 UTC 偏移的字符串会按偏移计算绝对时刻。返回 `ZonedDateTimeValue`。
+接受 ISO 字符串或 `Date`，返回 `ZonedDateTimeValue`。`Z` 或数值偏移决定绝对时刻，`[IANA]` 决定关联时区并优先于 `options.timezone`。即使偏移与时区规则冲突，也按给定偏移计算，再按关联时区显示。省略偏移时才用关联时区解释墙上字段。
+
+纽约回拨日的 `2024-11-03T01:30:00-04:00[America/New_York]` 对应 `05:30Z`，`2024-11-03T01:30:00-05:00[America/New_York]` 对应 `06:30Z`。如果业务要求按纽约墙上时间解释输入，可只传 `2024-11-03T01:30:00[America/New_York]`，由时区规则消歧。
 
 ```ts
 import { TIMEZONE, ZonedDateTime } from "@axutils/common/date";
@@ -1067,7 +1069,7 @@ console.log(ZonedDateTime.format(value, DATE_FORMAT.DATE_TIME)); // 2024-01-01 0
 
 ### `ZonedDateTime.toString(zdt)`
 
-输出带 UTC 偏移的 ISO 日期时间；epoch 毫秒非整秒时追加三位毫秒，不附加 IANA 时区方括号。
+输出带 UTC 偏移的 ISO 日期时间，省略 IANA 时区方括号和为零的毫秒，保留非零的三位毫秒及 ISO 年份 `0000`。当本地年份超出 `0000`–`9999`，或该时刻的偏移无法用 `±14:00` 以内的整分钟表示时，输出同一时刻的 UTC `Z` 文本。例如，epoch `0` 在 `Africa/Monrovia` 的历史偏移带秒，结果为 `1970-01-01T00:00:00Z`。若 UTC 结果本身也需要扩展年份，则使用带符号的六位 ISO 年份。这类文本可通过 `new Date(text)` 读回，再把 `Date` 传给 `ZonedDateTime.from`。
 
 ```ts
 import { ZonedDateTime } from "@axutils/common/date";

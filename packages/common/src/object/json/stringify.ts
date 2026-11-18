@@ -1,18 +1,14 @@
-import { configure } from "safe-stable-stringify";
+import { stringify as stringifyScalar } from "safe-stable-stringify";
+import { stringifyBoxedValue } from "./boxed-value.js";
+import { resolveComparator } from "./sort-keys.js";
+import type { JsonStringifyOptions } from "./types.js";
 
-import type { JsonStringifyOptions, OnCycleOption, SortKeysOption } from "./types.js";
-
-/**
- * 循环引用错误。
- *
- * 库内部的祖先检测只追踪容器引用，不维护路径，因此内部抛出的错误 path 为空字符串。
- * 显式构造时保留调用方提供的路径；错误类型和名称可用于 instanceof 判断。
- */
+/** 循环引用错误。内部只追踪容器引用，显式构造时保留调用者给出的路径。 */
 export class JsonCircularReferenceError extends Error {
-  /** 构造时提供的访问路径；库内部抛错时为空字符串，不能据此恢复实际路径。 */
+  /** 构造时提供的访问路径，库内部抛错时为空字符串。 */
   declare path: string;
 
-  /** 创建兼容的循环引用错误；path 由内部传入空字符串，不推测对象路径。 */
+  /** 构造可用 instanceof 区分的循环引用错误。 */
   constructor(path: string) {
     super(`检测到循环引用${path ? `，路径：${path}` : ""}`);
     this.name = "JsonCircularReferenceError";
@@ -20,173 +16,124 @@ export class JsonCircularReferenceError extends Error {
   }
 }
 
-/**
- * 将 `SortKeysOption` 归一化为 `safe-stable-stringify` 的 `deterministic` 配置值。
- *
- * - `undefined` / `false` -> `false`（不排序，保持原顺序）
- * - `true` / `"asc"` -> `true`（升序）
- * - `"desc"` -> 自定义降序比较函数
- * - 自定义函数 -> 直接透传
- *
- * 这是文件内部辅助函数，不对外导出。
- */
-const resolveDeterministic = (
-  sortKeys: SortKeysOption | undefined,
-): boolean | ((a: string, b: string) => number) => {
-  // 默认保留键顺序；升序可以直接使用第三方排序能力。
-  if (sortKeys === undefined || sortKeys === false) {
-    return false;
-  }
-  if (sortKeys === true || sortKeys === "asc") {
-    return true;
-  }
-  // 降序显式反转比较，自定义比较函数保持调用方语义。
-  if (sortKeys === "desc") {
-    return (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
-  }
-  return sortKeys;
-};
-
-/**
- * 在序列化器已经执行 toJSON 之后按实际访问路径检查循环，同时过滤对象的 nullish 字段。
- * 不预读用户属性，getter 与 toJSON 的调用次数和异常均由唯一一次实际序列化决定。
- */
-const createStringifyReplacer = (
-  onCycle: OnCycleOption,
-  filterNullish: boolean,
-): ((this: unknown, key: string, value: unknown) => unknown) => {
-  /** 当前序列化路径中的容器，最近访问的容器位于末尾。 */
-  const ancestors: object[] = [];
-  /** 与祖先栈同步的引用集合；共享兄弟引用在离开原分支后可以再次进入。 */
-  const activeAncestors = new WeakSet<object>();
-  /** 根值不能被 nullish 过滤；空字符串业务键仍然按普通字段处理。 */
-  let isRoot = true;
-
-  /** this 是当前字段所属容器，value 已完成 toJSON 转换。 */
-  return function (this: unknown, _key: string, value: unknown): unknown {
-    const root = isRoot;
-    isRoot = false;
-
-    if (onCycle === "throw") {
-      // 序列化器从深层返回同级字段时，弹出已经离开的容器，只保留当前父链。
-      while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
-        const completed = ancestors.pop();
-        if (completed !== undefined) activeAncestors.delete(completed);
-      }
-
-      // 只把实际作为容器序列化的对象加入路径；转换前的自引用不一定会进入 JSON。
-      if (typeof value === "object" && value !== null) {
-        if (activeAncestors.has(value)) throw new JsonCircularReferenceError("");
-        ancestors.push(value);
-        activeAncestors.add(value);
-      }
+/** 编码已执行 toJSON 的非数组对象。包装标量返回最终 JSON 片段，普通对象返回 undefined 以便继续遍历。 */
+const encodeBoxed = (value: object): string | undefined => {
+  try {
+    return stringifyBoxedValue(value);
+  } catch (error) {
+    // 原生不支持 BigInt。只有确认接收者确有 BigInt 内部槽才使用 peer 的无损数字编码，
+    // Number/String 包装值的用户转换错误仍原样传播，转换也不会重试。
+    let bigint: bigint;
+    try {
+      bigint = BigInt.prototype.valueOf.call(value);
+    } catch {
+      throw error;
     }
+    return stringifyScalar(bigint);
+  }
+};
 
-    // 数组中的 undefined 仍由序列化器写成 null；根值原样保留原生的返回语义。
-    if (!root && filterNullish && (value === null || value === undefined)) return undefined;
-    return value;
-  };
+/** 对当前出现位置执行一次 toJSON 协议。根键为空串，数组下标也是字符串。 */
+const applyToJSON = (value: unknown, key: string): unknown => {
+  if (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function" || typeof value === "bigint")
+  ) {
+    // 分开读取与调用，既保留原始接收者，也不会再次读取 getter 或访问钩子自身的 call 属性。
+    const hook: unknown = (value as { toJSON?: unknown }).toJSON;
+    if (typeof hook === "function") return Reflect.apply(hook, value, [key]);
+  }
+  return value;
 };
 
 /**
- * 判断当前配置是否所有项均为默认值（即无需额外处理）。
- *
- * FastPath 判定：返回 true 时直接走原生 `JSON.stringify`。
- * 显式 `onCycle`（包括 `"throw"`）使用配置化路径，保留专用循环错误；
- * 只有未配置循环策略、排序和过滤时才使用原生路径。
- * 这是文件内部辅助函数，不对外导出。
- */
-const isDefaultStringifyOptions = (options: JsonStringifyOptions | undefined): boolean => {
-  // space 只控制展示，不要求进入配置化序列化；其余非默认选项需要额外策略。
-  if (options === undefined) {
-    return true;
-  }
-  if (options.sortKeys !== undefined && options.sortKeys !== false) {
-    return false;
-  }
-  if (options.filterNullish) {
-    return false;
-  }
-  // onCycle 显式传值时（含 "throw"）需走配置化路径，抛 JsonCircularReferenceError
-  // onCycle 为 undefined 时走 FastPath，原生遇到循环引用抛 TypeError，行为可接受
-  if (options.onCycle !== undefined) {
-    return false;
-  }
-  return true;
-};
-
-/**
- * JSON 序列化方法。
- *
- * 在原生 `JSON.stringify` 基础上增加配置项：key 排序、过滤 nullish 字段、
- * 缩进格式化、循环引用处理。底层使用 `safe-stable-stringify` 实现配置化路径。
- *
- * **FastPath**：未启用排序、过滤或显式循环引用策略时，直接调用原生 `JSON.stringify`，
- * 保留原生异常；`space` 可单独设置。
- *
- * **配置化路径**：通过 `safe-stable-stringify` 的 `configure` 工厂创建序列化器，
- * 按需配置排序，以及同次遍历中的循环检测和 nullish 过滤。
- * 显式传入 `onCycle: "throw"` 也会进入此路径，即使未启用其他配置。
- *
- * 依赖说明：使用本方法需要安装 peer 依赖 `safe-stable-stringify`（`npm i safe-stable-stringify`）。
- * 不使用 `@axutils/common/object/json` 子路径的用户无需安装。
- *
- * @param value 待序列化的值
- * @param options 序列化配置，见 {@link JsonStringifyOptions}
- * @returns JSON 字符串；当根值为 `undefined`、函数或 `Symbol` 时，与原生一致返回 `undefined`
- * @throws {TypeError} 原生路径遇到循环引用或 BigInt 等不可序列化值
- * @throws {JsonCircularReferenceError} 配置化路径检测到循环引用，且 `onCycle` 未传或为 `"throw"`
+ * JSON 序列化。排序、过滤或显式 onCycle 启用配置化遍历，仅设置 space 时沿用原生行为。
+ * @returns JSON 文本。根值经 toJSON 转换后仍为函数、undefined 或 Symbol 时返回 undefined。
+ * @throws {JsonCircularReferenceError} 配置化遍历发现当前祖先引用且未启用 skip。
+ * @throws {TypeError} 原生路径遇到循环或无法表示的 BigInt。用户钩子和比较器异常原样传播。
  */
 export const jsonStringify = (
   value: unknown,
   options?: JsonStringifyOptions,
 ): string | undefined => {
-  // FastPath：无配置或全默认 -> 原生 stringify，零开销
-  if (isDefaultStringifyOptions(options)) {
-    const space = options?.space;
-    return space !== undefined ? JSON.stringify(value, null, space) : JSON.stringify(value);
+  if (options === undefined) return JSON.stringify(value);
+  const { filterNullish, onCycle, sortKeys, space } = options;
+  const comparator = resolveComparator(sortKeys);
+  if (!comparator && !filterNullish && onCycle === undefined) {
+    return JSON.stringify(value, null, space);
   }
 
-  const onCycle = options?.onCycle ?? "throw";
+  // 与原生一致，每层缩进最多十个空格或十个 UTF-16 码元。
+  const gap =
+    typeof space === "number"
+      ? " ".repeat(Math.max(0, Math.min(10, space)))
+      : (space ?? "").slice(0, 10);
+  /** 仅追踪当前分支中经过 toJSON 后实际展开的容器。 */
+  const ancestors = new WeakSet<object>();
 
-  // 让底层实际遍历对象并调用 toJSON；replacer 在同一次遍历中识别循环，避免提前读取 getter。
-  const config = {
-    bigint: true,
-    circularValue: onCycle === "skip" ? null : Error,
-    deterministic: resolveDeterministic(options?.sortKeys),
+  /** 返回该位置的 JSON 片段，undefined 表示省略对象字段或由数组调用者补 null。 */
+  const visit = (
+    raw: unknown,
+    key: string,
+    indent: string,
+    objectField: boolean,
+  ): string | undefined => {
+    const item = applyToJSON(raw, key);
+    // nullish 过滤只针对转换后的对象字段。用原生字符串转义保留任意 UTF-16 码元。
+    if (item === null) return objectField && filterNullish ? undefined : "null";
+    if (typeof item === "string") return JSON.stringify(item);
+    if (typeof item !== "object") {
+      // peer 只编码标量，特别是 BigInt 的完整十进制数字。函数转换结果不再查找 toJSON。
+      if (typeof item === "function" || typeof item === "symbol" || item === undefined)
+        return undefined;
+      return stringifyScalar(item);
+    }
+    const array = Array.isArray(item);
+    if (!array) {
+      const scalar = encodeBoxed(item);
+      if (scalar !== undefined) return scalar;
+    }
+    if (ancestors.has(item)) {
+      if (onCycle === "skip") return "null";
+      throw new JsonCircularReferenceError("");
+    }
+
+    // 先快照数组长度或对象键，在最终顺序中每次只读取当前属性值，再进入下一层。
+    ancestors.add(item);
+    const nextIndent = indent + gap;
+    const parts: string[] = [];
+    if (array) {
+      // 代理数组也只读取并转换一次 length，遍历时保持初始长度，忽略后续追加元素。
+      const length = Math.min(Number.MAX_SAFE_INTEGER, Math.floor(+item.length));
+      for (let i = 0; i < length; i++) {
+        parts.push(visit(item[i], String(i), nextIndent, false) ?? "null");
+      }
+    } else {
+      const keys = Object.keys(item);
+      if (comparator) keys.sort(comparator);
+      for (const name of keys) {
+        const field = visit(Reflect.get(item, name), name, nextIndent, true);
+        if (field !== undefined) parts.push(`${JSON.stringify(name)}:${gap ? " " : ""}${field}`);
+      }
+    }
+    // 离开分支便允许兄弟字段再次展开相同引用。异常会结束本次调用，其局部集合随之释放。
+    ancestors.delete(item);
+    const body =
+      gap && parts.length
+        ? `\n${nextIndent}${parts.join(`,\n${nextIndent}`)}\n${indent}`
+        : parts.join(",");
+    return array ? `[${body}]` : `{${body}}`;
   };
-  const stringify = configure(config);
 
-  // throw 策略需要追踪实际祖先链；skip 仅在过滤开启时添加 replacer，保持循环生成的 null 占位。
-  const filterNullish = options?.filterNullish ?? false;
-  const replacer =
-    onCycle === "throw" || filterNullish ? createStringifyReplacer(onCycle, filterNullish) : null;
-
-  return stringify(value, replacer, options?.space);
+  return visit(value, "", "", false);
 };
 
-/**
- * 安全版 JSON 序列化方法。
- *
- * 行为与 {@link jsonStringify} 完全一致，区别在于任何异常（包括
- * {@link JsonCircularReferenceError}、`TypeError`、`SyntaxError` 等）
- * 都不会抛出，而是直接返回 `null`。
- *
- * 适用场景：不关心失败原因、只需保证流程不中断的容错场景，
- * 例如日志输出、缓存写入、不可信数据的兜底处理。
- * 如需区分错误类型或获取错误信息，请使用会抛异常的 {@link jsonStringify}。
- *
- * 依赖说明：内部调用 {@link jsonStringify}，同样需要安装 peer 依赖 `safe-stable-stringify`。
- *
- * @param value 待序列化的值
- * @param options 序列化配置，见 {@link JsonStringifyOptions}
- * @returns 成功时返回 JSON 字符串；根值不可序列化时返回 `undefined`；任何异常时返回 `null`
- */
+/** 安全序列化。与 jsonStringify 使用同一遍历，异常返回 null，不可表示的根值返回 undefined。 */
 export const jsonStringifySafe = (
   value: unknown,
   options?: JsonStringifyOptions,
 ): string | null | undefined => {
-  // safe 入口明确以 null 表示失败，普通入口的原生或用户异常仍原样传播。
+  // 仅在 Safe 入口将原生、配置或用户回调异常转换为约定的失败值。
   try {
     return jsonStringify(value, options);
   } catch {

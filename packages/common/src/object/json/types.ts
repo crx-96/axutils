@@ -4,7 +4,7 @@
  * - `true` 或 `"asc"`：按 Unicode 升序排列。
  * - `"desc"`：按 Unicode 降序排列。
  * - 自定义比较函数：与 `Array.prototype.sort` 的比较函数语义一致。
- * - 不传或 `false`：保持对象原有 key 顺序（`Object.keys` 的插入顺序）。
+ * - 不传或 `false`：保持 `Object.keys` 的枚举顺序。
  */
 export type SortKeysOption = boolean | "asc" | "desc" | ((a: string, b: string) => number);
 
@@ -13,7 +13,6 @@ export type SortKeysOption = boolean | "asc" | "desc" | ((a: string, b: string) 
  *
  * - `"throw"`：抛出 `JsonCircularReferenceError`（默认行为）。
  * - `"skip"`：将循环引用字段值替换为 `null`（不删除字段，数组中同理）。
- *   注意：底层 `safe-stable-stringify` 的 skip 语义是 null 替代而非字段删除。
  *   替换发生在 nullish 过滤之后，因此生成的 null 占位仍然保留。
  */
 export type OnCycleOption = "throw" | "skip";
@@ -55,8 +54,7 @@ export interface JsonStringifyOptions {
 export interface JsonParseOptions {
   /**
    * 对解析结果中的对象 key 排序，见 {@link SortKeysOption}。
-   *
-   * 仅对对象自身的可枚举字符串 key 生效，数组元素顺序不受影响。
+   * 普通对象的数组索引键始终优先按数值升序枚举，其余字符串键才体现指定顺序。数组元素保持原序。
    */
   sortKeys?: SortKeysOption;
   /**

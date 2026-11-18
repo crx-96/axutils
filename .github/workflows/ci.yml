@@ -31,8 +31,8 @@ jobs:
             name: verify (windows-latest)
           # 在 Linux 补充开发版本下限与当前新版，不重复展开整个操作系统矩阵。
           - os: ubuntu-latest
-            node: "22.12.0"
-            name: verify (ubuntu-latest, Node 22.12.0)
+            node: "22.13.0"
+            name: verify (ubuntu-latest, Node 22.13.0)
           - os: ubuntu-latest
             node: "26"
             name: verify (ubuntu-latest, Node 26)

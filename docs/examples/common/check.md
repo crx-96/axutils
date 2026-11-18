@@ -207,14 +207,14 @@ console.log(isNil(null)); // true
 
 ### `isFunction(value)`
 
-判断值是否为函数，覆盖普通函数、箭头函数、`async` 函数、生成器函数和 `class` 构造函数。类型守卫收窄为无参可调用的宽泛函数类型。
+判断值是否为函数，覆盖普通函数、箭头函数、`async` 函数、生成器函数和 `class` 构造函数。类型守卫收窄为可调用函数或只能通过 `new` 调用的构造器；调用前需要确认实际签名。
 
 ```ts
 import { isFunction } from "@axutils/common/check/type";
 
 const value: unknown = () => "ok";
 if (isFunction(value)) {
-  console.log(value()); // ok
+  console.log(value.name);
 }
 console.log(isFunction(class Example {})); // true
 ```

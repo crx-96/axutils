@@ -1,5 +1,17 @@
 # @axutils/common
 
+## 2.2.0
+
+### Minor Changes
+
+- 改进 Axios 和 RxJS 客户端的并发去重、取消和重试。请求身份区分目标地址、查询参数及响应配置，重试保留初次传输的目标，一次性上传流遇错保留首次失败。
+
+  修复 JSON 排序和 getter 读取、缓存前缀隔离与旧记录迁移、深拷贝、查询解析及函数识别的边界行为。改进 Base64 编解码和跨块 UTF-8 的 MD5 计算。
+
+  修正日期时间对显式偏移、夏令时和历史时区的处理，时长字段支持原型 getter。Node 端的 ESM 与 CJS 共享存储和错误类，日期格式化保留各自的 date-fns 默认设置。UMD 附带本包和内置依赖的许可正文。
+
+  TypeScript 调用方请留意：`isFunction` 也识别只能用 `new` 调用的构造器，对 `unknown` 使用后需先确定签名再调用。Promise HTTP 的 `signal` 应传入 `AbortController.signal` 或具备取消监听能力的对象。Node ESM 项目如需沿用应用配置的 Axios 默认值和拦截器，请通过 `axiosInstance` 传入实例。
+
 ## 2.1.1
 
 ### Patch Changes

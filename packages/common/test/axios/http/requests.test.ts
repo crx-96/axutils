@@ -25,6 +25,43 @@ describe("axios/http 请求、错误与重试", () => {
     });
   });
 
+  it("request 按 URL、原型 method、自有选项的顺序各读取一次", async () => {
+    const reads: string[] = [];
+    class Input {
+      url = "/first";
+      get method(): "POST" {
+        reads.push("method");
+        return "POST";
+      }
+    }
+    const input = new Input();
+    const getter = (name: string, value: string) => () => {
+      reads.push(name);
+      return value;
+    };
+    Object.defineProperties(input, {
+      data: { enumerable: true, get: getter("data", "body") },
+      url: { enumerable: true, get: getter("url", "/first") },
+    });
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    await new PromiseHttpClient({ axiosInstance: instance }).request(input);
+    expect(reads).toEqual(["url", "method", "data"]);
+    expect(context.configs[0]).toMatchObject({ data: "body", method: "post", url: "/first" });
+  });
+
+  it("request 的 URL 无效时同步报错并跳过其余 getter", () => {
+    const input = {
+      get data(): never {
+        throw new Error("提前读取 data");
+      },
+      get method(): never {
+        throw new Error("提前读取 method");
+      },
+      url: null as never,
+    };
+    expect(() => new PromiseHttpClient().request(input)).toThrow("请求 url 必须是字符串");
+  });
+
   it("拼接 baseUrl，并传递 params、headers、data 和 timeout", async () => {
     const { context, instance } = createAxiosInstance((config) => response(config));
     const client = new PromiseHttpClient({

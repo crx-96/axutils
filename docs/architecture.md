@@ -94,7 +94,7 @@ Node 实现 → 不依赖宿主的通用机制
 
 包级 `scripts/build.mjs` 调用根 `scripts/build/package.mjs` 的 `buildPackage(packageRoot, options)`，仅提供包目录和可选 UMD 配置。共享脚本从 exports 的 ESM 产物目标定位源码，例如 `./date` 指向 `dist/date/index.js`，再对应 `src/date/index.ts`。不在包级脚本另外维护入口清单。
 
-每个 exports 项显式提供 `import.types/default` 和 `require.types/default`，同一 stem 分别对应 `.d.ts/.js` 与 `.d.cts/.cjs`，`types` 排在 `default` 前。源码相对模块引用使用 `.js`；内部文件也参与声明引用图，不能只保留公开入口的声明。
+每个 exports 项显式提供 `import.types/default` 和 `require.types/default`，同一 stem 分别对应 `.d.ts/.js` 与 `.d.cts/.cjs`。common 的 `import` 条件按 `types`、可选 `node`、`default` 排列。Node ESM 通过 `.node.mjs` 门面共享缓存和错误类。日期入口直接加载对应格式的实现，使 ESM 和 CJS 调用方均保留各自的 `date-fns` 默认设置。浏览器打包使用 `.js` 原生 ESM。源码相对模块引用使用 `.js`；内部文件也参与声明引用图，不能只保留公开入口的声明。
 
 每次构建清空本包 dist，依次生成 ESM、CJS、UMD（如声明）和类型。仅 external 已声明依赖与 Node 内置模块，编译器辅助代码随产物打包。UMD 将其入口使用的通用第三方依赖内置，入口与全局名由本包提供，`unpkg`/`jsdelivr` 与实际 UMD 产物一致。兼容目标见[开发环境](./development.md#环境)。
 

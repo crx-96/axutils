@@ -23,11 +23,12 @@ export function createUtcDate(
   year: number,
   month: number,
   day: number,
-  hour = 0,
-  minute = 0,
-  second = 0,
-  millisecond = 0,
+  ...time:
+    | []
+    | [hour: number, minute: number, second?: number | undefined, millisecond?: number | undefined]
 ): Date {
+  // 只有纯日期调用可省略整段时间。字段对象必须提供 hour、minute，传 undefined 也需校验。
+  const [hour, minute, second = 0, millisecond = 0] = time.length ? time : [0, 0];
   // 先检查整数及时间范围，再借助 Date 验证不同月份的实际日数和可表示年份。
   assertInteger(year, "year");
   assertInteger(month, "month");
@@ -58,9 +59,26 @@ export function createUtcDate(
   return date;
 }
 
-/** 判断本 Realm 的 Date 是否含有可表示的时间值。 */
+/** 序列化 UTC 对齐的 ISO 字段，保留扩展年份和非零毫秒，后缀由字段所代表的时区决定。 */
+export function isoDateTimeString(date: Date, suffix = ""): string {
+  const iso = date.toISOString();
+  return iso.slice(0, iso.endsWith(".000Z") ? -5 : -1) + suffix;
+}
+
+/** 通过 Date 内部槽识别跨 Realm 实例，普通字段对象继续走各自的构造校验。 */
+export function isDateObject(value: unknown): value is Date {
+  if (value === null || typeof value !== "object") return false;
+  try {
+    Date.prototype.getTime.call(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 检查已识别的 Date 的内部时间值，包括其他 Realm 创建的 Date。 */
 export function isValidDate(value: Date): boolean {
-  return value instanceof Date && Number.isFinite(value.getTime());
+  return Number.isFinite(Date.prototype.getTime.call(value));
 }
 
 /** 校验 Date 并按年到毫秒的稳定顺序读取 UTC 字段；不读取宿主本地时间。 */

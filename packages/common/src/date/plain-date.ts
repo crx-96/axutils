@@ -1,4 +1,4 @@
-import { formatInTimeZone } from "date-fns-tz";
+import { MS_PER_DAY } from "./constant.js";
 import type { DateFormatPattern, Timezone } from "./format.js";
 import {
   addYearMonths,
@@ -6,9 +6,12 @@ import {
   dateToUtcFields,
   dateToZonedDate,
   daysInGregorianMonth,
-  formatOptions,
+  durationValue,
+  formatZonedDate,
   invalid,
+  isDateObject,
   parseDateString,
+  toEpochMilliseconds,
 } from "./internal.js";
 import type {
   DateFormatOptions,
@@ -20,7 +23,7 @@ import type {
 /** 将支持的日期输入规范为当天 UTC 午夜；Date 输入只读取 UTC 字段并生成副本。 */
 function fromInput(input: PlainDateInput): Date {
   // Date 和文本分别走字段提取与严格解析，不借助宿主本地日期解析。
-  if (input instanceof Date) {
+  if (isDateObject(input)) {
     const fields = dateToUtcFields(input);
     return createUtcDate(fields.year, fields.month, fields.day);
   }
@@ -35,23 +38,24 @@ function fromInput(input: PlainDateInput): Date {
   return createUtcDate(input.year, input.month, input.day);
 }
 
-/** 读取日期运算所需字段，缺省为 0；时间字段由此调用方有意忽略。 */
-function durationValue(duration: DurationFields, name: keyof DurationFields): number {
-  const value = duration[name] ?? 0;
-  if (!Number.isInteger(value) || !Number.isFinite(value)) {
-    invalid(`${name} 必须是有限整数`);
-  }
-  return value;
-}
-
 /** 先进行年月夹紧，再增加整日；最终构造再次检查 Date 范围。 */
-function addDate(date: Date, duration: DurationFields): Date {
+function addDate(date: Date, duration: DurationFields, direction = 1): Date {
   const years = durationValue(duration, "years");
   const months = durationValue(duration, "months");
   const days = durationValue(duration, "days");
-  let result = addYearMonths(date, years, months);
-  result = new Date(result.getTime() + days * 86_400_000);
+  let result = addYearMonths(date, direction * years, direction * months);
+  result = new Date(result.getTime() + direction * days * MS_PER_DAY);
   return createUtcDate(result.getUTCFullYear(), result.getUTCMonth() + 1, result.getUTCDate());
+}
+
+/** 从输入日期直接移至周首或周末，只要求最终结果位于 Date 范围内。 */
+function weekBoundary(date: Date, weekStartsOn: number, targetDay: 0 | 6): Date {
+  if (!Number.isInteger(weekStartsOn) || weekStartsOn < 0 || weekStartsOn > 6) {
+    invalid("weekStartsOn 必须是 0 到 6 的整数");
+  }
+  // 用周内相对序号算最终偏移，避免先构造一个本身不可表示的周首。
+  const dayInWeek = (date.getUTCDay() - weekStartsOn + 7) % 7;
+  return new Date(toEpochMilliseconds(date.getTime() + (targetDay - dayInWeek) * MS_PER_DAY));
 }
 
 /** 比较两个日期的 UTC 午夜毫秒值，忽略输入 Date 的时间部分。 */
@@ -94,12 +98,7 @@ export const PlainDate = {
 
   /** 日期减法。 */
   subtract(date: PlainDateInput, duration: DurationFields): Date {
-    // biome-ignore assist/source/useSortedKeys: 保留日期字段 getter 的读取顺序。
-    return addDate(fromInput(date), {
-      years: -(duration.years ?? 0),
-      months: -(duration.months ?? 0),
-      days: -(duration.days ?? 0),
-    });
+    return addDate(fromInput(date), duration, -1);
   },
 
   /** 返回 date - other 的日历日差，结果只含 days 字段。 */
@@ -169,16 +168,7 @@ export const PlainDate = {
       weekStartsOn?: number;
     } = {},
   ): Date {
-    const value = fromInput(date);
-    const weekStartsOn = options.weekStartsOn ?? 1;
-    // 周起点使用 Date 的星期编码（周日为 0），先校验再回退到本周起点。
-    if (!Number.isInteger(weekStartsOn) || weekStartsOn < 0 || weekStartsOn > 6) {
-      invalid("weekStartsOn 必须是 0 到 6 的整数");
-    }
-    const current = value.getUTCDay();
-    const offset = (current - weekStartsOn + 7) % 7;
-    const epoch = value.getTime() - offset * 86_400_000;
-    return new Date(epoch);
+    return weekBoundary(fromInput(date), options.weekStartsOn ?? 1, 0);
   },
 
   /** 获取所在周的最后一天。 */
@@ -189,7 +179,7 @@ export const PlainDate = {
       weekStartsOn?: number;
     } = {},
   ): Date {
-    return new Date(PlainDate.startOfWeek(date, options).getTime() + 6 * 86_400_000);
+    return weekBoundary(fromInput(date), options.weekStartsOn ?? 1, 6);
   },
 
   /** 输出 ISO 日期；0–9999 年使用四位年份，其余年份使用带符号的六位扩展年份。 */
@@ -209,6 +199,6 @@ export const PlainDate = {
     pattern: DateFormatPattern,
     options: DateFormatOptions = {},
   ): string {
-    return formatInTimeZone(fromInput(date), "UTC", pattern, formatOptions(options.locale));
+    return formatZonedDate(fromInput(date), "UTC", pattern, options.locale);
   },
 };

@@ -1,3 +1,5 @@
+import { normalizeExpired, toExpiresAt } from "../../object/storage/record.js";
+
 /** Node 端缓存 key 处理函数。 */
 export type StorageKeyHandler = (key: string) => string;
 
@@ -11,40 +13,26 @@ export interface StorageOptions {
   key?: StorageKeyHandler;
 }
 
-const STORAGE_RECORD_MARKER = "@axutils/common/node-storage";
-
+/** Node 记录直接持有业务值。 */
 interface StorageRecord {
-  marker: typeof STORAGE_RECORD_MARKER;
-  prefix: string;
+  /** 毫秒时间戳，0 表示永不过期。 */
   expiresAt: number;
+  /** 调用方传入的原引用。 */
   data: unknown;
 }
 
-// 所有 Node StorageUtils 实例共享同一个进程内 Map，行为接近同一进程中的缓存服务。
-const memoryStorage = new Map<string, StorageRecord>();
+/** 同一前缀的实例共享数据和清理进度。 */
+interface Namespace {
+  /** 以转换后的键查找记录。 */
+  records: Map<string, StorageRecord>;
+  /** 将一次到期清理分摊到连续写入，避免大命名空间在单次 set 中被完整扫描。 */
+  sweep?: IterableIterator<[string, StorageRecord]>;
+  /** 最早可能到期的时间，无待清理记录时为 Infinity。 */
+  nextExpiry: number;
+}
 
-const normalizeExpired = (expired: number | undefined): number => {
-  if (expired === undefined) {
-    return 0;
-  }
-  if (!Number.isFinite(expired)) {
-    throw new TypeError("expired 必须是有限数字");
-  }
-  return expired;
-};
-
-const toExpiresAt = (expired: number | undefined): number => {
-  const normalized = normalizeExpired(expired);
-  if (normalized <= 0) {
-    return 0;
-  }
-
-  const expiresAt = Math.floor(Date.now() + normalized * 1000);
-  if (!Number.isFinite(expiresAt) || !Number.isSafeInteger(expiresAt)) {
-    throw new RangeError("expired 计算结果超出安全时间范围");
-  }
-  return expiresAt;
-};
+/** 非空命名空间的进程级索引。 */
+const memoryStorage = new Map<string, Namespace>();
 
 /**
  * Node 端高性能进程内缓存。
@@ -69,45 +57,57 @@ export class StorageUtils<Key extends string = string> {
    * `expired` 单位为秒，小于等于 0 表示不过期；计算结果超出安全时间范围时抛出 `RangeError`。
    */
   set<T = unknown>(key: Key, value: T, expired?: number): void {
-    memoryStorage.set(this.getStorageKey(key), {
-      data: value,
-      expiresAt: toExpiresAt(expired === undefined ? this.expired : expired),
-      marker: STORAGE_RECORD_MARKER,
-      prefix: this.prefix,
-    });
+    const storageKey = this.getStorageKey(key);
+    const expiresAt = toExpiresAt(expired === undefined ? this.expired : expired);
+    let namespace = memoryStorage.get(this.prefix);
+    if (!namespace) {
+      namespace = { nextExpiry: Infinity, records: new Map() };
+      memoryStorage.set(this.prefix, namespace);
+    }
+    const now = Date.now();
+    if (!namespace.sweep && namespace.nextExpiry <= now) {
+      namespace.sweep = namespace.records.entries();
+      namespace.nextExpiry = Infinity;
+    }
+    // 每次写入最多检查八条，比新键增长得快，同时限制单次调用的清理成本。
+    for (let remaining = 8; namespace.sweep && remaining > 0; remaining--) {
+      const next = namespace.sweep.next();
+      if (next.done) {
+        delete namespace.sweep;
+        break;
+      }
+      const [storedKey, record] = next.value;
+      if (record.expiresAt === 0) continue;
+      if (record.expiresAt <= now) namespace.records.delete(storedKey);
+      else namespace.nextExpiry = Math.min(namespace.nextExpiry, record.expiresAt);
+    }
+    namespace.records.set(storageKey, { data: value, expiresAt });
+    if (expiresAt !== 0) namespace.nextExpiry = Math.min(namespace.nextExpiry, expiresAt);
   }
 
-  /** 读取缓存；不存在或过期时返回 `null`。 */
+  /** 读取原引用并惰性删除已经到期的记录。 */
   get<T = unknown>(key: Key): T | null {
     const storageKey = this.getStorageKey(key);
-    const record = memoryStorage.get(storageKey);
-
-    if (record === undefined || record.marker !== STORAGE_RECORD_MARKER) {
-      return null;
-    }
-    if (record.prefix !== this.prefix) {
-      return null;
-    }
+    const record = memoryStorage.get(this.prefix)?.records.get(storageKey);
+    if (!record) return null;
     if (record.expiresAt !== 0 && record.expiresAt <= Date.now()) {
-      memoryStorage.delete(storageKey);
+      this.remove(key);
       return null;
     }
-
     return record.data as T;
   }
 
-  /** 删除一个缓存条目。 */
+  /** 删除条目，并释放已经清空的命名空间。 */
   remove(key: Key): void {
-    memoryStorage.delete(this.getStorageKey(key));
+    const storageKey = this.getStorageKey(key);
+    const namespace = memoryStorage.get(this.prefix);
+    namespace?.records.delete(storageKey);
+    if (namespace?.records.size === 0) memoryStorage.delete(this.prefix);
   }
 
   /** 只清空当前 prefix 命名空间，不影响其他缓存实例。 */
   clear(): void {
-    for (const [key, record] of memoryStorage) {
-      if (record.marker === STORAGE_RECORD_MARKER && record.prefix === this.prefix) {
-        memoryStorage.delete(key);
-      }
-    }
+    memoryStorage.delete(this.prefix);
   }
 
   /** 读取安全版本：任意异常都返回 `null`。 */
@@ -149,7 +149,7 @@ export class StorageUtils<Key extends string = string> {
     }
   }
 
-  /** 无处理函数时直接拼接；有处理函数时在实例生命周期内缓存 `prefix + key` 的处理结果。 */
+  /** 转换结果在当前命名空间内定位记录，并在实例生命周期内复用。 */
   private getStorageKey(key: Key): string {
     if (this.keyHandler === undefined || this.keyCache === undefined) {
       return this.prefix + key;

@@ -14,6 +14,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildBrowserConsumer } from "./consumer/browser-bundle.mjs";
 import { consumerTypes } from "./consumer/types.mjs";
 
 const require = createRequire(import.meta.url);
@@ -54,6 +55,26 @@ try {
   );
   // 使用相对路径，避免 GNU tar 将 Windows 盘符解析为远程主机。
   run("tar", ["-xf", "common.tgz"], temporary);
+  const packed = join(temporary, "package");
+  const notices = JSON.parse(readFileSync(join(packed, "dist/THIRD-PARTY-LICENSES.json"), "utf8"));
+  const umd = readFileSync(join(packed, manifest.unpkg), "utf8");
+  const sources = JSON.parse(readFileSync(join(packed, `${manifest.unpkg}.map`), "utf8")).sources;
+  // sourcemap 独立于许可生成器，也能查出 tslib 这样的传递依赖被漏收。
+  const bundled = sources.flatMap((path) => {
+    const parts = path.split("/node_modules/");
+    return parts.length === 1 ? [] : [parts.at(-1).match(/^(?:@[^/]+\/)?[^/]+/u)[0]];
+  });
+  assert.ok(bundled.length);
+  assert.deepEqual([...new Set(bundled)].sort(), notices.map(({ name }) => name).sort());
+  assert.ok(umd.includes(readFileSync(join(packed, "dist/LICENSE"), "utf8").trim()));
+  for (const { name, version, text } of notices) {
+    assert.ok(
+      text.trim() &&
+        umd.includes(`${name}@${version}`) &&
+        umd.includes(text.replaceAll("*/", "* /")),
+      name,
+    );
+  }
   const groups = new Map();
   for (const [subpath, dependencies] of Object.entries(peers)) {
     const key = dependencies.join(",");
@@ -92,6 +113,21 @@ try {
     const env = { ...process.env, NODE_PATH: "" };
     run(runtime, [join(fixture, "runtime.mjs")], fixture, env);
     run(runtime, [join(fixture, "runtime.cjs")], fixture, env);
+    cpSync(new URL("./consumer/mixed-runtime.mjs", import.meta.url), join(fixture, "mixed.mjs"));
+    for (const first of ["esm", "cjs"]) run(runtime, ["mixed.mjs", first, ...names], fixture, env);
+    if (subpaths.includes(".")) {
+      await buildBrowserConsumer(fixture);
+      run(
+        runtime,
+        [
+          "--input-type=module",
+          "-e",
+          'import {color,lazy} from "./bundle/main.mjs"; if (color !== "#808080" || !await lazy()) throw Error("浏览器 ESM 分块消费失败");',
+        ],
+        fixture,
+        env,
+      );
+    }
     const typeFiles = ["types.mts", "types.cts"];
     for (const format of ["mts", "cts"]) {
       writeFileSync(join(fixture, `types.${format}`), consumerTypes(manifest, subpaths, format));
@@ -108,6 +144,24 @@ try {
         typeFiles.push(example);
       }
     }
+    const browserTypes = [];
+    if (dependencies.includes("axios")) {
+      // 两种 Axios 声明继续接受真实的浏览器 Fetch API，不能把宿主类型一律替换成 never。
+      for (const format of ["mts", "cts"]) {
+        const filename = `web-fetch.${format}`;
+        writeFileSync(
+          join(fixture, filename),
+          [
+            'type Env = NonNullable<import("axios").AxiosRequestConfig["env"]>;',
+            "const env: Env = { Request, fetch };",
+            'const buildRequest = (init: RequestInit): Request => new env.Request!(new Request("/"), init);',
+            "const buildResponse = (body: Blob | FormData, init: ResponseInit): Response => new env.Response!(body, init);",
+            "void [buildRequest, buildResponse];",
+          ].join("\n"),
+        );
+        browserTypes.push(filename);
+      }
+    }
     writeFileSync(
       join(fixture, "tsconfig.json"),
       JSON.stringify({
@@ -121,10 +175,37 @@ try {
           target: "ES2020",
           types: [],
         },
-        files: typeFiles,
+        files: [...typeFiles, ...browserTypes],
       }),
     );
     run(process.execPath, [tsc, "-p", join(fixture, "tsconfig.json")], fixture, env);
+    if (dependencies.includes("axios")) {
+      // 用真正的 Node 14 声明替代开发机的 Node 24 类型，严格禁止 DOM 或全局 Fetch 混入。
+      const typeRoot = join(modules, "@types");
+      mkdirSync(typeRoot);
+      symlinkSync(
+        dirname(require.resolve("node14-types/package.json")),
+        join(typeRoot, "node"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+      writeFileSync(
+        join(fixture, "node-only.ts"),
+        "// @ts-expect-error Node 14 未声明浏览器文档\nvoid document;\n// @ts-expect-error Node 14 未声明全局 Fetch 请求\nvoid Request;\n",
+      );
+      writeFileSync(
+        join(fixture, "node14.json"),
+        JSON.stringify({
+          compilerOptions: {
+            // @types/node 14 引入 esnext.intl，TS 7 的该标准库依赖 ES2021.Intl 的 DateTimeRangeFormatPart。
+            lib: ["ES2020", "ES2021.Intl"],
+            types: ["node"],
+          },
+          extends: "./tsconfig.json",
+          files: [...typeFiles, "node-only.ts"],
+        }),
+      );
+      run(process.execPath, [tsc, "-p", join(fixture, "node14.json")], fixture, env);
+    }
     console.log(`打包消费通过：${subpaths.join("、")}；peer：${dependencies.join(", ") || "无"}`);
   }
 } finally {

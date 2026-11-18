@@ -10,6 +10,14 @@ describe("date/Instant", () => {
     expect(Instant.fromEpochMilliseconds(1_718_445_600_000)).toBe(1_718_445_600_000);
   });
 
+  it.each(["t", " "])("接受分隔符 %j，仍要求以明确偏移结尾", (separator) => {
+    const local = `2024/06/15${separator}10:00:00.123456789`;
+    expect(Instant.from(`${local}+05:45`)).toBe(Date.parse("2024-06-15T04:15:00.123Z"));
+    expect(() => Instant.from(local)).toThrow(RangeError);
+    expect(() => Instant.from(`${local}Z[UTC]`)).toThrow(RangeError);
+    expect(() => Instant.from(`${local}+14:01`)).toThrow(RangeError);
+  });
+
   it("按实际毫秒计算加法和差值", () => {
     const instant = Instant.fromEpochMilliseconds(0);
     expect(Instant.add(instant, { hours: 24 })).toBe(86_400_000);

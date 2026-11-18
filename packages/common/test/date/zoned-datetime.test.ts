@@ -9,6 +9,65 @@ describe("date/ZonedDateTime", () => {
     expect(ZonedDateTime.toString(value)).toContain("+08:00");
   });
 
+  it("冲突时偏移确定 epoch，方括号时区用于显示", () => {
+    const timezone = "America/New_York";
+    for (const offset of ["Z", "+00:00", "-00:00", "+05:45", "+14:00", "-14:00"]) {
+      const text = `2024-03-10T02:30:00.123${offset}`;
+      expect(ZonedDateTime.from(`${text}[${timezone}]`, { timezone: "UTC" })).toEqual({
+        epochMs: Date.parse(text),
+        timezone,
+      });
+    }
+    expect(ZonedDateTime.from("0000-01-01T00:00:00+14:00[UTC]").epochMs).toBe(
+      Date.parse("-000001-12-31T10:00:00Z"),
+    );
+    expect(() => ZonedDateTime.from("2024-03-10T02:30:00+14:01[UTC]")).toThrow(RangeError);
+    expect(() => ZonedDateTime.from("2024-03-10T02:30:00Z[Mars/Phobos]")).toThrow(RangeError);
+  });
+
+  it("序列化保留公元零年、毫秒和可精确表示的本地偏移", () => {
+    for (const [input, expected] of [
+      ["0000-01-01T00:00:00Z[UTC]", "0000-01-01T00:00:00Z"],
+      ["0000-02-29T04:30:00.007Z[Etc/GMT-1]", "0000-02-29T05:30:00.007+01:00"],
+      ["9999-12-31T23:59:59.999-01:00[Etc/GMT+1]", "9999-12-31T23:59:59.999-01:00"],
+      ["9999-12-31T23:59:59.999Z[Asia/Tokyo]", "9999-12-31T23:59:59.999Z"],
+    ] as const) {
+      const value = ZonedDateTime.from(input);
+      const text = ZonedDateTime.toString(value);
+      expect(text).toBe(expected);
+      expect(ZonedDateTime.from(text).epochMs).toBe(value.epochMs);
+    }
+  });
+
+  it("蒙罗维亚历史偏移含秒时输出原时刻的 Z 文本", () => {
+    for (const [epochMs, expected] of [
+      [-1, "1969-12-31T23:59:59.999Z"],
+      [0, "1970-01-01T00:00:00Z"],
+      [123, "1970-01-01T00:00:00.123Z"],
+    ] as const) {
+      const text = ZonedDateTime.toString({ epochMs, timezone: "Africa/Monrovia" });
+      expect(text).toBe(expected);
+      expect(ZonedDateTime.from(text).epochMs).toBe(epochMs);
+    }
+    expect(() => ZonedDateTime.from("1969-12-31T23:15:30-00:44:30")).toThrow(RangeError);
+  });
+
+  it("扩展年回退使用带符号的 UTC 年份，公开文本输入仍要求四位年", () => {
+    for (const text of [
+      "-000001-12-31T10:00:00.003Z",
+      "+010000-06-15T12:00:00Z",
+      "-271821-04-20T00:00:00Z",
+      "+275760-09-13T00:00:00Z",
+    ]) {
+      const epochMs = Date.parse(text);
+      expect(ZonedDateTime.toString({ epochMs, timezone: "Asia/Tokyo" })).toBe(text);
+      expect(() => ZonedDateTime.from(text)).toThrow(RangeError);
+      expect(() => ZonedDateTime.toString({ epochMs, timezone: "Mars/Phobos" })).toThrow(
+        RangeError,
+      );
+    }
+  });
+
   it("接受斜杠分隔日期和 Z 后缀", () => {
     const value = ZonedDateTime.from("2024/06/15T10:00:00+08:00[Asia/Shanghai]");
     expect(value.epochMs).toBe(Date.parse("2024-06-15T02:00:00Z"));

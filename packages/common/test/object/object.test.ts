@@ -151,6 +151,139 @@ describe("object/object", () => {
     expect(deepClone(typedArray)).toBe(typedArray);
   });
 
+  it("保留内建子类及私有状态，包括来自其他 Realm 的子类", () => {
+    class Lines extends Array<number> {
+      #tax = 2;
+      total() {
+        return this.reduce((sum, line) => sum + line, this.#tax);
+      }
+    }
+    const lines = new Lines(4, 8);
+    const instances = [
+      lines,
+      new (class extends Map {})(),
+      new (class extends Date {})(),
+      new (class extends RegExp {})("x"),
+      new (class extends Set {})(),
+      runInContext("new (class extends Array {})()", createContext({})),
+    ];
+    for (const instance of instances) expect(deepClone(instance)).toBe(instance);
+    expect(deepClone({ lines }).lines.total()).toBe(14);
+  });
+
+  it("插入普通原型仍独立复制数组、元素及其他支持的内建值", () => {
+    const item = { id: 1 };
+    const source = {
+      array: [item],
+      date: new Date(1234),
+      map: new Map([[item, item]]),
+      regexp: /test/gi,
+      set: new Set([item]),
+    };
+    source.regexp.lastIndex = 2;
+    for (const value of Object.values(source)) {
+      Object.setPrototypeOf(value, Object.create(Object.getPrototypeOf(value)));
+    }
+
+    const clone = deepClone(source);
+    expect(clone.array).not.toBe(source.array);
+    expect(clone.array[0]).not.toBe(item);
+    expect(clone.array).toEqual([{ id: 1 }]);
+    expect(clone.date).not.toBe(source.date);
+    expect(clone.date.getTime()).toBe(1234);
+    expect(clone.regexp).not.toBe(source.regexp);
+    expect(clone.regexp).toEqual(/test/gi);
+    expect(clone.regexp.lastIndex).toBe(2);
+    expect(clone.map).not.toBe(source.map);
+    expect(clone.set).not.toBe(source.set);
+    const [key] = clone.map.keys();
+    expect(key).toBe(clone.array[0]);
+    expect([...clone.map.values()][0]).toBe(key);
+    expect([...clone.set][0]).toBe(key);
+  });
+
+  it("私有字段子类上插入普通原型仍保留原实例", () => {
+    class Items extends Array {
+      #id = 1;
+      id() {
+        return this.#id;
+      }
+    }
+    const source = new Items();
+    Object.setPrototypeOf(source, Object.create(Items.prototype));
+    const clone = deepClone(source);
+    expect(clone).toBe(source);
+    expect(clone.id()).toBe(1);
+  });
+
+  it("普通 Proxy 首次与再次复制具有相同的反射顺序", () => {
+    const events: string[] = [];
+    const target = { first: 1, second: 2 };
+    const source = new Proxy(target, {
+      get(obj, key, receiver) {
+        events.push(`get ${String(key)}`);
+        return Reflect.get(obj, key, receiver);
+      },
+      getOwnPropertyDescriptor(obj, key) {
+        events.push(`descriptor ${String(key)}`);
+        return Reflect.getOwnPropertyDescriptor(obj, key);
+      },
+      getPrototypeOf(obj) {
+        events.push("prototype");
+        return Reflect.getPrototypeOf(obj);
+      },
+      has(obj, key) {
+        events.push(`has ${String(key)}`);
+        return Reflect.has(obj, key);
+      },
+      ownKeys(obj) {
+        events.push("keys");
+        return Reflect.ownKeys(obj);
+      },
+    });
+    for (let i = 0; i < 2; i++) {
+      events.length = 0;
+      const clone = deepClone(source);
+      expect(events).toEqual([
+        "prototype",
+        "keys",
+        "descriptor first",
+        "descriptor second",
+        "get first",
+        "get second",
+      ]);
+      expect(clone).toEqual(target);
+      expect(Object.is(clone, source)).toBe(false);
+    }
+  });
+
+  it("分类时跳过本地和其他 Realm 普通对象的标签 getter", () => {
+    const foreign: object = runInContext("({ id: 1 })", createContext({}));
+    for (const source of [{ id: 1 }, foreign]) {
+      Object.defineProperty(source, Symbol.toStringTag, {
+        get() {
+          throw new Error("分类不能读取标签");
+        },
+      });
+      const clone = deepClone(source);
+      expect(clone).toEqual({ id: 1 });
+      expect(Object.getPrototypeOf(clone)).toBe(Object.prototype);
+    }
+  });
+
+  it("重复复制时重新读取属性、共享关系和当前原型", () => {
+    const row = { count: 1 };
+    const first = deepClone(row);
+    row.count = 2;
+    Object.setPrototypeOf(row, null);
+    const second = deepClone([row, row]);
+    expect(first.count).toBe(1);
+    expect(second[0]?.count).toBe(2);
+    expect(Object.getPrototypeOf(second[0])).toBeNull();
+    expect(second[0]).toBe(second[1]);
+    expect(second[0]).not.toBe(row);
+  });
+
   it("先冻结可枚举键，再按键顺序求值 getter", () => {
     const reads: string[] = [];
     const source: Record<string, unknown> = {};

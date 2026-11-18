@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { Duration } from "../../src/date";
 
@@ -11,6 +12,57 @@ describe("date/Duration", () => {
       minutes: 2,
       seconds: -30,
     });
+  });
+
+  it.runIf(runInNewContext("typeof Temporal === 'object'"))(
+    "读取真实 Temporal.Duration 的原型字段",
+    () => {
+      const duration = runInNewContext(
+        "Temporal.Duration.from({days: 3, hours: 2, microseconds: 1})",
+      );
+      expect(Duration.from(duration)).toStrictEqual({
+        days: 3,
+        hours: 2,
+        milliseconds: 0,
+        minutes: 0,
+        months: 0,
+        seconds: 0,
+        years: 0,
+      });
+    },
+  );
+
+  it("复制继承及非枚举的支持单位，忽略额外字段", () => {
+    const input = Object.create({
+      days: 3,
+      get extra() {
+        throw new Error("无关字段");
+      },
+    });
+    Object.defineProperty(input, "hours", { value: 2 });
+    expect(Duration.from(input)).toStrictEqual({ days: 3, hours: 2 });
+    expect(Duration.from({ minutes: undefined, seconds: 0 })).toStrictEqual({ seconds: 0 });
+  });
+
+  it("各运算校验且只使用 getter 的第一次读取", () => {
+    for (const [operation, expected] of [
+      [Duration.from, { seconds: 2 }],
+      [Duration.negated, { seconds: -2 }],
+      [Duration.abs, { seconds: 2 }],
+      [Duration.totalMilliseconds, 2000],
+      [(d) => Duration.add(d, { seconds: 1 }), { seconds: 3 }],
+      [(d) => Duration.subtract({ seconds: 1 }, d), { seconds: -1 }],
+    ] as const satisfies readonly (readonly [(d: { seconds: number }) => unknown, unknown])[]) {
+      let reads = 0;
+      expect(
+        operation({
+          get seconds() {
+            return ++reads === 1 ? 2 : NaN;
+          },
+        }),
+      ).toEqual(expected);
+      expect(reads).toBe(1);
+    }
   });
 
   it("在毫秒与完整字段之间转换", () => {

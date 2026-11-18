@@ -1,6 +1,14 @@
+import { fr } from "date-fns/locale/fr";
 import { fromZonedTime } from "date-fns-tz";
-import { describe, expect, it } from "vitest";
-import { Instant, PlainDate, PlainDateTime, ZonedDateTime } from "../../../src/date/index.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  DATE_FORMAT,
+  Instant,
+  Now,
+  PlainDate,
+  PlainDateTime,
+  ZonedDateTime,
+} from "../../../src/date/index.js";
 
 describe(`date/独立宿主 ${process.env.TZ}`, () => {
   it("进程启动时已经应用请求的宿主时区", () => {
@@ -17,6 +25,67 @@ describe(`date/独立宿主 ${process.env.TZ}`, () => {
     expect(ZonedDateTime.from(wallTime, { timezone: "UTC" }).epochMs).toBe(expected);
     const date = wallTime.slice(0, 10);
     expect(PlainDate.toZonedDateTime(date, "UTC").epochMs).toBe(Date.parse(`${date}T00:00:00Z`));
+  });
+
+  it.each([
+    ["2024-03-10T02:30:00.123", "2024-03-09T18:30:00.123Z"],
+    ["2011-12-30T02:30:00.123", "2011-12-29T18:30:00.123Z"],
+  ])("格式化和反向读取 %s 的 UTC 与上海墙上字段", (wall, shanghaiInstant) => {
+    for (const [timezone, instant] of [
+      ["UTC", `${wall}Z`],
+      ["Asia/Shanghai", shanghaiInstant],
+    ] as const) {
+      const date = new Date(instant);
+      const zdt = Instant.toZonedDateTime(date.getTime(), timezone);
+      const offset = timezone === "UTC" ? "Z" : "+08:00";
+      expect(ZonedDateTime.toString(zdt)).toBe(wall + offset);
+      expect(ZonedDateTime.format(zdt, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")).toBe(wall + offset);
+      expect(PlainDateTime.format(date, DATE_FORMAT.DATE_TIME_MS, { timezone })).toBe(
+        wall.replace("T", " "),
+      );
+      expect(PlainDate.format(wall.slice(0, 10), DATE_FORMAT.DATE)).toBe(wall.slice(0, 10));
+      expect(ZonedDateTime.toPlainDateTime(zdt).toISOString()).toBe(`${wall}Z`);
+      expect(ZonedDateTime.toPlainDate(zdt).toISOString()).toBe(
+        `${wall.slice(0, 10)}T00:00:00.000Z`,
+      );
+      expect(ZonedDateTime.toPlainTime(zdt).toISOString()).toBe("1970-01-01T02:30:00.123Z");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(date);
+        expect(Now.plainDateTimeISO(timezone).toISOString()).toBe(`${wall}Z`);
+        expect(Now.plainDateISO(timezone).toISOString()).toBe(`${wall.slice(0, 10)}T00:00:00.000Z`);
+        expect(Now.plainTimeISO(timezone).toISOString()).toBe("1970-01-01T02:30:00.123Z");
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  });
+
+  it("回拨两次 01:30 的偏移、时区名称与时间戳对应各自瞬间", () => {
+    for (const [offset, utc] of [
+      ["-04:00", "05:30"],
+      ["-05:00", "06:30"],
+    ]) {
+      const timezone = "America/New_York";
+      const iso = `2024-11-03T01:30:00.007${offset}`;
+      const epoch = Date.parse(`2024-11-03T${utc}:00.007Z`);
+      const zdt = ZonedDateTime.from(`${iso}[${timezone}]`, { timezone: "UTC" });
+      expect(zdt).toStrictEqual({ epochMs: epoch, timezone });
+      expect(ZonedDateTime.toString(zdt)).toBe(iso);
+      expect(ZonedDateTime.format(zdt, "PPPP 'à' p", { locale: fr })).toBe(
+        "dimanche 3 novembre 2024 à 01:30",
+      );
+      const name = new Intl.DateTimeFormat("fr", { timeZone: timezone, timeZoneName: "long" })
+        .formatToParts(epoch)
+        .find((p) => p.type === "timeZoneName")?.value;
+      expect(
+        ZonedDateTime.format(zdt, "EEEE d MMMM yyyy HH:mm xxx OOOO zzzz RRRR-II-i 'X''z' t T", {
+          locale: fr,
+        }),
+      ).toBe(
+        `dimanche 3 novembre 2024 01:30 ${offset} GMT${offset} ${name} 2024-44-7 X'z ${Math.floor(epoch / 1000)} ${epoch}`,
+      );
+    }
   });
 
   it("偏移分钟独立校验，同时保留正负 14:00 边界", () => {

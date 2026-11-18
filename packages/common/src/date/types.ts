@@ -75,7 +75,7 @@ export interface DurationFields {
 export interface DateFormatOptions {
   /** date-fns locale 对象；省略时使用该依赖的默认 locale。 */
   locale?: Locale | undefined;
-  /** 显示时区；PlainDate 固定 UTC 并忽略此值，PlainDateTime 默认 UTC，ZonedDateTime 默认自身时区。 */
+  /** 显示时区。PlainDate 和 ISO_UTC 预设固定输出 UTC，PlainDateTime 默认 UTC，ZonedDateTime 默认关联时区。 */
   timezone?: Timezone | undefined;
 }
 

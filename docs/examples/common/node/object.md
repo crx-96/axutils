@@ -49,11 +49,11 @@ Node 缓存没有 `AxutilsCommon` UMD 用法；浏览器应使用 [通用缓存�
 
 ## `new StorageUtils<Key = string>(options?)`
 
-创建 Node 进程内缓存实例。所有实例共享同一个进程内 Map，但 `prefix` 命名空间相互隔离。
+创建 Node 进程内缓存实例。同一 `prefix` 的实例共享一张 Map，不同前缀各自保存和删除记录。
 
 - `expired`：默认过期时间，单位为秒；小于等于 `0` 表示不过期；非有限值抛 `TypeError`。
 - `prefix`：默认空字符串，用于隔离业务 key。
-- `key`：可选 key 处理函数，接收已经拼接 `prefix` 的字符串，返回底层 Map key。
+- `key`：可选 key 处理函数，接收已经拼接 `prefix` 的字符串，返回值用于定位该前缀内的记录；同前缀内相同转换结果对应同一条记录。
 
 ```ts
 import { StorageUtils } from "@axutils/common/node/object/storage";
@@ -99,7 +99,7 @@ console.log(storage.get("job") === value); // true
 
 ### `storage.get<T>(key)`
 
-读取值；不存在或已过期时返回 `null`，过期条目会被删除。泛型只用于调用方类型提示，不做运行时校验。
+读取值；不存在或已过期时返回 `null`，读取时删除该过期条目。同前缀到期后的写入会分批回收已过期记录；需要立即释放整个命名空间时可调用 `clear()`。泛型只用于调用方类型提示，不做运行时校验。
 
 ```ts
 import { StorageUtils } from "@axutils/common/node/object/storage";

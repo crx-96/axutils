@@ -78,6 +78,18 @@ describe("date/PlainDate", () => {
     expect(() => PlainDate.toZonedDateTime("2024-01-01", "")).toThrow(RangeError);
   });
 
+  it("周边界只校验最终日期，不经过越界的周首", () => {
+    const min = new Date(-8.64e15);
+    const max = new Date(8.64e15);
+    expect(PlainDate.endOfWeek(min).getTime()).toBe(min.getTime() + 5 * 86_400_000);
+    expect(PlainDate.endOfWeek(min, { weekStartsOn: 3 })).toEqual(min);
+    expect(PlainDate.startOfWeek(min, { weekStartsOn: 2 })).toEqual(min);
+    expect(PlainDate.endOfWeek(max, { weekStartsOn: 0 })).toEqual(max);
+    expect(() => PlainDate.startOfWeek(min)).toThrow(RangeError);
+    expect(() => PlainDate.endOfWeek(max)).toThrow(RangeError);
+    expect(() => PlainDate.endOfWeek(min, { weekStartsOn: -1 })).toThrow(RangeError);
+  });
+
   it("负年与扩展年份序列化为带符号的 ISO 日期", () => {
     expect(PlainDate.toString({ day: 1, month: 1, year: -1 })).toBe("-000001-01-01");
     expect(PlainDate.toString({ day: 1, month: 1, year: 10000 })).toBe("+010000-01-01");

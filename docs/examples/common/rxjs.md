@@ -592,7 +592,11 @@ client.delete("/users/1").subscribe((result) => console.log(result.success));
 
 主动 `unsubscribe()` 会释放当前订阅及其成功或错误转换流，不会调用 `transformError`，也不会产生合成结果。默认 `cancelOnNoSubscribers: false`：最后一个订阅者取消订阅时，底层请求仍继续执行并可被后续相同请求复用。设置为 `true` 后，最后一个订阅者离开会中止底层 Axios 请求及重试等待；使用去重时，只有所有订阅者都取消才会中止共享请求。传入 `signal` 的请求始终不自动去重，以保证调用方独立取消。
 
-FormData、流、Map、Set、类实例和循环引用等无法稳定 JSON 序列化的值默认关闭自动去重；可使用 `dedupeKey` 声明业务身份。显式 key 仍会保留 method、完整 URL 和重试选项等稳定维度，不会仅因 key 相同就合并不同 URL。
+每次订阅解析 Axios 的 `baseURL`、有效 `timeout`、`responseType` 和可稳定合并的默认查询参数，内部重试沿用这些值。实例缺省 `baseURL` 时，请求拦截器仍可用 `config.baseURL ??= '/api'` 补全地址。遇到自定义 `paramsSerializer`、复杂默认配置，或重试前新增了会混入请求的默认字段时，共享传输沿错误通道返回前一次传输错误。
+
+自动和显式去重键都区分有效地址、`timeout` 和 `responseType`，请求头名称按大小写不敏感规则比较。请求已覆盖的实例默认超时可在传输期间修改，相同请求仍可共享。普通数组支持跨 Realm，普通数据字段 `{ toJSON: 'plain' }` 可以自动去重，可调用的 `toJSON` 与访问器则独立发送。FormData、流、Map、Set、类实例、含 getter 的参数或请求体默认独立发送，可用 `dedupeKey` 声明其业务身份。显式 key 仍区分地址、最终请求头和重试策略。实例设置了默认 `params` 或 `paramsSerializer` 时，每次独立发送，由 Axios 执行参数合并与序列化。例如，有默认页码时，`params: {}` 继承它，`params: { page: undefined }` 则屏蔽它。
+
+`repeat(2)` 在第一次成功完成后启动第二次传输。外部 `retry` 在失败后重新订阅时，新的进行中请求或配置初始化仍可供并发订阅共享。
 
 ```ts
 import { RxHttpClient } from "@axutils/common/rxjs/http";
@@ -614,6 +618,8 @@ second.unsubscribe(); // 最后一个订阅者离开，触发 abort
 ## 重试和 `AbortSignal`
 
 默认 GET、HEAD、OPTIONS 对网络错误、超时、429 和 5xx 重试；4xx（429 除外）和取消不重试。对于 RxJS 实现，明确的 Axios 网络错误和自定义 adapter 抛出的普通 `Error` 会分类为 network；配置错误会分类为 config。POST、PUT、PATCH、DELETE 只有 `retryNonIdempotent: true` 才允许重试。
+
+Node `Readable`、Web `ReadableStream` 等一次性请求体即使开启 `retryNonIdempotent` 也只发送一次。首次失败时，`HttpRequestError.error.cause` 保留原始异常。Axios 的 `ERR_BAD_OPTION_VALUE` 等配置错误即使消息含有 `timeout` 也按 `config` 处理，只发送一次。
 
 `signal` 覆盖异步配置、retryDelay、网络请求和成功转换流。订阅前已取消、等待中取消或成功转换流进行中取消，均产生 `kind: "cancel"` 的 `HttpRequestError`。没有 `transformError` 时走错误通道；有该回调时，可以将取消转换成普通结果，取消的 signal 不会立即抑制这条恢复流。
 

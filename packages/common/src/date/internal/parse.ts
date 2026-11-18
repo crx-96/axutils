@@ -18,6 +18,9 @@ export interface ParsedDateTime {
   timezone?: string;
 }
 
+/** 公开文本语法允许的最大绝对 UTC 偏移，单位为分钟。 */
+export const MAX_ISO_OFFSET_MINUTES = 14 * 60;
+
 // 仅接受完整日期时间与可选偏移/IANA 后缀；年月日等数值边界交给 UTC 日历校验。
 const DATE_TIME_PATTERN =
   /^(\d{4})[-/](\d{2})[-/](\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})?(?:\[([^\]]+)\])?$/u;
@@ -61,7 +64,10 @@ export function parseDateTimeString(value: string): ParsedDateTime {
     result.second,
     result.millisecond,
   );
-  if (result.offsetMinutes !== undefined && Math.abs(result.offsetMinutes) > 14 * 60) {
+  if (
+    result.offsetMinutes !== undefined &&
+    Math.abs(result.offsetMinutes) > MAX_ISO_OFFSET_MINUTES
+  ) {
     invalid("UTC 偏移超出范围");
   }
   return result;

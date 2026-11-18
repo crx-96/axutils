@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   isArray as isArrayFromType,
@@ -91,7 +91,11 @@ describe("type", () => {
   it("判断函数", () => {
     expect(isFunction(() => {})).toBe(true);
     // class 声明的 typeof 结果也是 "function"
-    expect(isFunction(class {})).toBe(true);
+    const candidate: unknown = class {};
+    expect(isFunction(candidate)).toBe(true);
+    if (isFunction(candidate)) {
+      expectTypeOf(candidate).not.toMatchTypeOf<() => unknown>();
+    }
     // async 函数
     expect(isFunction(async () => {})).toBe(true);
     // 生成器函数
@@ -225,6 +229,13 @@ describe("type", () => {
   it.each([
     "async => async",
     "async /* parameter */ => async",
+    "(matcher = /* default */ /[)]/) => matcher",
+    "(matcher = // default\r/[)]/) => matcher",
+    "(o, price = o.return /* annual */ / 12) => price",
+    "(o, price = o?. /* member */ typeof / 12) => price",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 保留待识别源码中的模板插值。
+    "(o, price = `${o. /* member */ return / 12}`) => price",
+    "(matcher = (() => { return /* pattern */ /[)]/; })()) => matcher",
     "值 => 值",
     "𐐀 => 𐐀",
     "_值 => _值",
@@ -236,7 +247,7 @@ describe("type", () => {
     "\\u{00000061} => \\u{00000061}",
     "async值 => async值",
     "async𐐀 => async𐐀",
-  ])("识别原始单参数箭头源码 %s", (source) => {
+  ])("识别原始同步箭头源码 %s", (source) => {
     const candidate: unknown = new Function(`return (${source});`)();
 
     expect(isArrowFunction(candidate)).toBe(true);
@@ -278,6 +289,9 @@ describe("type", () => {
     expect(isDate(new Date("2024-01-01"))).toBe(true);
     // Invalid Date 虽为 Date 实例但时间戳为 NaN
     expect(isDate(new Date("invalid"))).toBe(false);
+    expect(isDate(Object.assign(new Date(NaN), { getTime: () => 0 }))).toBe(false);
+    expect(isDate(Object.create(Date.prototype))).toBe(false);
+    expect(isDate(new Proxy(new Date(), {}))).toBe(false);
     // 日期字符串和时间戳不是 Date 实例
     expect(isDate("2024-01-01")).toBe(false);
     expect(isDate(Date.now())).toBe(false);

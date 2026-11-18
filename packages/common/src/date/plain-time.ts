@@ -1,15 +1,18 @@
+import { MS_PER_DAY } from "./constant.js";
 import {
   createUtcDate,
   dateToUtcFields,
   durationMilliseconds,
   invalid,
+  isDateObject,
   millisecondsToDuration,
   parseDateTimeString,
 } from "./internal.js";
 import type { DurationFields, PlainTimeInput } from "./types.js";
 
+/** 将 Date 的 UTC 时间、文本或必需的时分字段转换为 epoch 当天的纯时间。 */
 function fromInput(input: PlainTimeInput): Date {
-  if (input instanceof Date) {
+  if (isDateObject(input)) {
     const fields = dateToUtcFields(input);
     return createUtcDate(1970, 1, 1, fields.hour, fields.minute, fields.second, fields.millisecond);
   }
@@ -47,23 +50,17 @@ function fromInput(input: PlainTimeInput): Date {
   if (input === null || typeof input !== "object") {
     invalid("PlainTime 输入无效");
   }
-  return createUtcDate(
-    1970,
-    1,
-    1,
-    input.hour,
-    input.minute,
-    input.second ?? 0,
-    input.millisecond ?? 0,
-  );
+  return createUtcDate(1970, 1, 1, input.hour, input.minute, input.second, input.millisecond);
 }
 
+/** 比较 UTC 对齐的两个纯时间，返回三态顺序。 */
 function compareTimes(first: PlainTimeInput, second: PlainTimeInput): -1 | 0 | 1 {
   const difference = fromInput(first).getTime() - fromInput(second).getTime();
   return difference < 0 ? -1 : difference > 0 ? 1 : 0;
 }
 
-function addTime(time: Date, duration: DurationFields): Date {
+/** 只读取时间单位，先校验再按方向加减，一天内取模。 */
+function addTime(time: Date, duration: DurationFields, direction = 1): Date {
   // biome-ignore assist/source/useSortedKeys: 按时间字段顺序读取并校验，保留首个错误的语义。
   const milliseconds = durationMilliseconds({
     hours: duration.hours,
@@ -71,10 +68,9 @@ function addTime(time: Date, duration: DurationFields): Date {
     seconds: duration.seconds,
     milliseconds: duration.milliseconds,
   });
-  const normalized =
-    (((time.getTime() - Date.UTC(1970, 0, 1) + milliseconds) % 86_400_000) + 86_400_000) %
-    86_400_000;
-  return new Date(Date.UTC(1970, 0, 1) + normalized);
+  // 输入已对齐 epoch 当天，对正负结果统一取模后即可作为该日的毫秒数。
+  const elapsed = time.getTime() + direction * milliseconds;
+  return new Date(((elapsed % MS_PER_DAY) + MS_PER_DAY) % MS_PER_DAY);
 }
 
 /** 纯时间命名空间；时间加减不跨日，超出 24 小时按周期取模。 */
@@ -97,13 +93,7 @@ export const PlainTime = {
 
   /** 时间减法。 */
   subtract(time: PlainTimeInput, duration: DurationFields): Date {
-    // biome-ignore assist/source/useSortedKeys: 按时间字段顺序读取并校验，保留首个错误的语义。
-    return addTime(fromInput(time), {
-      hours: -(duration.hours ?? 0),
-      minutes: -(duration.minutes ?? 0),
-      seconds: -(duration.seconds ?? 0),
-      milliseconds: -(duration.milliseconds ?? 0),
-    });
+    return addTime(fromInput(time), duration, -1);
   },
 
   /** 返回 time - other 的时分秒毫秒差。 */

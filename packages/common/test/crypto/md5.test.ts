@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   binaryStringToBytes as binaryStringToBytesFromBrowser,
@@ -20,6 +21,58 @@ import {
   toByteArray as toByteArrayFromNode,
 } from "../../src/node/crypto/convert";
 import { Md5 as NodeMd5 } from "../../src/node/crypto/md5";
+
+describe.each([
+  { Md5: BrowserMd5, name: "通用" },
+  { Md5: NodeMd5, name: "Node" },
+])("$name MD5 文本分块", ({ Md5 }) => {
+  it("UTF-8 在任意码元处分块和插入空文本仍与完整文本相同", () => {
+    const text = "前\ud800\u{1d11e}\u{1f600}\udc00\udbff后";
+    const expected = createHash("md5").update(text).digest("hex");
+    const stream = new Md5();
+    for (let index = 0; index < text.length; index++) {
+      stream.update(text.charAt(index), "utf8").update("");
+    }
+    expect(stream.toHex()).toBe(expected);
+  });
+
+  it("完成摘要时孤立高代理项只写一次，缓存副本和新实例独立", () => {
+    const pending = new Md5().update("A\ud83d");
+    const independent = new Md5().update("\ude00");
+    const expected = createHash("md5").update("A\ufffd").digest();
+    const bytes = pending.toBytes();
+    expect(bytes).toEqual([...expected]);
+    bytes.fill(0);
+    expect(pending.toHex()).toBe(expected.toString("hex"));
+    expect(pending.toBase64()).toBe(expected.toString("base64"));
+    expect(() => pending.update("\ude00")).toThrow(/摘要/);
+    expect(independent.toHex()).toBe(createHash("md5").update("\ufffd").digest("hex"));
+  });
+
+  it.each([
+    { input: [0xff], middle: [0xff], name: "字节数组" },
+    { input: new Uint8Array(), middle: [], name: "空字节视图" },
+    { encoding: "hex" as const, input: "61", middle: [97], name: "hex" },
+    { encoding: "base64" as const, input: "Yg==", middle: [98], name: "Base64" },
+    { encoding: "hex" as const, input: "", middle: [], name: "空 hex" },
+    { encoding: "base64" as const, input: "\n", middle: [], name: "空 Base64" },
+  ])("$name 结束前一段文本，代理对不能跨边界组合", ({ input, encoding, middle }) => {
+    const md5 = new Md5().update("\ud83d").update(input, encoding).update("\ude00");
+    const expected = createHash("md5")
+      .update("\ufffd")
+      .update(Uint8Array.from(middle))
+      .update("\ufffd");
+    expect(md5.toHex()).toBe(expected.digest("hex"));
+  });
+
+  it("无效字节和编码不会消耗待配对状态，可以纠正后续块", () => {
+    const md5 = new Md5().update("\ud83d");
+    expect(() => md5.update([256])).toThrow(TypeError);
+    expect(() => md5.update("TR==", "base64")).toThrow(TypeError);
+    expect(() => md5.update("1", "hex")).toThrow(TypeError);
+    expect(md5.update("\ude00").toHex()).toBe(createHash("md5").update("\u{1f600}").digest("hex"));
+  });
+});
 
 describe("crypto/md5", () => {
   it("浏览器实现支持空串和常见文本的 md5 摘要", () => {

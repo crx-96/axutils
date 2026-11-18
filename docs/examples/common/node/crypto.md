@@ -112,12 +112,18 @@ console.log(md5 instanceof Md5); // true
 ```ts
 import { Md5 } from "@axutils/common/node/crypto/md5";
 
+// 连续 UTF-8 文本可在代理对的两个码元之间拆块。
+const split = new Md5().update("\ud83d").update("\ude00");
+console.log(split.toHex() === new Md5().update("\u{1f600}").toHex()); // true
+
 const md5 = new Md5().update("hel").update("lo");
 console.log(md5.toHex()); // 5d41402abc4b2a76b9719d911017c592
 
 const fromBase64 = new Md5().update("aGVsbG8=", "base64");
 console.log(fromBase64.toHex()); // 5d41402abc4b2a76b9719d911017c592
 ```
+
+空 UTF-8 字符串延续当前文本段。切换到字节、`hex` 或 `base64`（包括空块）以及首次生成摘要时，未配对的高代理项按 `U+FFFD` 编码。输入校验失败后可重试，生成摘要后请用新实例开始下一次计算。
 
 ### `md5.toBytes()`
 
@@ -178,7 +184,7 @@ console.log(copy !== input, [...copy]); // true [1, 2, 3]
 
 ### `binaryStringToBytes(value)`
 
-把 raw 二进制字符串按低 8 位转换为 `number[]`，用于摘要 raw 结果适配，不是通用文本解码器。
+把 raw 二进制字符串按每个 UTF-16 码元的低 8 位转换为 `number[]`。一个代理对产生两个字节。此函数用于适配 raw 摘要。
 
 ```ts
 import { binaryStringToBytes } from "@axutils/common/node/crypto/convert";

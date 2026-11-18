@@ -70,11 +70,33 @@ describe("object/url", () => {
     });
   });
 
+  it("区分没有查询的相对路径与裸查询标志", () => {
+    expect(queryToObject("./items/list#hash")).toEqual({});
+    expect(queryToObject("../items/list")).toEqual({});
+    expect(queryToObject("items/list")).toEqual({});
+    expect(queryToObject("items%2Flist")).toEqual({ "items/list": "" });
+    expect(queryToObject("flag")).toEqual({ flag: "" });
+  });
+
+  it("对补充平面字符使用码点顺序，并保留相同前缀的长度顺序", () => {
+    const result = objectToQuery({ "\ue000": 2, 𐀀: 3, 𐀀x: 1 }, { sortKeys: true });
+    expect([...new URLSearchParams(result).keys()]).toEqual(["\ue000", "𐀀", "𐀀x"]);
+  });
+
   it("解析带 query 的相对路径", () => {
     expect(queryToObject("search?page=1&tag=ts")).toEqual({
       page: "1",
       tag: "ts",
     });
+  });
+
+  it.each([
+    ["./flag=a?b", { "./flag": "a?b" }],
+    ["./flag=1", { "./flag": "1" }],
+    ["../first&flag?q=1", { "../first": "", "flag?q": "1" }],
+    ["./items/list?q=1", { q: "1" }],
+  ] as const)("按问号前的查询分隔符区分相对路径 %s", (input, expected) => {
+    expect(queryToObject(input)).toEqual(expected);
   });
 
   it("完整 URL 没有 query 时返回空对象", () => {
@@ -88,7 +110,8 @@ describe("object/url", () => {
 
   it("按 URLSearchParams 规则处理空 query、双问号和百分号边界", () => {
     expect(queryToObject("?")).toEqual({});
-    expect(queryToObject("/path??a=1")).toEqual({ a: "1" });
+    expect(queryToObject("/path??a=1&a=2")).toEqual({ "?a": "1", a: "2" });
+    expect(queryToObject("??a=1")).toEqual({ "?a": "1" });
     expect(queryToObject("value=%00")).toEqual({ value: "\u0000" });
     expect(queryToObject("value=%ZZ")).toEqual({ value: "%ZZ" });
   });

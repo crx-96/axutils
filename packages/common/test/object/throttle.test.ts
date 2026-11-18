@@ -51,6 +51,17 @@ describe("object/timing - throttle", () => {
     expect(calls).toEqual(["first", "boundary"]);
   });
 
+  it("宿主墙上时钟回拨时仍在一个周期内执行 trailing", () => {
+    vi.useFakeTimers();
+    const callback = vi.fn();
+    const handler = throttle(callback, 100);
+    handler();
+    vi.setSystemTime(Date.now() - 60_000);
+    handler();
+    vi.advanceTimersByTime(100);
+    expect(callback).toHaveBeenCalledTimes(2);
+  });
+
   it("只有一次调用时不会额外触发 trailing", () => {
     vi.useFakeTimers();
 

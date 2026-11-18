@@ -1,4 +1,4 @@
-import { firstValueFrom, forkJoin, from, of, throwError } from "rxjs";
+import { Observable, Subject, firstValueFrom, forkJoin, from, of, retry, throwError } from "rxjs";
 import { describe, expect, it } from "vitest";
 import { type HttpClientConfig, RxHttpClient } from "../../../src/rxjs/http.js";
 import { createAxiosInstance, response } from "../../helpers/http/adapter.js";
@@ -51,6 +51,50 @@ describe("rxjs/http 配置", () => {
     await requests;
 
     expect(factoryCalls).toBe(1);
+  });
+
+  it("配置 teardown 时同步重订阅，稍后的请求仍共享替代初始化", async () => {
+    let calls = 0;
+    let replacement: Promise<unknown> | undefined;
+    const gate = new Subject<Partial<HttpClientConfig>>();
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    const client = RxHttpClient.create(
+      () => {
+        if (++calls > 1) return gate;
+        return new Observable<Partial<HttpClientConfig>>(() => () => {
+          replacement = firstValueFrom(client.get("/replacement"));
+        });
+      },
+      { axiosInstance: instance },
+    );
+
+    client.get("/first").subscribe().unsubscribe();
+    const joined = firstValueFrom(client.get("/joined"));
+    gate.next({ baseUrl: "/configured" });
+    await Promise.all([replacement, joined]);
+    expect(replacement).toBeDefined();
+    expect(calls).toBe(2);
+    expect(context.configs.map((config) => config.url)).toEqual([
+      "/configured/replacement",
+      "/configured/joined",
+    ]);
+  });
+
+  it("配置失败后同步重订阅，后来的请求仍共享新的初始化", async () => {
+    let calls = 0;
+    const failed = new Subject<Partial<HttpClientConfig>>();
+    const gate = deferred<Partial<HttpClientConfig>>();
+    const { instance } = createAxiosInstance((config) => response(config));
+    const client = RxHttpClient.create(() => (++calls === 1 ? failed : from(gate.promise)), {
+      axiosInstance: instance,
+      retryCount: 1,
+    });
+    const first = firstValueFrom(client.get("/first").pipe(retry(1)));
+    failed.error(new Error("first config"));
+    const second = firstValueFrom(client.get("/second"));
+    gate.resolve({});
+    await Promise.all([first, second]);
+    expect(calls).toBe(2);
   });
 
   it("配置失败最多总尝试三次，失败后下一次请求可以重新初始化", async () => {

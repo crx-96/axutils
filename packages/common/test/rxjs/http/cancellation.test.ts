@@ -122,6 +122,29 @@ describe("rxjs/http 取消生命周期", () => {
     }
   });
 
+  it("adapter abort 时同步重订阅，稍后的请求仍共享替代传输", async () => {
+    const pending = createPendingAxiosInstance();
+    const client = new RxHttpClient({
+      axiosInstance: pending.instance,
+      cancelOnNoSubscribers: true,
+    });
+    const request = client.get("/reentrant-abort");
+    const first = request.subscribe();
+    await pending.started;
+    let replacement: Promise<unknown> | undefined;
+    pending.context.configs[0]?.signal?.addEventListener?.("abort", () => {
+      replacement = firstValueFrom(request);
+    });
+
+    first.unsubscribe();
+    const joined = firstValueFrom(request);
+    pending.complete();
+    expect(replacement).toBeDefined();
+    expect(await joined).toBe(await replacement);
+    expect(pending.abortCount).toBe(1);
+    expect(pending.context.calls).toBe(2);
+  });
+
   it("开启 cancelOnNoSubscribers 后，非去重请求取消订阅也会中止底层请求", async () => {
     const pending = createPendingAxiosInstance();
     const subscription = new RxHttpClient({

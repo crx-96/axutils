@@ -1,5 +1,10 @@
+/** 可枚举自有属性的字符串键或 Symbol 键。 */
 type ClonePropertyKey = string | symbol;
+/** 单次复制的源对象到副本映射，用于还原循环与共享关系。 */
 type CloneCache = WeakMap<object, unknown>;
+
+// 内建槽不会随属性或原型修改而改变；弱缓存只记录已排除的槽，不缓存值、原型或复制结果。
+const withoutBuiltinSlots = new WeakSet<object>();
 
 /**
  * 取得对象的可枚举自有属性。
@@ -79,27 +84,36 @@ const isSetValue = (value: object): value is Set<unknown> => {
 };
 
 /**
- * 判断并返回普通对象副本应该使用的原型。
- *
- * 跨 Realm 的字面量对象的原型不是当前 Realm 的 `Object.prototype`，但它的原型自身仍以
- * `null` 为终点，并且对象标签为 `[object Object]`；复制时切换到当前 Realm 的原型，避免
- * 把源 Realm 的全局对象链带入副本。`Object.create(null)` 则继续保留 null 原型。
+ * 按原型链确定复制策略：普通根原型允许复制字面量，其他原型需要内部槽确认，
+ * 具备派生构造器的实例则原样保留。分类只检查原型及描述符，不读取源对象的标签。
  */
-const getPlainObjectClonePrototype = (value: object): object | null | undefined => {
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype === null) {
-    return null;
+const classifyPrototype = (prototype: object | null): "plain" | "checkSlots" | "preserve" => {
+  if (prototype === null || prototype === Object.prototype) return "plain";
+  let current = prototype;
+  let parent: object | null = Object.getPrototypeOf(current);
+  if (parent === null) return "plain"; // 其他 Realm 的字面量也直接继承链根。
+
+  let visited: Set<object> | undefined;
+  while (parent !== Object.prototype) {
+    const ancestor: object | null = Object.getPrototypeOf(parent);
+    if (ancestor === null) break; // 已到其他 Realm 的内建直接原型层。
+
+    // 跳过普通中间原型；构造器与原型互指的派生层可能持有私有状态。
+    const ctor: unknown = Object.getOwnPropertyDescriptor(current, "constructor")?.value;
+    if (
+      typeof ctor === "function" &&
+      Object.getOwnPropertyDescriptor(ctor, "prototype")?.value === current
+    ) {
+      return "preserve";
+    }
+    // Proxy 可以报告循环的原型链，此时保守地保留原引用。
+    visited ??= new Set<object>();
+    if (visited.has(current)) return "preserve";
+    visited.add(current);
+    current = parent;
+    parent = ancestor;
   }
-  if (prototype === Object.prototype) {
-    return Object.prototype;
-  }
-  if (
-    Object.getPrototypeOf(prototype) === null &&
-    Object.prototype.toString.call(value) === "[object Object]"
-  ) {
-    return Object.prototype;
-  }
-  return undefined;
+  return "checkSlots";
 };
 
 /**
@@ -121,7 +135,11 @@ const cloneValue = (value: unknown, cache: CloneCache): unknown => {
     return cached;
   }
 
-  // 数组有跨 Realm 的直接判别入口，提前处理可避免依次触发内建品牌校验异常。
+  const prototype: object | null = Object.getPrototypeOf(value);
+  // 每次检查当前原型，保留可识别的子类实例及其私有状态。
+  const kind = classifyPrototype(prototype);
+  if (kind === "preserve") return value;
+
   if (Array.isArray(value)) {
     const clone: unknown[] = new Array(value.length);
     cache.set(value, clone);
@@ -129,47 +147,47 @@ const cloneValue = (value: unknown, cache: CloneCache): unknown => {
     return clone;
   }
 
-  if (isDateValue(value)) {
-    const clone = new Date(Reflect.apply(Date.prototype.getTime, value, []));
-    cache.set(value, clone);
-    copyEnumerableProperties(value, clone, cache);
-    return clone;
-  }
-
-  if (isRegExpValue(value)) {
-    const clone = new RegExp(value.source, value.flags);
-    clone.lastIndex = value.lastIndex;
-    cache.set(value, clone);
-    copyEnumerableProperties(value, clone, cache);
-    return clone;
-  }
-
-  if (isMapValue(value)) {
-    const clone = new Map<unknown, unknown>();
-    cache.set(value, clone);
-    for (const [key, item] of value) {
-      clone.set(cloneValue(key, cache), cloneValue(item, cache));
+  if (!withoutBuiltinSlots.has(value)) {
+    // 内建方法直接探测内部槽。即使首次分类，也无需通过源对象读取标签。
+    if (isDateValue(value)) {
+      const clone = new Date(Reflect.apply(Date.prototype.getTime, value, []));
+      cache.set(value, clone);
+      copyEnumerableProperties(value, clone, cache);
+      return clone;
     }
-    copyEnumerableProperties(value, clone, cache);
-    return clone;
-  }
-
-  if (isSetValue(value)) {
-    const clone = new Set<unknown>();
-    cache.set(value, clone);
-    for (const item of value) {
-      clone.add(cloneValue(item, cache));
+    if (isRegExpValue(value)) {
+      const clone = new RegExp(value.source, value.flags);
+      clone.lastIndex = value.lastIndex;
+      cache.set(value, clone);
+      copyEnumerableProperties(value, clone, cache);
+      return clone;
     }
-    copyEnumerableProperties(value, clone, cache);
-    return clone;
+    // 原型被替换的 Map/Set 与普通对象具有相同标签，首次仍需按内部槽区分。
+    if (isMapValue(value)) {
+      const clone = new Map<unknown, unknown>();
+      cache.set(value, clone);
+      for (const [key, item] of value) {
+        clone.set(cloneValue(key, cache), cloneValue(item, cache));
+      }
+      copyEnumerableProperties(value, clone, cache);
+      return clone;
+    }
+    if (isSetValue(value)) {
+      const clone = new Set<unknown>();
+      cache.set(value, clone);
+      for (const item of value) {
+        clone.add(cloneValue(item, cache));
+      }
+      copyEnumerableProperties(value, clone, cache);
+      return clone;
+    }
+    withoutBuiltinSlots.add(value);
   }
 
-  const clonePrototype = getPlainObjectClonePrototype(value);
-  if (clonePrototype === undefined) {
-    return value;
-  }
-
-  const clone = Object.create(clonePrototype) as object;
+  // 缺少所支持的内部槽时，只有普通对象可按属性复制。
+  if (kind !== "plain") return value;
+  // 跨 Realm 字面量归入当前 Realm，显式空原型继续保留。
+  const clone = Object.create(prototype === null ? null : Object.prototype) as object;
   cache.set(value, clone);
   copyEnumerableProperties(value, clone, cache);
   return clone;

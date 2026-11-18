@@ -1,10 +1,15 @@
+import { stringifyBoxedValue } from "../json/boxed-value.js";
+
 /** 通用 JSON 缓存的记录标记，用于排除同一存储空间中的其他业务数据。 */
 export const STORAGE_RECORD_MARKER = "@axutils/common/storage";
+
+/** 独立标记防止旧键恰好指向另一条新格式记录。 */
+export const CURRENT_STORAGE_MARKER = "@axutils/common/storage/v2";
 
 /** 记录携带命名空间，使经过 key 处理的条目仍能准确归属和清理。 */
 export interface StorageRecord {
   /** 固定格式标记；不同缓存实现不能混读记录。 */
-  marker: typeof STORAGE_RECORD_MARKER;
+  marker: typeof STORAGE_RECORD_MARKER | typeof CURRENT_STORAGE_MARKER;
   /** 原始命名空间，即使底层 key 经处理仍用于归属判断。 */
   prefix: string;
   /** 到期时刻的安全整数毫秒时间戳；0 表示永久有效。 */
@@ -52,7 +57,7 @@ export const parseStorageRecord = (value: string): StorageRecord | null => {
     }
     // JSON.parse 能将 1e999 解析为 Infinity；安全整数检查同时拒绝此类非有限值和小数。
     if (
-      record.marker !== STORAGE_RECORD_MARKER ||
+      (record.marker !== STORAGE_RECORD_MARKER && record.marker !== CURRENT_STORAGE_MARKER) ||
       typeof record.prefix !== "string" ||
       !Number.isSafeInteger(record.expiresAt)
     ) {
@@ -69,6 +74,19 @@ export const parseStorageRecord = (value: string): StorageRecord | null => {
 export const serializeStorageRecord = (record: StorageRecord): string => {
   // 在 JSON 的唯一一次遍历中检查实际写出的值；不预读 getter 或重复执行 toJSON。
   const serialized = JSON.stringify(record, (_key, value: unknown) => {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      const scalar = stringifyBoxedValue(value);
+      if (scalar === "null") {
+        // 新版宿主还允许原始 JSON null 对象。其余对象产生 null 表示数字拆箱时丢失精度。
+        if ("isRawJSON" in JSON && typeof JSON.isRawJSON === "function" && JSON.isRawJSON(value))
+          return null;
+        throw new TypeError("缓存值不能包含非有限数字");
+      }
+      if (scalar !== undefined) value = JSON.parse(scalar);
+    }
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      throw new TypeError("缓存值不能包含非有限数字");
+    }
     const valueType = typeof value;
     if (valueType === "undefined" || valueType === "function" || valueType === "symbol") {
       throw new TypeError("缓存值不能包含 undefined、函数或 Symbol");

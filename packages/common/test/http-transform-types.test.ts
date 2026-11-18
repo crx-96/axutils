@@ -14,6 +14,16 @@ interface Payload {
 
 describe("HTTP 返回值转换的类型契约", () => {
   // 这些函数只参加 tsc 检查，不执行其中的请求，避免 Promise 客户端访问网络。
+  it("Promise 信号须支持注册与清理取消监听", () => {
+    const assertTypes = () => {
+      const promise = new PromiseHttpClient();
+      promise.get("/signal", { signal: new AbortController().signal });
+      // @ts-expect-error 只有 aborted 的对象不能取消配置等待。
+      promise.get("/signal", { signal: { aborted: false } });
+    };
+    expectTypeOf(assertTypes).toBeFunction();
+  });
+
   it("未设置转换时，构造函数和工厂保留原有成功结果类型", () => {
     const assertTypes = () => {
       const rx = new RxHttpClient();

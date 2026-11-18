@@ -350,9 +350,13 @@ console.log(result.success, result.code);
 
 默认只对 GET、HEAD、OPTIONS 的明确 Axios 网络错误（`ERR_NETWORK`）、超时、429 和 5xx 重试；POST、PUT、PATCH、DELETE 只有 `retryNonIdempotent: true` 才允许重试。4xx（429 除外）、取消、普通 `Error` 和无 response 的未知 AxiosError 不重试。`retryCount` 是总尝试次数，不是额外重试次数。
 
-`signal` 同时可以取消 Axios 网络请求、异步配置等待和 `retryDelay`。已 abort 的 signal 会立即 reject 为 `kind: "cancel"`。带 `signal` 的请求始终不参与自动去重。
+`signal` 需要提供布尔值 `aborted` 及 `addEventListener`、`removeEventListener` 方法，例如 `new AbortController().signal`。调用方可以取消配置等待、网络请求和 `retryDelay`。取消配置等待后，该调用以 `kind: "cancel"` 拒绝并跳过请求头回调，其他调用仍可共享初始化。带 `signal` 的请求独立发送。
 
-默认去重只覆盖可稳定 JSON 序列化的 params、headers、data 和请求配置；Map、Set、FormData、流、类实例和循环引用会自动放弃去重。此类请求可以使用 `dedupeKey` 声明业务身份，但 method、完整 URL 和重试选项仍会参与区分。成功、失败或取消后 in-flight key 都会清理，不会缓存响应。
+即使开启 `retryNonIdempotent`，传入 Node `Readable`、Web `ReadableStream` 等一次性请求体时也只发送一次。若首次传输返回 503，调用方会收到 `code: 503` 的统一错误，`error.cause` 保留原始异常。Axios 的 `ERR_BAD_OPTION_VALUE` 等配置错误即使消息含有 `timeout` 也按 `config` 处理，只发送一次。
+
+内部重试沿用首次解析的 `baseURL`、有效 `timeout`、`responseType` 和可稳定合并的默认查询参数。实例缺省 `baseURL` 时，原 Axios 请求拦截器仍可用 `config.baseURL ??= '/api'` 补全地址。遇到自定义 `paramsSerializer`、复杂默认配置，或重试前新增了会混入请求的默认字段时，调用方直接收到前一次传输错误。
+
+自动和显式去重键都区分有效地址、`timeout` 和 `responseType`，按大小写不敏感的头名比较最终请求头。请求已覆盖的实例默认超时可在传输期间修改，相同请求仍可共享。普通数组支持跨 Realm，普通数据字段 `{ toJSON: 'plain' }` 可以自动去重，可调用的 `toJSON` 与访问器则独立发送。Map、Set、FormData、流、类实例、循环引用和含 getter 的参数或请求体默认独立发送。可用 `dedupeKey` 声明特殊载荷的业务身份，地址、最终头与重试策略仍参与区分。实例设置了默认 `params` 或 `paramsSerializer` 时，每次独立发送，由 Axios 完成参数合并与序列化。例如，有默认页码时，`params: {}` 继承它，`params: { page: undefined }` 则屏蔽它。传输结束后释放去重记录。
 
 ```ts
 import { PromiseHttpClient } from "@axutils/common/axios/http";

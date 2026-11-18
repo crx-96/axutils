@@ -34,6 +34,38 @@ describe("axios/http 配置", () => {
     ]);
   });
 
+  it("工厂同步 abort 时，监听器重入与后续请求共享第一次初始化", async () => {
+    const controller = new AbortController();
+    const gate = deferred<Partial<PromiseHttpClientConfig>>();
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    let calls = 0;
+    const client = PromiseHttpClient.create(
+      () => {
+        calls++;
+        controller.abort();
+        return gate.promise;
+      },
+      { axiosInstance: instance },
+    );
+    let replacement: Promise<unknown> | undefined;
+    controller.signal.addEventListener("abort", () => {
+      replacement = client.get("/replacement");
+    });
+
+    const canceled = expectRequestError(client.get("/first", { signal: controller.signal }));
+    expect(controller.signal.aborted).toBe(true);
+    expect(replacement).toBeDefined();
+    expect((await canceled).error.kind).toBe("cancel");
+    gate.resolve({ baseUrl: "/configured" });
+    await replacement;
+    await client.get("/later");
+    expect(calls).toBe(1);
+    expect(context.configs.map((config) => config.url)).toEqual([
+      "/configured/replacement",
+      "/configured/later",
+    ]);
+  });
+
   it("异步配置失败不缓存，并按同步 retryCount 重试", async () => {
     let factoryCalls = 0;
     const { instance } = createAxiosInstance((config) => response(config));

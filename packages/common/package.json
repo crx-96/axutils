@@ -1,6 +1,6 @@
 {
   "name": "@axutils/common",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "axutils 的公共工具子包",
   "homepage": "https://github.com/crx-96/axutils/tree/main/packages/common#readme",
   "bugs": {
@@ -18,6 +18,7 @@
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
+        "node": "./dist/index.node.mjs",
         "default": "./dist/index.js"
       },
       "require": {
@@ -28,6 +29,7 @@
     "./check/type": {
       "import": {
         "types": "./dist/check/type.d.ts",
+        "node": "./dist/check/type.node.mjs",
         "default": "./dist/check/type.js"
       },
       "require": {
@@ -38,6 +40,7 @@
     "./check/reg": {
       "import": {
         "types": "./dist/check/reg.d.ts",
+        "node": "./dist/check/reg.node.mjs",
         "default": "./dist/check/reg.js"
       },
       "require": {
@@ -48,6 +51,7 @@
     "./check/platform": {
       "import": {
         "types": "./dist/check/platform.d.ts",
+        "node": "./dist/check/platform.node.mjs",
         "default": "./dist/check/platform.js"
       },
       "require": {
@@ -58,6 +62,7 @@
     "./object/object": {
       "import": {
         "types": "./dist/object/object.d.ts",
+        "node": "./dist/object/object.node.mjs",
         "default": "./dist/object/object.js"
       },
       "require": {
@@ -68,6 +73,7 @@
     "./object/json": {
       "import": {
         "types": "./dist/object/json.d.ts",
+        "node": "./dist/object/json.node.mjs",
         "default": "./dist/object/json.js"
       },
       "require": {
@@ -78,6 +84,7 @@
     "./object/storage": {
       "import": {
         "types": "./dist/object/storage.d.ts",
+        "node": "./dist/object/storage.node.mjs",
         "default": "./dist/object/storage.js"
       },
       "require": {
@@ -88,6 +95,7 @@
     "./object/timing": {
       "import": {
         "types": "./dist/object/timing.d.ts",
+        "node": "./dist/object/timing.node.mjs",
         "default": "./dist/object/timing.js"
       },
       "require": {
@@ -98,6 +106,7 @@
     "./object/url": {
       "import": {
         "types": "./dist/object/url.d.ts",
+        "node": "./dist/object/url.node.mjs",
         "default": "./dist/object/url.js"
       },
       "require": {
@@ -108,6 +117,7 @@
     "./object/tree": {
       "import": {
         "types": "./dist/object/tree.d.ts",
+        "node": "./dist/object/tree.node.mjs",
         "default": "./dist/object/tree.js"
       },
       "require": {
@@ -118,6 +128,7 @@
     "./color/rgb": {
       "import": {
         "types": "./dist/color/rgb.d.ts",
+        "node": "./dist/color/rgb.node.mjs",
         "default": "./dist/color/rgb.js"
       },
       "require": {
@@ -128,6 +139,7 @@
     "./crypto/md5": {
       "import": {
         "types": "./dist/crypto/md5.d.ts",
+        "node": "./dist/crypto/md5.node.mjs",
         "default": "./dist/crypto/md5.js"
       },
       "require": {
@@ -138,6 +150,7 @@
     "./crypto/convert": {
       "import": {
         "types": "./dist/crypto/convert.d.ts",
+        "node": "./dist/crypto/convert.node.mjs",
         "default": "./dist/crypto/convert.js"
       },
       "require": {
@@ -148,6 +161,7 @@
     "./rxjs/http": {
       "import": {
         "types": "./dist/rxjs/http.d.ts",
+        "node": "./dist/rxjs/http.node.mjs",
         "default": "./dist/rxjs/http.js"
       },
       "require": {
@@ -158,6 +172,7 @@
     "./axios/http": {
       "import": {
         "types": "./dist/axios/http.d.ts",
+        "node": "./dist/axios/http.node.mjs",
         "default": "./dist/axios/http.js"
       },
       "require": {
@@ -168,6 +183,7 @@
     "./node": {
       "import": {
         "types": "./dist/node/index.d.ts",
+        "node": "./dist/node/index.node.mjs",
         "default": "./dist/node/index.js"
       },
       "require": {
@@ -178,6 +194,7 @@
     "./node/crypto/md5": {
       "import": {
         "types": "./dist/node/crypto/md5.d.ts",
+        "node": "./dist/node/crypto/md5.node.mjs",
         "default": "./dist/node/crypto/md5.js"
       },
       "require": {
@@ -188,6 +205,7 @@
     "./node/crypto/convert": {
       "import": {
         "types": "./dist/node/crypto/convert.d.ts",
+        "node": "./dist/node/crypto/convert.node.mjs",
         "default": "./dist/node/crypto/convert.js"
       },
       "require": {
@@ -198,6 +216,7 @@
     "./node/object/storage": {
       "import": {
         "types": "./dist/node/object/storage.d.ts",
+        "node": "./dist/node/object/storage.node.mjs",
         "default": "./dist/node/object/storage.js"
       },
       "require": {

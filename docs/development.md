@@ -4,9 +4,9 @@
 
 ## 环境
 
-- 开发 Node：`^22.12 || ^24 || >=26`，同时满足锁定的 Vite 与 Changesets 要求；pnpm `>=10`，仓库不通过 `packageManager` 固定其版本。发布工具调用的 npm 需 `>=10.9.0`。
+- 开发 Node：`^22.13 || ^24 || >=26`，其中锁定的 Changesets 传递依赖 `@pnpm/deps.graph-sequencer` 要求 Node `>=22.13`；pnpm `>=10`，仓库不通过 `packageManager` 固定其版本。发布工具调用的 npm 需 `>=10.9.0`。
 - 包消费：默认 Node `>=14.18.0`、ES2020，提供 ESM/CJS 与双格式声明。common 另支持浏览器和 UMD；改变包运行环境时，同步构建目标、声明与 CI 消费矩阵。
-- CI：Node 24 在 Linux、Windows 中文路径中构建验证，再用 Node 14.18.0 消费同一份产物；Linux 另验证 Node 22.12.0、26，详见 [CI 覆盖与排错](#ci-覆盖与排错)。
+- CI：Node 24 在 Linux、Windows 中文路径中构建验证，再用 Node 14.18.0 消费同一份产物；Linux 另验证 Node 22.13.0、26，详见 [CI 覆盖与排错](#ci-覆盖与排错)。
 - 依赖按锁文件恢复，检查使用仓库本地工具；不靠全局 Biome 或 TypeScript 代替。
 - 文本文件由根 [`.gitattributes`](../.gitattributes) 统一以 LF 检出，与 Biome 的换行配置保持一致，避免 Windows 的 `core.autocrlf` 将文件转换为 CRLF 后导致 CI 格式检查失败。
 
@@ -51,7 +51,7 @@ pnpm check
 | 环境 | 验证范围 |
 | --- | --- |
 | Linux、Windows / Node 24 | 完整 `pnpm check`；再以 Node 14.18.0 执行同一份产物的 `test:runtime`、`test:consumer` |
-| Linux / Node 22.12.0、26 | 完整 `pnpm check`，覆盖开发版本下限及当前新版 |
+| Linux / Node 22.13.0、26 | 完整 `pnpm check`，覆盖开发依赖的最低版本和新版 Node |
 
 所有任务都在中文路径下运行，浏览器使用 Playwright Chromium，验证 ESM 打包消费与 UMD 全局消费。每个任务只构建工具包一次；最低运行时验证继续使用已有产物，类型编译器仍由开发 Node 执行。
 
@@ -75,7 +75,7 @@ pnpm check
 
 根 `scripts/workspace.mjs` 发现 `packages/` 的直接子包，排除 `private:true`，检查必需脚本后交给 pnpm 按依赖拓扑运行。每个发布包必须提供 `build`、`typecheck`、`test`、`test:dist`、`test:consumer`、`publint`，并登记根 TypeScript references 和 README 包列表。
 
-有浏览器能力的包还要提供 `test:browser`。调度器只执行已声明的浏览器脚本，不会判断漏配；接入审查必须确认这一点。
+有浏览器能力的包还要提供 `test:browser`。发布包声明 `browser`、`unpkg`、`jsdelivr`、提供 `exports` 的 `browser` 条件或包含 `test-browser/` 时，调度器会在执行各阶段前检查该脚本。其他主动声明 `test:browser` 的包也会参与浏览器验证。
 
 根最低运行时检查约定包内提供 `scripts/smoke-esm.mjs`、`smoke-cjs.cjs`，声明 `unpkg` 时另有 `smoke-umd.cjs`。`scripts/smoke/` 维护包行为和导出快照，`scripts/consumer/` 维护最小 peer 映射和类型用例。
 

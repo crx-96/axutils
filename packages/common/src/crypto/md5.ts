@@ -1,12 +1,12 @@
 import SparkMD5 from "spark-md5";
 
+import { Md5InputStream } from "../internal/crypto/md5-input-stream.js";
 import {
   type Md5Input,
   type Md5StringEncoding,
   binaryStringToBytes,
   bytesToBase64,
   bytesToHex,
-  normalizeMd5Input,
 } from "./convert.js";
 
 /**
@@ -20,11 +20,20 @@ import {
  * Node 侧可使用 `@axutils/common/node/crypto/md5`，基于 `node:crypto`，无需额外依赖。
  */
 export class Md5 {
+  /** 处理已编码字节的通用摘要后端。 */
   private declare readonly instance: InstanceType<typeof SparkMD5.ArrayBuffer>;
+  /** 当前摘要独占的分块编码状态。 */
+  private declare readonly inputStream: Md5InputStream;
+  /** 首次完成摘要时缓存的字节，null 表示仍可追加输入。 */
   private declare digestBytes: number[] | null;
 
+  /** 创建一个空摘要，绑定只接收完整字节缓冲区的 SparkMD5 后端。 */
   constructor() {
     this.instance = new SparkMD5.ArrayBuffer();
+    this.inputStream = new Md5InputStream((bytes) => {
+      // 归一化结果独占整个 ArrayBuffer，包括来自子视图的输入，无需再复制。
+      this.instance.append(bytes.buffer as ArrayBuffer);
+    });
     this.digestBytes = null;
   }
 
@@ -39,9 +48,8 @@ export class Md5 {
       throw new Error("MD5 摘要已经生成，不能继续 update。");
     }
 
-    const bytes = normalizeMd5Input(input, encoding);
-    // normalizeMd5Input 始终返回覆盖完整底层 buffer 的新 Uint8Array，因此这里无需再次复制。
-    this.instance.append(bytes.buffer as ArrayBuffer);
+    // 连续 UTF-8 输入可在代理对中间分块，编码器保留尚未确定的尾码元。
+    this.inputStream.update(input, encoding);
     return this;
   }
 
@@ -53,6 +61,8 @@ export class Md5 {
    */
   toBytes(): number[] {
     if (this.digestBytes === null) {
+      // 先处理尾部孤立代理项，再固定摘要，后续读取仅复制缓存。
+      this.inputStream.flush();
       this.digestBytes = binaryStringToBytes(this.instance.end(true));
     }
 

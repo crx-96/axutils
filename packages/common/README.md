@@ -5,7 +5,9 @@
 ## 兼容性
 
 - 包消费运行时：`Node.js >= 14.18.0`
-- 同时提供 ESM、CJS 和浏览器 UMD 产物，ESM/CJS 各有独立类型声明
+- Node 同一进程的 `import` 和 `require` 共享存储和错误类。日期入口按调用方的模块格式加载 `date-fns`，保留通过 `setDefaultOptions` 设置的语言和周规则。浏览器打包使用原生 ESM，支持按需导入、动态导入和 tree shaking。
+- Promise 和 RxJS HTTP 入口提供 ESM/CJS 声明，可在使用 `@types/node@14` 的纯 Node 工程中启用严格声明检查，支持传入 Axios 的原始实例。在 Node ESM 中需要复用应用配置的 Axios defaults 或拦截器时，通过 `axiosInstance` 传入该实例。
+- 浏览器 UMD 单文件附带本包和内置依赖的许可正文，发布包另提供 `dist/THIRD-PARTY-LICENSES.json`。
 - Node 专属实现使用显式 `/node` 子路径；根入口不要求安装第三方运行时依赖
 
 ## 安装

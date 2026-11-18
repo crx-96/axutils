@@ -37,19 +37,14 @@ export type QueryObject = Record<string, string | string[]>;
  * 按 Unicode 代码点比较字符串，避免依赖运行时默认排序的实现细节。
  */
 const compareByCodePoint = (left: string, right: string): number => {
-  const leftPoints = Array.from(left);
-  const rightPoints = Array.from(right);
-  const length = Math.min(leftPoints.length, rightPoints.length);
-
-  for (let index = 0; index < length; index += 1) {
-    const leftPoint = leftPoints[index]?.codePointAt(0) ?? 0;
-    const rightPoint = rightPoints[index]?.codePointAt(0) ?? 0;
-    if (leftPoint !== rightPoint) {
-      return leftPoint - rightPoint;
-    }
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; ) {
+    const leftPoint = left.codePointAt(index) ?? 0;
+    const rightPoint = right.codePointAt(index) ?? 0;
+    if (leftPoint !== rightPoint) return leftPoint - rightPoint;
+    index += leftPoint > 0xffff ? 2 : 1;
   }
-
-  return leftPoints.length - rightPoints.length;
+  return left.length - right.length;
 };
 
 /**
@@ -113,15 +108,15 @@ const extractQuery = (value: string): string | null => {
   const beforeHash = hashIndex >= 0 ? value.slice(0, hashIndex) : value;
   const questionMarkIndex = beforeHash.indexOf("?");
 
-  if (beforeHash.startsWith("?")) {
-    return beforeHash.slice(questionMarkIndex + 1);
-  }
+  if (beforeHash.startsWith("?")) return beforeHash;
 
-  const beforeQuestionMark = beforeHash.slice(0, questionMarkIndex);
-  const isExplicitPath = /^(?:https?:\/\/|\/)/i.test(beforeHash);
-  const isRelativePath = questionMarkIndex >= 0 && !/[=&]/u.test(beforeQuestionMark);
+  const path = questionMarkIndex < 0 ? beforeHash : beforeHash.slice(0, questionMarkIndex);
+  // 只有 HTTP(S) 和前导斜杠优先确定路径；./ 和 ../ 同样可以是裸查询键的开头。
+  const isExplicitPath = /^(?:https?:\/\/|\/)/i.test(path);
+  const isRelativePath = !/[=&]/u.test(path) && (questionMarkIndex >= 0 || path.includes("/"));
   if (isExplicitPath || isRelativePath) {
-    return questionMarkIndex >= 0 ? beforeHash.slice(questionMarkIndex + 1) : null;
+    // URLSearchParams 自行消费一个分隔问号；第二个问号是业务键的一部分。
+    return questionMarkIndex >= 0 ? beforeHash.slice(questionMarkIndex) : null;
   }
 
   return beforeHash;

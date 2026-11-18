@@ -4,11 +4,18 @@ export {
   createUtcDate,
   dateToUtcFields,
   daysInGregorianMonth,
+  isDateObject,
   isValidDate,
+  isoDateTimeString,
 } from "./internal/calendar.js";
-export { durationMilliseconds, millisecondsToDuration } from "./internal/duration.js";
+export {
+  durationMilliseconds,
+  durationValue,
+  millisecondsToDuration,
+} from "./internal/duration.js";
 export type { ParsedDateTime } from "./internal/parse.js";
 export {
+  MAX_ISO_OFFSET_MINUTES,
   dateTimeToUtcDate,
   parseDateString,
   parseDateTimeString,
@@ -18,8 +25,9 @@ export {
   LOCAL_TIMEZONE,
   assertTimezone,
   dateToZonedDate,
-  formatOptions,
+  formatZonedDate,
   getTimezone,
+  zonedWallDate,
 } from "./internal/timezone.js";
 export {
   assertFinite,

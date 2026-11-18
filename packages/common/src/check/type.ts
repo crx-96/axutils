@@ -84,12 +84,11 @@ export const isNil = (value: unknown): value is null | undefined =>
  * 如果需要单独识别 `async` 函数，请使用 {@link isAsyncFunction}。
  * 另外，跨 realm（如 iframe）时 `typeof` 仍然是可靠的，比 `instanceof Function` 更稳妥。
  *
- * 类型层面：收窄后的类型为 `(...args: never[]) => unknown`，
- * 调用方可以在收窄后**无参调用**并拿到 `unknown` 返回值，
- * 但**带参调用会触发类型错误**（实参不可赋值给 `never[]`）。
- * 如需带参调用，请在收窄后再断言具体的函数签名。
+ * 结果可能只支持 new，直接调用前需要另行确定调用签名。
  */
-export const isFunction = (value: unknown): value is (...args: never[]) => unknown =>
+export const isFunction = (
+  value: unknown,
+): value is ((...args: never[]) => unknown) | (abstract new (...args: never[]) => unknown) =>
   typeof value === "function";
 
 /**
@@ -149,7 +148,7 @@ const hasAsyncFunctionTag = (value: object): boolean => {
  *   不属于 class 声明或箭头语法，会被视为普通函数返回 `true`，方法名也可以是 class。
  *   如需严格区分 `function` 关键字定义与方法简写，本方法不支持。
  *
- * 类型层面：收窄后的类型为 `(...args: never[]) => unknown`，调用约束同 {@link isFunction}。
+ * 类型层面：收窄后的类型为 `(...args: never[]) => unknown`，带参调用需先确认具体签名。
  */
 export const isNormalFunction = (value: unknown): value is (...args: never[]) => unknown => {
   // 先收窄可读取函数源码的值；普通非函数不会触发任何标签或源码访问。
@@ -186,7 +185,7 @@ export const isNormalFunction = (value: unknown): value is (...args: never[]) =>
  * 即与 {@link isAsyncFunction} 存在交集；
  * 如需单独识别 `async` 箭头函数，请使用 {@link isAsyncArrowFunction}。
  *
- * 类型层面：收窄后的类型为 `(...args: never[]) => unknown`，调用约束同 {@link isFunction}。
+ * 类型层面：收窄后的类型为 `(...args: never[]) => unknown`，带参调用需先确认具体签名。
  */
 export const isArrowFunction = (value: unknown): value is (...args: never[]) => unknown =>
   typeof value === "function" && isArrowSource(Function.prototype.toString.call(value));
@@ -228,8 +227,13 @@ export const isAsyncArrowFunction = (
  * 因为两者的 `Date` 构造函数并非同一个对象。
  * 如果需要跨 realm 判断，请改用 `Object.prototype.toString.call(value) === "[object Date]"`。
  */
-export const isDate = (value: unknown): value is Date =>
-  value instanceof Date && !Number.isNaN(value.getTime());
+export const isDate = (value: unknown): value is Date => {
+  try {
+    return value instanceof Date && !Number.isNaN(Date.prototype.getTime.call(value));
+  } catch {
+    return false;
+  }
+};
 
 /**
  * 判断传入值是否为“字面量对象”（plain object）。

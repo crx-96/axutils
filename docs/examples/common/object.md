@@ -22,7 +22,7 @@ JSON 子路径的配置化序列化需要可选 peer 依赖：
 pnpm add safe-stable-stringify
 ```
 
-缓存的 key 处理函数对同一完整 key 的转换结果在实例生命周期内保持稳定，remove/clear 后再次使用也沿用该结果；未提供处理器时直接使用 prefix + key。clear 只移除记录标记与命名空间匹配的条目，保留其它业务数据；内存降级后端一次取得全部键，避免随数据量产生重复全量复制。
+缓存的 key 处理函数对同一完整 key 的转换结果在实例生命周期内保持稳定，remove/clear 后再次使用也沿用该结果；未提供处理器时使用 prefix + key 作为转换结果。clear 只移除记录标记与命名空间匹配的条目，保留其它业务数据；内存降级后端一次取得全部键，避免随数据量产生重复全量复制。
 
 通用 StorageUtils 使用 JSON 保存与读取值，Node StorageUtils 保存原引用，详见 [Node 缓存](https://github.com/crx-96/axutils/blob/main/docs/examples/common/node/object.md)。deepClone 的支持范围与可枚举键快照语义保持不变，数组路径优化不扩大到未支持类型。
 
@@ -156,7 +156,7 @@ later();
 
 ### `deepClone(value)`
 
-递归复制原始值、数组、普通对象、`Date`、`RegExp`、`Map`、`Set`、循环引用和共享引用。只复制可枚举自有字符串/Symbol 属性；函数、自定义 class 实例、TypedArray、`WeakMap`、`WeakSet`、`Promise` 等未声明支持的对象原样返回。属性描述符和非枚举属性不会复制。
+递归复制原始值、数组、普通对象、`Date`、`RegExp`、`Map`、`Set`、循环引用和共享引用。只复制可枚举自有字符串/Symbol 属性；函数、自定义 class 实例（包括 `Array`、`Map` 等内建类型的子类）、TypedArray、`WeakMap`、`WeakSet`、`Promise` 等未声明支持的对象原样返回。属性描述符和非枚举属性不会复制。
 
 返回值类型为输入类型 `T`，支持类型会解除嵌套引用；`Object.create(null)` 会保留 null 原型。
 
@@ -321,7 +321,7 @@ console.log(objectToQuery({ value: null }, { filterNullish: false })); // value=
 
 ### `queryToObject(value)`
 
-解析裸 query、带 query 的相对/绝对路径或 HTTP(S) URL，返回 `Record<string, string | string[]>`。hash 及其后的片段会忽略；重复 key 按出现顺序提升为数组；没有 query 的路径返回空对象。相对路径与裸 query 在没有前导斜杠时存在歧义：问号前含 `=` 或 `&` 时优先按裸 query 处理，裸 query 的 key 若含未编码问号可加前导 `?`。
+解析裸 query、带 query 的相对/绝对路径或 HTTP(S) URL，返回 `Record<string, string | string[]>`。hash 及其后的片段会忽略；重复 key 按出现顺序提升为数组；没有 query 的路径返回空对象。相对路径与裸 query 在没有前导斜杠时存在歧义：问号前含 `=` 或 `&` 时优先按裸 query 处理，裸 query 的 key 若含未编码问号可加前导 `?`，例如 `??id=1` 的键为 `?id`。没有问号、等号和 `&` 时，含 `/` 的输入按路径解释；裸标志键中的斜线可写成 `%2F`。
 
 ```ts
 import { queryToObject } from "@axutils/common/object/url";
@@ -345,9 +345,11 @@ console.log(queryToObject("?q=a%20b")); // { q: "a b" }
 - `space`：数字缩进空格数或字符串缩进。
 - `onCycle`：默认/显式 `"throw"` 检测循环引用后抛 `JsonCircularReferenceError`；`"skip"` 将循环字段替换为 `null`。
 
-无配置时根值为 `undefined`、函数或 Symbol 会像原生一样返回 `undefined`；FastPath 遇到 `BigInt` 会抛原生 `TypeError`。配置化路径底层 `safe-stable-stringify` 会把 `BigInt` 序列化为数字。如需稳定排序或循环引用策略，务必显式传对应配置。
+无配置或仅设置 `space` 时沿用原生行为。根值为 `undefined`、Symbol 或没有可用 `toJSON` 的函数时返回 `undefined`。`BigInt` 默认抛原生 `TypeError`。配置化路径把 `BigInt`（含包装对象）写为完整的十进制 JSON 数字，例如 `9007199254740993n` 输出 `9007199254740993`。用 `JSON.parse` 读回超出安全整数范围的数字时可能丢失精度。
 
-配置化路径在实际序列化的同一次遍历中检测循环，不预先读取属性。可枚举业务字段的 getter 按最终排序顺序读取；共享对象在每次实际出现时正常序列化。循环判断使用 `toJSON` 转换后的值：被转换消除的自引用不会误报，转换新生成的循环或返回父容器则抛 `JsonCircularReferenceError`。用户 getter、`toJSON` 或比较器的异常原样传播。`onCycle: "skip"` 生成的 `null` 占位仍会保留，即使同时开启 `filterNullish`。
+配置化路径按最终键序读取字段，包括 `"10"`、`"2"` 等索引键。每次遇到带 `toJSON` 的对象或函数时，读取一次转换钩子，以原值为 `this` 调用，传入所在对象的键或字符串数组下标，根键为 `""`。转换得到的 `Number`、`String`、`Boolean` 包装对象也按原生规则输出标量，例如 `Object(false)` 输出 `false`。
+
+循环检测在 `toJSON` 转换后进行。转换消除的自引用可以正常输出，转换返回当前祖先时由 `onCycle` 决定抛错或写入 `null`。`"skip"` 产生的占位即使开启 `filterNullish` 也会保留。共享对象在每次出现时独立访问。用户 getter、`toJSON` 或比较器的异常原样传播。
 
 ```ts
 import { jsonStringify } from "@axutils/common/object/json";
@@ -361,7 +363,7 @@ console.log(text);
 
 ### `jsonParse<T = unknown>(text, options?)`
 
-解析 JSON 文本；非法文本抛 `SyntaxError`。配置化路径可以递归排序结果对象 key，或删除值为 `null` 的对象字段；JSON 文本没有 `undefined`，所以 `filterNullish` 只过滤 `null`。排序会创建新对象，不保证引用相等。
+解析 JSON 文本，非法文本抛 `SyntaxError`。配置化路径可以递归排序结果对象的键，或删除值为 `null` 的对象字段。排序会创建普通对象。枚举它的键时，数组索引键（`"0"` 到 `"4294967294"` 的规范十进制写法）总是优先按数值升序出现，其余字符串键才体现指定顺序。例如降序解析 `{"a":1,"10":2,"2":3,"b":4}` 后，`Object.keys` 返回 `["2", "10", "b", "a"]`。
 
 类型参数 `T` 只声明预期结果类型，不会校验或转换实际数据结构。合法 JSON 即使与 `T` 不符也会正常返回，调用方需在业务边界确认字段、类型和必填项；不确定结构时可先使用默认的 `unknown`。
 
@@ -428,9 +430,9 @@ try {
 
 ### `new StorageUtils<Key = string>(options?)`
 
-创建通用缓存实例。浏览器优先使用 `localStorage`，`type: "session"` 使用 `sessionStorage`；Node 或 Web Storage 不可用时，实例创建时降级到对应类型的进程内 `Map`。缓存值走 JSON 编解码，因此不支持循环引用、`BigInt`、`undefined`、函数和 Symbol。`expired` 单位为秒，小于等于 `0` 表示不过期；非有限值抛 `TypeError`。
+创建通用缓存实例。浏览器优先使用 `localStorage`，`type: "session"` 使用 `sessionStorage`；Node 或 Web Storage 不可用时，实例创建时降级到对应类型的进程内 `Map`。配额已满但已有持久数据可读时，实例继续使用 Web Storage，写入遇到配额错误会抛错，`setSafe` 返回 `false`。缓存值走 JSON 编解码，因此不支持循环引用、`BigInt`、`undefined`、函数和 Symbol。`expired` 单位为秒，小于等于 `0` 表示不过期；非有限值抛 `TypeError`。
 
-`prefix` 用于命名空间；`key` 回调收到已经拼接前缀的 key，返回值作为底层存储 key。`type` 只能是 `"local"` 或 `"session"`。
+`prefix` 用于命名空间；`key` 回调收到已经拼接前缀的 key，返回值与 `prefix` 共同确定新记录的位置。相同转换结果在不同前缀下互相隔离，同一前缀内仍可用于键名归一化。旧格式仅在记录标记和前缀匹配时读取或删除。新记录写入成功即生效，清理旧记录失败时 `setSafe` 仍返回 `true`，后续写入或删除会再次尝试清理。`type` 只能是 `"local"` 或 `"session"`。
 
 ```ts
 import { StorageUtils } from "@axutils/common/object/storage";
@@ -464,7 +466,7 @@ console.log(user?.id, token);
 
 ### `storage.set<T>(key, value, expired?)`
 
-写入缓存。单次 `expired` 覆盖构造配置；小于等于 `0` 永不过期。值中出现 `undefined`、函数或 Symbol（包括嵌套字段/数组项）会抛 `TypeError`；循环引用、`BigInt` 等 JSON 不可表示值也会抛错；过期绝对时间超出安全整数范围抛 `RangeError`。
+写入缓存。单次 `expired` 覆盖构造配置；小于等于 `0` 永不过期。值中出现非有限数字（`NaN`、`Infinity`、`-Infinity`）、`undefined`、函数或 Symbol（包括嵌套字段/数组项）会抛 `TypeError`；循环引用、`BigInt` 等 JSON 不可表示值也会抛错；过期绝对时间超出安全整数范围抛 `RangeError`。
 
 ```ts
 import { StorageUtils } from "@axutils/common/object/storage";

@@ -1,4 +1,5 @@
-import type { JsonParseOptions, SortKeysOption } from "./types.js";
+import { resolveComparator } from "./sort-keys.js";
+import type { JsonParseOptions } from "./types.js";
 
 /**
  * 递归后处理解析结果。
@@ -45,28 +46,6 @@ const postProcess = <T>(
 };
 
 /**
- * 将 `SortKeysOption` 归一化为可直接用于 `Array.prototype.sort` 的比较函数。
- *
- * 返回 `null` 表示不需要排序（保持原顺序）。
- * 这是文件内部辅助函数，不对外导出。
- */
-const resolveComparator = (
-  sortKeys: SortKeysOption | undefined,
-): ((a: string, b: string) => number) | null => {
-  // 无排序时返回 null，让调用方跳过排序；内建方向与自定义比较器保持同一接口。
-  if (sortKeys === undefined || sortKeys === false) {
-    return null;
-  }
-  if (sortKeys === true || sortKeys === "asc") {
-    return (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-  }
-  if (sortKeys === "desc") {
-    return (a, b) => (a < b ? 1 : a > b ? -1 : 0);
-  }
-  return sortKeys;
-};
-
-/**
  * JSON 反序列化方法。
  *
  * 先用原生 `JSON.parse` 解析，再按配置项对结果做后处理（key 排序、过滤 null 字段）。
@@ -76,7 +55,7 @@ const resolveComparator = (
  *
  * 注意：
  * - JSON 文本中不存在 `undefined`，因此 `filterNullish` 只过滤 `null`。
- * - 排序会创建新对象，不保证引用相等。
+ * - 排序会创建普通对象，枚举时数组索引键始终优先按数值升序出现。
  * - T 只声明预期结果类型，不做运行时结构校验；调用方需确认解析值是否满足业务结构。
  *
  * @param text JSON 文本

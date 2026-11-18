@@ -6,7 +6,9 @@ import axios, {
   type RawAxiosRequestHeaders,
 } from "axios";
 import {
+  type MonoTypeOperatorFunction,
   type Observable,
+  ReplaySubject,
   catchError,
   defer,
   finalize,
@@ -15,14 +17,20 @@ import {
   map,
   of,
   retry,
-  shareReplay,
+  share,
   switchMap,
   tap,
   throwError,
   timer,
 } from "rxjs";
 import { createAttemptHeaders, resolveRequestHeaders } from "../../internal/http/headers.js";
-import { SAFE_RETRY_METHODS, assertObject } from "../../internal/http/primitives.js";
+import {
+  SAFE_RETRY_METHODS,
+  assertObject,
+  canReplayRequestBody,
+  snapshotRequestInput,
+} from "../../internal/http/primitives.js";
+import { type TransportSnapshot, snapshotTransport } from "../../internal/http/request-identity.js";
 import { createAbortLifecycle } from "./abort.js";
 import {
   getConfigOptions,
@@ -54,6 +62,12 @@ import type {
   ResolvedRequest,
 } from "./types.js";
 
+/** 在订阅解析阶段固定传输选项，并在共享流及内部重试间复用。 */
+type TransportRequest<D> = ResolvedRequest<D> & {
+  /** 本次订阅在共享前确定的传输选项。 */
+  transport: TransportSnapshot;
+};
+
 /** 共享传输只携带响应与实际请求头；订阅业务上下文始终留在共享流外。 */
 interface HttpTransportResult<T> {
   /** Axios 返回的统一成功结果。 */
@@ -84,6 +98,25 @@ function snapshotRequestHeaders(
       }),
     ),
   );
+}
+
+/** 共享单结果连接，在通知下游或中止上游前释放登记，以便同步重订阅建立新连接。 */
+function shareSingleResult<T>(release: () => void, refCount: boolean): MonoTypeOperatorFunction<T> {
+  /** 最后一个订阅者离开时先解除登记，再通知 share 同步断开上游。 */
+  const disconnect = () => {
+    release();
+    return of(null);
+  };
+  return (source) =>
+    source.pipe(
+      // 下游可同步发起下一次请求，先释放已结束的连接。
+      tap({ complete: release, error: release, next: release }),
+      share({
+        connector: () => new ReplaySubject<T>(1),
+        resetOnComplete: false,
+        resetOnRefCountZero: refCount && disconnect,
+      }),
+    );
 }
 
 /** 显式映射的两种创建方式，共用 RxHttpClient 的传输与订阅生命周期。 */
@@ -303,12 +336,19 @@ export class RxHttpClient<
     ) => Observable<HttpSuccess<unknown>>;
     let signal: HttpRequestOptions["signal"];
     let config: HttpRequestConfig<D> | undefined;
+    let signalRead = false;
+    /** 快照和失败恢复共用首次读取的 signal，即便其 getter 抛错也只执行一次。 */
+    const readSignal = () => {
+      if (!signalRead) {
+        signalRead = true;
+        signal = config?.signal;
+      }
+      return signal;
+    };
     try {
       config = buildInput();
       assertObject(config, "HttpRequestConfig 必须是对象");
-      if (typeof config.url !== "string") throw new TypeError("请求 url 必须是字符串");
-      if (typeof config.method !== "string") throw new TypeError("请求 method 必须是字符串");
-      const input: HttpRequestConfig<D> = { ...config, method: normalizeMethod(config.method) };
+      const input = snapshotRequestInput(config, normalizeMethod, readSignal);
       config = input;
       validateRequestInput(input);
       signal = input.signal;
@@ -317,8 +357,8 @@ export class RxHttpClient<
     } catch (error) {
       if (this.transformError === undefined) throw error;
       try {
-        // 其他参数无效时仍保留合法取消信号；已完成浅复制时复用快照。
-        const candidate = config?.signal;
+        // 即使其他选项未能复制，也沿用已取得的取消信号。
+        const candidate = readSignal();
         validateSignal(candidate);
         signal = candidate;
       } catch {
@@ -363,7 +403,7 @@ export class RxHttpClient<
         const request = this.resolveRequest(clientConfig, input, context);
         // 在去重前锁定各订阅的请求头，只有传输结果进入共享流。
         onHeaders(snapshotRequestHeaders(request.headers));
-        const key = this.getDedupeKey(request);
+        const key = getDedupeKey(request, request.transport.identity);
         return key === undefined
           ? this.executeRequest<T, D>(request)
           : this.getOrCreateInFlight<T, D>(key, request);
@@ -397,7 +437,11 @@ export class RxHttpClient<
       return of(this.cachedConfig);
     }
 
-    const config$ = defer(() => {
+    /** 清理本轮初始化，旧订阅的 teardown 不能释放同步重订阅刚登记的配置流。 */
+    const release = () => {
+      if (this.configLoading$ === config$) this.configLoading$ = undefined;
+    };
+    const config$: Observable<HttpClientConfig> = defer(() => {
       const result = this.configFactory?.();
       if (result === undefined || typeof result.subscribe !== "function") {
         throw new TypeError("HttpConfigFactory 必须返回 Observable");
@@ -416,11 +460,8 @@ export class RxHttpClient<
         this.cachedConfig = config;
       }),
       catchError((error: unknown) => throwError(() => toHttpRequestError(error, "config"))),
-      finalize(() => {
-        // 失败不缓存；成功时保留 cachedConfig，后续请求直接复用，不再执行工厂。
-        if (this.cachedConfig === undefined) this.configLoading$ = undefined;
-      }),
-      shareReplay({ bufferSize: 1, refCount: true }),
+      // 最后一个等待者离开时断开配置源，工厂的 teardown 可以同步发起新的初始化。
+      shareSingleResult(release, true),
     );
 
     this.configLoading$ = config$;
@@ -432,7 +473,7 @@ export class RxHttpClient<
     clientConfig: HttpClientConfig,
     input: HttpRequestConfig<D>,
     context: HttpRequestContext<C>,
-  ): ResolvedRequest<D> & { headers: RawAxiosRequestHeaders } {
+  ): TransportRequest<D> & { headers: RawAxiosRequestHeaders } {
     const request = resolveRequest(clientConfig, input);
     try {
       // 两客户端共享最终头解析，但上下文和业务回调仍属于当前订阅。
@@ -445,57 +486,51 @@ export class RxHttpClient<
             ? inputHeaders
             : this.transformHeaders(inputHeaders, context),
       );
-      return { ...request, headers };
+      const transport = snapshotTransport(
+        this.axiosInstance.defaults,
+        request.params,
+        request.timeout,
+      );
+      return { ...request, headers, transport };
     } catch (error) {
       throw toHttpRequestError(error, "config");
     }
   }
 
-  /**
-   * 根据请求语义生成 in-flight key。
-   *
-   * 自动 key 使用现有 jsonStringify 的递归 key 排序，再用 Md5 压缩长度；两个依赖均为可选 peer，
-   * 仅从本子路径使用 HTTP 功能时需要安装。无法稳定 JSON 序列化时宁可关闭自动去重，也不冒险合并请求。
-   */
-  private getDedupeKey<D>(request: ResolvedRequest<D>): string | undefined {
-    return getDedupeKey(request);
-  }
-
   /** 创建或复用同 key 的 in-flight Observable；请求完成/失败/取消后都会清理 Map。 */
   private getOrCreateInFlight<T, D>(
     key: string,
-    request: ResolvedRequest<D>,
+    request: TransportRequest<D>,
   ): Observable<HttpTransportResult<T>> {
     const existing = this.inFlight.get(key);
     if (existing !== undefined) return existing as Observable<HttpTransportResult<T>>;
 
     // 只有第一次订阅进入这里才登记 Map；Observable 创建本身不会占用去重槽位。
     let shared$: Observable<HttpTransportResult<unknown>>;
-    const source$ = this.executeRequest<T, D>(request).pipe(
-      finalize(() => {
-        if (this.inFlight.get(key) === shared$) this.inFlight.delete(key);
-      }),
+    /** 单次传输在发出成功值或错误之前结束共享，允许下游同步 repeat/retry。 */
+    const release = () => {
+      if (this.inFlight.get(key) === shared$) this.inFlight.delete(key);
+    };
+    // 只有开启自动取消才在最后一个订阅离开时断开 Axios；默认保留进行中的请求供重订阅共享。
+    shared$ = this.executeRequest<T, D>(request).pipe(
+      shareSingleResult(release, request.cancelOnNoSubscribers),
     );
-    // 默认不取消底层请求时不能使用 refCount，否则最后一个订阅者离开会让 source finalize 并清掉 Map，
-    // 但 Axios Promise 仍在执行，随后相同请求会重新发起。开启自动取消时才让 refCount 控制底层生命周期。
-    shared$ = source$.pipe(shareReplay({ bufferSize: 1, refCount: request.cancelOnNoSubscribers }));
     this.inFlight.set(key, shared$);
     return shared$ as Observable<HttpTransportResult<T>>;
   }
 
   /** 通过 defer/from 接入 Axios Promise，并按规则进行请求级重试和统一错误转换。 */
-  private executeRequest<T, D>(request: ResolvedRequest<D>): Observable<HttpTransportResult<T>> {
+  private executeRequest<T, D>(request: TransportRequest<D>): Observable<HttpTransportResult<T>> {
     return defer(() => {
       // 取消资源属于这次共享传输，所有内部重试复用同一生命周期与请求参数。
       const abortLifecycle = createAbortLifecycle(request.signal, request.cancelOnNoSubscribers);
       let settled = false;
       const axiosConfig: AxiosRequestConfig<D> = {
+        ...request.transport.config,
         method: request.method.toLowerCase(),
         url: request.url,
       };
-      if (request.params !== undefined) axiosConfig.params = request.params;
       if (request.data !== undefined) axiosConfig.data = request.data;
-      if (request.timeout !== undefined) axiosConfig.timeout = request.timeout;
       if (abortLifecycle.signal !== undefined) axiosConfig.signal = abortLifecycle.signal;
 
       // 默认只允许安全方法重试；每次尝试仍由 Axios 执行拦截器和请求体转换。
@@ -514,10 +549,21 @@ export class RxHttpClient<
         retry({
           count: retryAllowed ? request.retryCount - 1 : 0,
           delay: (error: unknown) => {
-            if (!retryAllowed || !isRetryableError(error)) {
+            if (
+              !isRetryableError(error) ||
+              !canReplayRequestBody(request.data) ||
+              !request.transport.canReplay(this.axiosInstance.defaults)
+            ) {
               return throwError(() => error);
             }
-            return request.retryDelay > 0 ? timer(request.retryDelay) : of(null);
+            if (request.retryDelay === 0) return of(null);
+            // 延迟结束时再检查，默认项也可能在定时器等待期间改变。
+            return timer(request.retryDelay).pipe(
+              map(() => {
+                if (!request.transport.canReplay(this.axiosInstance.defaults)) throw error;
+                return null;
+              }),
+            );
           },
         }),
         map((response) => {

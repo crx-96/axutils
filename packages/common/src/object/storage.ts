@@ -1,5 +1,6 @@
 import { type StorageBackend, resolveStorage } from "./storage/backend.js";
 import {
+  CURRENT_STORAGE_MARKER,
   STORAGE_RECORD_MARKER,
   type StorageRecord,
   normalizeExpired,
@@ -16,7 +17,7 @@ export type StorageType = "local" | "session";
 
 /**
  * 缓存 key 处理函数。
- * 调用时收到的参数已经包含 `prefix`，返回值会直接作为底层存储 key。
+ * 调用时收到的参数已经包含 `prefix`，返回值参与构造底层存储 key。
  */
 export type StorageKeyHandler = (key: string) => string;
 
@@ -37,7 +38,7 @@ export interface StorageOptions {
  *
  * 浏览器优先使用 `localStorage`/`sessionStorage`；在 Node 或 Web Storage 不可用时，
  * 实例创建时自动降级到进程内 Map。缓存值通过 JSON 编解码，因此不支持循环引用、BigInt、
- * `undefined`、函数和 Symbol。
+ * 非有限数字、`undefined`、函数和 Symbol。
  * `Key` 可指定业务 key 的字符串联合类型，默认接受任意字符串；仅提供静态提示与约束。
  */
 export class StorageUtils<Key extends string = string> {
@@ -58,44 +59,70 @@ export class StorageUtils<Key extends string = string> {
   /**
    * 写入缓存。
    * `expired` 未传时使用构造函数配置；小于等于 0 表示不过期。
-   * 缓存值不能包含 `undefined`、函数或 Symbol，否则会抛出 `TypeError`；
+   * 新键写入成功即生效，清理同一业务键的旧格式记录失败时仍视为写入成功。
+   * 缓存值不能包含非有限数字、`undefined`、函数或 Symbol，否则会抛出 `TypeError`；
    * 过期时间计算结果超出安全时间范围时抛出 `RangeError`。
    */
   set<T = unknown>(key: Key, value: T, expired?: number): void {
     const record: StorageRecord = {
       data: value,
       expiresAt: toExpiresAt(expired === undefined ? this.expired : expired),
-      marker: STORAGE_RECORD_MARKER,
+      marker: CURRENT_STORAGE_MARKER,
       prefix: this.prefix,
     };
 
-    this.storage.setItem(this.getStorageKey(key), serializeStorageRecord(record));
+    const [current, legacy] = this.getKeys(key);
+    const serialized = serializeStorageRecord(record);
+    // 同源 Web Storage 也可能被业务直接写入，已有内容必须能证明属于当前记录。
+    const previous = this.storage.getItem(current);
+    if (previous !== null && !this.ownedRecord(previous, CURRENT_STORAGE_MARKER)) {
+      throw new Error("缓存键已被其他数据占用");
+    }
+    // 新键写入成功即提交。若写入失败，原有的新旧记录都仍在原位。
+    this.storage.setItem(current, serialized);
+    try {
+      this.removeOwned(legacy, STORAGE_RECORD_MARKER);
+    } catch {
+      // 读取优先使用已提交的新键。旧键清理失败可留到下次写入、删除或过期时重试。
+    }
   }
 
-  /** 读取缓存；不存在、过期或数据损坏时返回 `null`。 */
+  /** 将命名空间与转换后的键分别编码，保留同一前缀内的自定义键别名。 */
+  private getKeys(key: Key): [string, string] {
+    const legacy = this.getStorageKey(key);
+    return [`${CURRENT_STORAGE_MARKER}/${JSON.stringify([this.prefix, legacy])}`, legacy];
+  }
+
+  /** 识别给定版本与命名空间的有效记录，其他格式按未命中处理。 */
+  private ownedRecord(value: string | null, marker: StorageRecord["marker"]): StorageRecord | null {
+    const record = value === null ? null : parseStorageRecord(value);
+    return record?.marker === marker && record.prefix === this.prefix ? record : null;
+  }
+
+  /** 删除前重新检查所有权，保留占用同一物理键的业务数据。 */
+  private removeOwned(key: string, marker: StorageRecord["marker"]): void {
+    if (this.ownedRecord(this.storage.getItem(key), marker)) this.storage.removeItem(key);
+  }
+
+  /** 优先读取新键，再兼容所属旧记录；过期时同时清理两种格式。 */
   get<T = unknown>(key: Key): T | null {
-    const storageKey = this.getStorageKey(key);
-    const value = this.storage.getItem(storageKey);
-
-    if (value === null) {
-      return null;
-    }
-
-    const record = parseStorageRecord(value);
-    if (record === null || record.prefix !== this.prefix) {
-      return null;
-    }
+    const [current, legacy] = this.getKeys(key);
+    const record =
+      this.ownedRecord(this.storage.getItem(current), CURRENT_STORAGE_MARKER) ??
+      this.ownedRecord(this.storage.getItem(legacy), STORAGE_RECORD_MARKER);
+    if (!record) return null;
     if (record.expiresAt !== 0 && record.expiresAt <= Date.now()) {
-      this.storage.removeItem(storageKey);
+      this.remove(key);
       return null;
     }
-
     return record.data as T;
   }
 
-  /** 删除一个缓存条目。 */
+  /** 删除当前业务键所属的新旧记录；先处理旧键以免旧值重新可见。 */
   remove(key: Key): void {
-    this.storage.removeItem(this.getStorageKey(key));
+    const [current, legacy] = this.getKeys(key);
+    this.removeOwned(legacy, STORAGE_RECORD_MARKER);
+    this.removeOwned(current, CURRENT_STORAGE_MARKER);
   }
 
   /**
@@ -103,8 +130,9 @@ export class StorageUtils<Key extends string = string> {
    * 通过记录标记和 prefix 识别条目，不调用底层 `Storage.clear()`，避免删除其他业务数据。
    */
   clear(): void {
-    // 后端只生成一次键快照；Map 无需为每一个索引重新展开全部键。
-    for (const key of this.storage.keys()) {
+    // 新物理键包含完整编码的旧键，长度一定更长。先清短键，部分清理失败时旧值仍被新键遮住。
+    const keys = this.storage.keys().sort((a, b) => a.length - b.length);
+    for (const key of keys) {
       const value = this.storage.getItem(key);
       if (value === null) {
         continue;

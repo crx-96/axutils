@@ -196,9 +196,12 @@ export const throttle = <T extends (...args: never[]) => unknown>(
   ): ReturnType<T> => {
     // 先更新状态再调用用户函数，保证用户函数重入调用 throttle 时仍处于当前节流周期。
     hasInvoked = true;
-    lastInvokeTime = Date.now();
+    lastInvokeTime = readActionTime();
     return Reflect.apply(fn, thisArg, args) as ReturnType<T>;
   };
+
+  // 降级到墙钟时，回拨不能让 trailing 的等待时间超过一个周期。
+  const elapsedSinceInvoke = (): number => Math.max(readActionTime() - lastInvokeTime, 0);
 
   /** 在剩余毫秒数后执行 trailing，由 cancel 或定时器触发路径负责清理句柄。 */
   const scheduleTrailing = (delay: number): void => {
@@ -224,7 +227,7 @@ export const throttle = <T extends (...args: never[]) => unknown>(
 
     // 用户回调可能重入并产生下一次待执行调用；此时继续从新的周期排程，避免丢失调用。
     if (lastArgs !== undefined && timer === undefined) {
-      scheduleTrailing(Math.max(wait - (Date.now() - lastInvokeTime), 0));
+      scheduleTrailing(Math.max(wait - elapsedSinceInvoke(), 0));
     }
   };
 
@@ -245,10 +248,7 @@ export const throttle = <T extends (...args: never[]) => unknown>(
     this: ThisParameterType<T>,
     ...args: Parameters<T>
   ): ReturnType<T> | undefined {
-    /** 本次调用的毫秒时间。 */
-    const now = Date.now();
-    /** 距上次真正执行回调的毫秒数。 */
-    const elapsed = now - lastInvokeTime;
+    const elapsed = elapsedSinceInvoke();
 
     // 如果 trailing timer 仍在排队，说明上一周期尚未完成；边界调用只更新待执行参数，
     // 不能清除 timer 后同步执行，否则 timer 注册顺序会导致 pending 调用被意外跳过。
@@ -267,7 +267,7 @@ export const throttle = <T extends (...args: never[]) => unknown>(
 
       // 处理 leading 回调内部重入的情况；普通调用不会进入此分支。
       if (lastArgs !== undefined && timer === undefined) {
-        scheduleTrailing(Math.max(wait - (Date.now() - lastInvokeTime), 0));
+        scheduleTrailing(Math.max(wait - elapsedSinceInvoke(), 0));
       }
       return result;
     }

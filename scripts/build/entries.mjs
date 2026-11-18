@@ -18,6 +18,7 @@ export function readPackageEntries(packageRoot) {
     const stem = esm.default.slice("./dist/".length, -3);
     if (
       esm.types !== `./dist/${stem}.d.ts` ||
+      (esm.node !== undefined && esm.node !== `./dist/${stem}.node.mjs`) ||
       cjs?.default !== `./dist/${stem}.cjs` ||
       cjs.types !== `./dist/${stem}.d.cts`
     ) {

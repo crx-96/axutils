@@ -1,88 +1,56 @@
-import { assertFinite, invalid } from "./internal.js";
+import {
+  DURATION_UNITS,
+  millisecondsToDuration,
+  readDuration,
+  totalDurationMilliseconds,
+} from "./internal/duration.js";
+import { assertInteger } from "./internal/validation.js";
 import type { DurationFields } from "./types.js";
 
-const FIELD_NAMES = [
-  "years",
-  "months",
-  "days",
-  "hours",
-  "minutes",
-  "seconds",
-  "milliseconds",
-] as const;
-function validateFields(fields: DurationFields): void {
-  if (fields === null || typeof fields !== "object" || Array.isArray(fields)) {
-    invalid("Duration 必须由字段对象构造");
+/** 在独立快照上变换每个已给值的字段，保留缺省字段和单位。 */
+function mapFields(fields: DurationFields, mapper: (value: number) => number): DurationFields {
+  const result = readDuration(fields);
+  for (const unit of DURATION_UNITS) {
+    const value = result[unit];
+    if (value !== undefined) result[unit] = mapper(value);
   }
-  for (const name of FIELD_NAMES) {
-    const value = fields[name];
-    if (value !== undefined) {
-      assertFinite(value, name);
-      if (!Number.isInteger(value)) {
-        invalid(`${name} 必须是有限整数`);
-      }
-    }
-  }
+  return result;
 }
 
-function mapFields(fields: DurationFields, mapper: (value: number) => number): DurationFields {
-  validateFields(fields);
+/** 逐单位合并两个已校验的快照，不跨单位进位。 */
+function combine(first: DurationFields, second: DurationFields, direction: 1 | -1): DurationFields {
+  const left = readDuration(first);
+  const right = readDuration(second);
   const result: DurationFields = {};
-  for (const name of FIELD_NAMES) {
-    if (fields[name] !== undefined) {
-      result[name] = mapper(fields[name] as number);
+  for (const unit of DURATION_UNITS) {
+    if (left[unit] !== undefined || right[unit] !== undefined) {
+      result[unit] = (left[unit] ?? 0) + direction * (right[unit] ?? 0);
     }
   }
   return result;
 }
 
-/** Temporal.Duration 风格的轻量时间长度命名空间；from/add/subtract 不会自动归约字段。 */
+/** Temporal.Duration 风格的轻量时间长度命名空间。 */
 // biome-ignore assist/source/useSortedKeys: 保留公开命名空间的成员枚举顺序。
 export const Duration = {
-  /** 从字段对象创建 Duration，未传入的字段不会被补入结果。 */
+  /** 创建七种支持单位的字段副本，继承或非枚举 getter 也只读取一次。 */
   from(fields: DurationFields): DurationFields {
-    validateFields(fields);
-    return { ...fields };
+    return readDuration(fields);
   },
 
-  /** 将毫秒拆解为天、小时、分钟、秒和毫秒，并显式补齐所有字段。 */
+  /** 将整数毫秒拆成天至毫秒，并在最前面显式补齐年月。 */
   fromMilliseconds(milliseconds: number): DurationFields {
-    validateFields({ milliseconds });
-    const sign = milliseconds < 0 ? -1 : 1;
-    let remaining = Math.abs(milliseconds);
-    const days = Math.floor(remaining / 86_400_000);
-    remaining -= days * 86_400_000;
-    const hours = Math.floor(remaining / 3_600_000);
-    remaining -= hours * 3_600_000;
-    const minutes = Math.floor(remaining / 60_000);
-    remaining -= minutes * 60_000;
-    const seconds = Math.floor(remaining / 1_000);
-    remaining -= seconds * 1_000;
-    // biome-ignore assist/source/useSortedKeys: 保留公开时长结果从大到小的字段枚举顺序。
+    // biome-ignore assist/source/useSortedKeys: 保留从年到毫秒的字段顺序。
     return {
       years: 0,
       months: 0,
-      days: days * sign,
-      hours: hours * sign,
-      minutes: minutes * sign,
-      seconds: seconds * sign,
-      milliseconds: remaining * sign,
+      ...millisecondsToDuration(assertInteger(milliseconds, "milliseconds")),
     };
   },
 
-  /** 将不含 years/months 的 Duration 展开为毫秒。 */
+  /** 将不含非零年月的有限整数时长展开为毫秒。 */
   totalMilliseconds(fields: DurationFields): number {
-    validateFields(fields);
-    if ((fields.years ?? 0) !== 0 || (fields.months ?? 0) !== 0) {
-      invalid("无法将 years 或 months 精确换算为毫秒");
-    }
-    return (
-      (fields.days ?? 0) * 86_400_000 +
-      (fields.hours ?? 0) * 3_600_000 +
-      (fields.minutes ?? 0) * 60_000 +
-      (fields.seconds ?? 0) * 1_000 +
-      (fields.milliseconds ?? 0)
-    );
+    return totalDurationMilliseconds(fields);
   },
 
   /** 对每个已存在字段取反，不进行跨字段借位或归约。 */
@@ -90,38 +58,19 @@ export const Duration = {
     return mapFields(fields, (value) => -value);
   },
 
-  /**
-   * 对每个已存在字段独立取绝对值，不进行跨字段归约或统一符号处理。
-   * 因此混合符号输入会逐字段变为正数，例如 { days: -1, hours: 2 } 变为 { days: 1, hours: 2 }。
-   */
+  /** 对每个已存在字段独立取绝对值，允许混合符号。 */
   abs(fields: DurationFields): DurationFields {
     return mapFields(fields, Math.abs);
   },
 
-  /** 对应字段直接相加；只要任一输入含有该字段，结果就保留该字段。 */
+  /** 对应字段相加，只要任一输入含有该单位就保留该字段。 */
   add(first: DurationFields, second: DurationFields): DurationFields {
-    validateFields(first);
-    validateFields(second);
-    const result: DurationFields = {};
-    for (const name of FIELD_NAMES) {
-      if (first[name] !== undefined || second[name] !== undefined) {
-        result[name] = (first[name] ?? 0) + (second[name] ?? 0);
-      }
-    }
-    return result;
+    return combine(first, second, 1);
   },
 
-  /** 对应字段直接相减；不进行跨字段借位或归约。 */
+  /** 对应字段相减，不进行跨字段借位或归约。 */
   subtract(first: DurationFields, second: DurationFields): DurationFields {
-    validateFields(first);
-    validateFields(second);
-    const result: DurationFields = {};
-    for (const name of FIELD_NAMES) {
-      if (first[name] !== undefined || second[name] !== undefined) {
-        result[name] = (first[name] ?? 0) - (second[name] ?? 0);
-      }
-    }
-    return result;
+    return combine(first, second, -1);
   },
 };
 

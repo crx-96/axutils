@@ -113,12 +113,13 @@ describe("axios/http 取消生命周期", () => {
     let factoryCalls = 0;
     const config = deferred<Partial<PromiseHttpClientConfig>>();
     const { context, instance } = createAxiosInstance((config) => response(config));
+    const transformHeaders = vi.fn(() => ({}));
     const client = PromiseHttpClient.create(
       () => {
         factoryCalls += 1;
         return config.promise;
       },
-      { axiosInstance: instance },
+      { axiosInstance: instance, transformHeaders },
     );
     const controller = new AbortController();
     const first = client.get("/cancelled-config", { signal: controller.signal });
@@ -132,6 +133,7 @@ describe("axios/http 取消生命周期", () => {
     // 工厂 Promise 不属于某个请求；首个请求取消后，其他等待者仍可复用它。
     config.resolve({ baseUrl: "https://shared.example.test" });
     await second;
+    expect(transformHeaders).toHaveBeenCalledOnce();
     await client.get("/after-shared-config");
 
     expect(factoryCalls).toBe(1);

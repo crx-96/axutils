@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
 import * as browserConvert from "../../src/crypto/convert.js";
 import { Md5 as BrowserMd5 } from "../../src/crypto/md5.js";
@@ -14,6 +15,49 @@ describe.each([
     expect(output).toEqual(input);
     expect(output.buffer).not.toBe(input.buffer);
     expect(convert.normalizeMd5Input("", "hex")).toEqual(input);
+  });
+
+  it("raw 字符串按 UTF-16 码元取低字节，包括成对和孤立的代理项", () => {
+    expect(convert.binaryStringToBytes("\u0000\u01ff\u{1d11e}\ud8ff")).toEqual([
+      0, 255, 52, 30, 255,
+    ]);
+  });
+
+  it("Base64 对空输入和三种尾组长度均与标准编码一致", () => {
+    const input = Buffer.from([0, 127, 255, 251, 255]);
+    for (let length = 0; length <= input.length; length++) {
+      const bytes = input.subarray(0, length);
+      const expected = bytes.toString("base64");
+      expect(convert.bytesToBase64(bytes)).toBe(expected);
+      expect(convert.decodeBase64(expected.split("").join("\u00a0\t"))).toEqual(
+        new Uint8Array(bytes),
+      );
+    }
+  });
+
+  it("1 MiB 字节视图的 Base64 编解码与独立实现一致", () => {
+    const backing = Buffer.alloc(1024 * 1024 + 2);
+    const bytes = backing.subarray(1, -1);
+    for (let index = 0; index < bytes.length; index++) bytes[index] = index % 251;
+    const expected = bytes.toString("base64");
+    expect(convert.bytesToBase64(bytes)).toBe(expected);
+    expect(bytes.equals(convert.decodeBase64(expected))).toBe(true);
+  });
+
+  it("严格拒绝错位或过多的 padding、URL-safe 和非 ASCII 字符", () => {
+    for (const invalid of [
+      "=AAA",
+      "A=AA",
+      "AA=A",
+      "A===",
+      "====",
+      "AA==AAAA",
+      "AA-_",
+      "\u0141AAA",
+      "AA\u{1d11e}",
+    ]) {
+      expect(() => convert.decodeBase64(invalid)).toThrow(TypeError);
+    }
   });
 
   it("JavaScript 调用者提供未知字符串编码时抛 TypeError", () => {

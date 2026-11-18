@@ -1,4 +1,4 @@
-import { firstValueFrom, forkJoin } from "rxjs";
+import { firstValueFrom, forkJoin, repeat, retry, toArray } from "rxjs";
 import { describe, expect, it } from "vitest";
 import { HttpRequestError, RxHttpClient } from "../../../src/rxjs/http.js";
 import { createAxiosInstance, response } from "../../helpers/http/adapter.js";
@@ -30,6 +30,36 @@ describe("rxjs/http 并发去重", () => {
 
     expect(context.calls).toBe(1);
     expect(firstResult).toBe(secondResult);
+  });
+
+  it("repeat(2) 的第二次订阅发送新请求", async () => {
+    const { context, instance } = createAxiosInstance((config, current) =>
+      response(config, current.calls),
+    );
+    const client = new RxHttpClient({ axiosInstance: instance });
+    const results = await firstValueFrom(client.get("/repeat").pipe(repeat(2), toArray()));
+    expect(results.map((result) => result.data)).toEqual([1, 2]);
+    expect(context.calls).toBe(2);
+  });
+
+  it("外部 retry 同步启动的新传输仍供并发订阅共享", async () => {
+    const gate = deferred();
+    const restarted = deferred();
+    const { context, instance } = createAxiosInstance(async (config, current) => {
+      if (current.calls === 1) throw new Error("first");
+      restarted.resolve();
+      await gate.promise;
+      return response(config);
+    });
+    const client = new RxHttpClient({ axiosInstance: instance, retryCount: 1 });
+    const request = client.get("/retry");
+    const first = firstValueFrom(request.pipe(retry(1)));
+    await restarted.promise;
+    const second = firstValueFrom(request);
+    gate.resolve();
+    const [a, b] = await Promise.all([first, second]);
+    expect(context.calls).toBe(2);
+    expect(a).toBe(b);
   });
 
   it("默认不取消底层请求时，最后一个订阅者离开后仍复用未完成请求", async () => {

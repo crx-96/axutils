@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as CommonEntry from "../../src/index";
 import { StorageUtils as StorageUtilsFromEntry } from "../../src/index";
@@ -58,9 +59,7 @@ class ThrowingStorage extends TestStorage {
 }
 
 class PartiallyThrowingStorage extends TestStorage {
-  constructor(private readonly failingKey: string) {
-    super();
-  }
+  failingKey: string | null = null;
 
   override getItem(key: string): string | null {
     if (key === this.failingKey) {
@@ -101,8 +100,8 @@ describe("object/storage", () => {
     new StorageUtils({ prefix: "storage-type-" }).set("key", "local");
     new StorageUtils({ prefix: "storage-type-", type: "session" }).set("key", "session");
 
-    expect(localStore.getItem("storage-type-key")).not.toBeNull();
-    expect(sessionStore.getItem("storage-type-key")).not.toBeNull();
+    expect(localStore.length).toBe(1);
+    expect(sessionStore.length).toBe(1);
     expect(new StorageUtils({ prefix: "storage-type-" }).get("key")).toBe("local");
     expect(new StorageUtils({ prefix: "storage-type-", type: "session" }).get("key")).toBe(
       "session",
@@ -138,7 +137,7 @@ describe("object/storage", () => {
     });
 
     storage.set("user", { id: 1 });
-    expect(store.getItem("md5:storage-key-user")).not.toBeNull();
+    expect(store.length).toBe(1);
     expect(storage.get("user")).toEqual({ id: 1 });
     expect(handledKeys).toEqual(["storage-key-user"]);
   });
@@ -164,14 +163,15 @@ describe("object/storage", () => {
   });
 
   it("clear 在部分 key 读取失败时保留已清理结果并抛出异常", () => {
-    const failingKey = "storage-clear-partial-second";
-    const store = new PartiallyThrowingStorage(failingKey);
+    const store = new PartiallyThrowingStorage();
     vi.stubGlobal("localStorage", store);
     const storage = new StorageUtils({ prefix: "storage-clear-partial-" });
 
     storage.set("first", 1);
     storage.set("second", 2);
 
+    const failingKey = store.key(1);
+    store.failingKey = failingKey;
     expect(() => storage.clear()).toThrow("partial get failed");
     expect(store.length).toBe(1);
     expect(store.key(0)).toBe(failingKey);
@@ -223,6 +223,12 @@ describe("object/storage", () => {
   });
 
   it.each([
+    ["根值 NaN", NaN],
+    ["嵌套 Infinity", { value: Infinity }],
+    ["数组负 Infinity", [-Infinity]],
+    ["包装 Infinity", Object(Infinity)],
+    ["toJSON 返回包装 NaN", { toJSON: () => Object(NaN) }],
+    ["跨 realm 包装负 Infinity", runInNewContext("Object(-Infinity)")],
     ["根值 undefined", undefined],
     ["根值函数", () => undefined],
     ["根值 Symbol", Symbol("root")],
@@ -239,8 +245,44 @@ describe("object/storage", () => {
 
     expect(() => storage.set("unsafe", value)).toThrow(TypeError);
     expect(storage.setSafe("safe", value)).toBe(false);
-    expect(store.getItem("storage-invalid-json-unsafe")).toBeNull();
-    expect(store.getItem("storage-invalid-json-safe")).toBeNull();
+    expect(store.length).toBe(0);
+  });
+
+  it("按 toJSON 后的实际数值存储跨 realm 包装对象，自定义拆箱只调用一次", () => {
+    vi.stubGlobal("localStorage", new TestStorage());
+    const storage = new StorageUtils();
+    const box: object = runInNewContext("Object(Infinity)");
+    const convert = vi.fn(() => "42");
+    Object.defineProperty(box, Symbol.toPrimitive, { value: convert });
+    const toJSON = vi.fn(() => box);
+
+    storage.set("key", [Object(2), { toJSON }]);
+    expect(storage.get("key")).toEqual([2, 42]);
+    expect(toJSON.mock.calls).toEqual([["1"]]);
+    expect(convert.mock.calls).toEqual([["number"]]);
+  });
+
+  it.runIf("rawJSON" in JSON)("原始 JSON null 保持为空，超出有限数范围的原始文本被拒绝", () => {
+    if (!("rawJSON" in JSON) || typeof JSON.rawJSON !== "function") throw new Error();
+    vi.stubGlobal("localStorage", new TestStorage());
+    const storage = new StorageUtils();
+    storage.set("key", [JSON.rawJSON("null")]);
+    expect(storage.get("key")).toEqual([null]);
+    expect(storage.setSafe("key", JSON.rawJSON("1e999"))).toBe(false);
+    expect(storage.get("key")).toEqual([null]);
+  });
+
+  it("数字包装对象的自定义转换失败时保留已存值", () => {
+    vi.stubGlobal("localStorage", new TestStorage());
+    const storage = new StorageUtils();
+    storage.set("key", 2);
+    const convert = vi.fn().mockReturnValueOnce(Infinity).mockReturnValueOnce(1n);
+    const box = Object.defineProperty(Object(1), "valueOf", { value: convert });
+
+    expect(storage.setSafe("key", box)).toBe(false);
+    expect(() => storage.set("key", box)).toThrow(TypeError);
+    expect(convert).toHaveBeenCalledTimes(2);
+    expect(storage.get("key")).toBe(2);
   });
 
   it.each([
@@ -414,5 +456,133 @@ describe("object/storage", () => {
     } finally {
       storage.clear();
     }
+  });
+
+  it("隔离不同前缀的同名物理键，保留同前缀的转换别名", () => {
+    vi.stubGlobal("localStorage", new TestStorage());
+    const first = new StorageUtils({ key: () => "collision", prefix: "app:" });
+    const second = new StorageUtils({ key: () => "collision", prefix: "app:draft:" });
+    try {
+      first.set("draft:42", 1);
+      second.set("42", 2);
+      expect(first.get("other")).toBe(1);
+      first.set("other", 3);
+      expect(first.get("draft:42")).toBe(3);
+      expect(second.get("42")).toBe(2);
+      first.remove("draft:42");
+      expect(first.get("draft:42")).toBeNull();
+      expect(first.get("other")).toBeNull();
+      expect(second.get("42")).toBe(2);
+      first.clear();
+      expect(second.get("42")).toBe(2);
+    } finally {
+      first.clear();
+      second.clear();
+    }
+  });
+
+  it("旧记录按所有权读删，新写失败时保留旧记录", () => {
+    const backend = new TestStorage();
+    vi.stubGlobal("localStorage", backend);
+    const raw = JSON.stringify({
+      data: 1,
+      expiresAt: 0,
+      marker: "@axutils/common/storage",
+      prefix: "app:",
+    });
+    backend.setItem("app:draft:42", raw);
+    const owner = new StorageUtils({ prefix: "app:" });
+    const other = new StorageUtils({ prefix: "app:draft:" });
+    expect(other.get("42")).toBeNull();
+    other.remove("42");
+    other.set("42", 2);
+    expect(owner.get("draft:42")).toBe(1);
+    expect(owner.setSafe("draft:42", NaN)).toBe(false);
+    expect(backend.getItem("app:draft:42")).toBe(raw);
+    owner.remove("draft:42");
+    expect(backend.getItem("app:draft:42")).toBeNull();
+    expect(other.get("42")).toBe(2);
+    backend.setItem("app:draft:42", "business value");
+    owner.set("draft:42", 3);
+    owner.remove("draft:42");
+    expect(backend.getItem("app:draft:42")).toBe("business value");
+  });
+
+  const legacyRecord =
+    '{"marker":"@axutils/common/storage","prefix":"","expiresAt":0,"data":"旧值"}';
+
+  it("迁移写入失败保留旧记录，写入成功后即使旧键读失败也可重试清理", () => {
+    const backend = new PartiallyThrowingStorage();
+    vi.stubGlobal("localStorage", backend);
+    const storage = new StorageUtils();
+    backend.setItem("key", legacyRecord);
+    vi.spyOn(backend, "setItem").mockImplementationOnce(() => {
+      throw new Error("写入失败");
+    });
+
+    expect(storage.setSafe("key", "新值")).toBe(false);
+    expect(backend.getItem("key")).toBe(legacyRecord);
+    expect(storage.get("key")).toBe("旧值");
+
+    backend.failingKey = "key";
+    expect(storage.setSafe("key", "新值")).toBe(true);
+    expect(storage.get("key")).toBe("新值");
+    backend.failingKey = null;
+    storage.set("key", "最终值");
+    expect(backend.getItem("key")).toBeNull();
+    expect(storage.get("key")).toBe("最终值");
+  });
+
+  it.each([
+    "remove",
+    "过期",
+    "clear",
+  ])("迁移提交后 %s 清理旧键失败时旧值不会重新可读", (operation) => {
+    vi.useFakeTimers();
+    const backend = new TestStorage();
+    vi.stubGlobal("localStorage", backend);
+    const storage = new StorageUtils();
+    const reader = new StorageUtils();
+    storage.set("key", "原新格式值");
+    backend.setItem("key", legacyRecord);
+    const removeItem = backend.removeItem.bind(backend);
+    const cleanup = vi.spyOn(backend, "removeItem").mockImplementation((key) => {
+      if (key === "key") throw new Error("旧键删除失败");
+      removeItem(key);
+    });
+
+    expect(storage.setSafe("key", "新值", operation === "过期" ? 1 : 0)).toBe(true);
+    expect(reader.get("key")).toBe("新值");
+    if (operation === "过期") {
+      vi.advanceTimersByTime(1000);
+      expect(reader.getSafe("key")).toBeNull();
+      expect(() => reader.get("key")).toThrow("旧键删除失败");
+    } else {
+      expect(operation === "clear" ? storage.clearSafe() : storage.removeSafe("key")).toBe(false);
+      expect(reader.get("key")).toBe("新值");
+    }
+
+    cleanup.mockRestore();
+    if (operation === "remove") storage.remove("key");
+    if (operation === "clear") storage.clear();
+    expect(reader.get("key")).toBeNull();
+    expect(backend.length).toBe(0);
+  });
+
+  it("已有数据可读但配额已满时保留持久后端", () => {
+    const backend = new TestStorage();
+    vi.stubGlobal("localStorage", backend);
+    new StorageUtils().set("saved", 1);
+    const error = Object.assign(new Error("full"), { name: "QuotaExceededError" });
+    vi.spyOn(backend, "setItem").mockImplementation(() => {
+      throw error;
+    });
+    const storage = new StorageUtils();
+    expect(storage.get("saved")).toBe(1);
+    expect(() => storage.set("saved", 2)).toThrow(error);
+    expect(storage.setSafe("saved", 2)).toBe(false);
+    expect(storage.get("saved")).toBe(1);
+    storage.remove("saved");
+    expect(backend.length).toBe(0);
   });
 });

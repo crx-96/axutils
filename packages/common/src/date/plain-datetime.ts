@@ -1,4 +1,3 @@
-import { formatInTimeZone } from "date-fns-tz";
 import type { DateFormatPattern, Timezone } from "./format.js";
 import {
   addYearMonths,
@@ -7,10 +6,14 @@ import {
   dateToUtcFields,
   dateToZonedDate,
   durationMilliseconds,
-  formatOptions,
+  durationValue,
+  formatZonedDate,
   invalid,
+  isDateObject,
+  isoDateTimeString,
   millisecondsToDuration,
   parseDateTimeString,
+  toEpochMilliseconds,
 } from "./internal.js";
 import type {
   DateFormatOptions,
@@ -22,7 +25,7 @@ import type {
 /** 将 Date、完整日期时间文本或字段对象规范为 UTC 对齐 Date，并保留毫秒字段。 */
 function fromInput(input: PlainDateTimeInput): Date {
   // Date 按 UTC 字段复制；文本偏移仍按原契约归一化为 UTC，不经过宿主本地解析。
-  if (input instanceof Date) {
+  if (isDateObject(input)) {
     const fields = dateToUtcFields(input);
     return createUtcDate(
       fields.year,
@@ -47,34 +50,26 @@ function fromInput(input: PlainDateTimeInput): Date {
     input.day,
     input.hour,
     input.minute,
-    input.second ?? 0,
-    input.millisecond ?? 0,
+    input.second,
+    input.millisecond,
   );
 }
 
 /** 先执行年月日历夹紧，再增加日及以下的整数毫秒，最后校验结果可表示。 */
-function addDateTime(date: Date, duration: DurationFields): Date {
-  let result = addYearMonths(date, duration.years ?? 0, duration.months ?? 0);
-  result = new Date(
-    result.getTime() +
-      // biome-ignore assist/source/useSortedKeys: 按日期字段顺序读取并校验，保留首个错误的语义。
-      durationMilliseconds({
-        days: duration.days,
-        hours: duration.hours,
-        minutes: duration.minutes,
-        seconds: duration.seconds,
-        milliseconds: duration.milliseconds,
-      }),
-  );
-  return createUtcDate(
-    result.getUTCFullYear(),
-    result.getUTCMonth() + 1,
-    result.getUTCDate(),
-    result.getUTCHours(),
-    result.getUTCMinutes(),
-    result.getUTCSeconds(),
-    result.getUTCMilliseconds(),
-  );
+function addDateTime(date: Date, duration: DurationFields, direction = 1): Date {
+  // 先校验输入值再施加方向，避免一元负号把字符串转换为有效整数。
+  const years = durationValue(duration, "years");
+  const months = durationValue(duration, "months");
+  const calendar = addYearMonths(date, direction * years, direction * months);
+  // biome-ignore assist/source/useSortedKeys: 按日到毫秒的顺序读取 getter。
+  const elapsed = durationMilliseconds({
+    days: duration.days,
+    hours: duration.hours,
+    minutes: duration.minutes,
+    seconds: duration.seconds,
+    milliseconds: duration.milliseconds,
+  });
+  return new Date(toEpochMilliseconds(calendar.getTime() + direction * elapsed));
 }
 
 /** 规范化两端后比较 UTC 对齐毫秒值。 */
@@ -107,16 +102,7 @@ export const PlainDateTime = {
 
   /** 日期时间减法。 */
   subtract(dateTime: PlainDateTimeInput, duration: DurationFields): Date {
-    // biome-ignore assist/source/useSortedKeys: 保留日期字段 getter 的读取顺序。
-    return addDateTime(fromInput(dateTime), {
-      years: -(duration.years ?? 0),
-      months: -(duration.months ?? 0),
-      days: -(duration.days ?? 0),
-      hours: -(duration.hours ?? 0),
-      minutes: -(duration.minutes ?? 0),
-      seconds: -(duration.seconds ?? 0),
-      milliseconds: -(duration.milliseconds ?? 0),
-    });
+    return addDateTime(fromInput(dateTime), duration, -1);
   },
 
   /** 返回 dateTime - other 的天、时、分、秒、毫秒差，不拆分年月。 */
@@ -166,18 +152,11 @@ export const PlainDateTime = {
     pattern: DateFormatPattern,
     options: DateFormatOptions = {},
   ): string {
-    return formatInTimeZone(
-      fromInput(dateTime),
-      options.timezone ?? "UTC",
-      pattern,
-      formatOptions(options.locale),
-    );
+    return formatZonedDate(fromInput(dateTime), options.timezone ?? "UTC", pattern, options.locale);
   },
 
   /** 输出 ISO 日期时间，保留带符号扩展年份；毫秒非零时追加三位毫秒，不输出时区后缀。 */
   toString(dateTime: PlainDateTimeInput): string {
-    // 使用 Date 的年份序列化，只去掉纯值不需要的 Z 和可省略的零毫秒。
-    const iso = fromInput(dateTime).toISOString();
-    return iso.endsWith(".000Z") ? iso.slice(0, -5) : iso.slice(0, -1);
+    return isoDateTimeString(fromInput(dateTime));
   },
 };

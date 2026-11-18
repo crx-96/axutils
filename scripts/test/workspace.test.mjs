@@ -40,8 +40,8 @@ test("workspace 按依赖顺序验证多包，并拒绝缺少检查脚本的发�
       manifests.push({ manifest, path });
       writeFileSync(join(path, "package.json"), JSON.stringify(manifest));
     }
-    const run = () =>
-      spawnSync(process.execPath, [join(directory, "scripts/workspace.mjs"), "test:dist"], {
+    const run = (phase = "test:dist") =>
+      spawnSync(process.execPath, [join(directory, "scripts/workspace.mjs"), phase], {
         cwd: directory,
         encoding: "utf8",
         env: process.env,
@@ -50,6 +50,28 @@ test("workspace 按依赖顺序验证多包，并拒绝缺少检查脚本的发�
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.equal(readFileSync(join(directory, "order.txt"), "utf8"), "b-dependency\na-consumer\n");
     const { path, manifest } = manifests[1];
+    for (const field of ["unpkg", "browser", "jsdelivr"]) {
+      manifest[field] = "./dist/browser.js";
+      writeFileSync(join(path, "package.json"), JSON.stringify(manifest));
+      const missingBrowser = run("test:browser");
+      assert.notEqual(missingBrowser.status, 0);
+      assert.match(missingBrowser.stderr, /缺少 test:browser/u);
+      delete manifest[field];
+    }
+    manifest.exports = { ".": { import: { browser: "./browser.mjs" } } };
+    writeFileSync(join(path, "package.json"), JSON.stringify(manifest));
+    assert.match(run("test:browser").stderr, /缺少 test:browser/u);
+    delete manifest.exports;
+    mkdirSync(join(path, "test-browser"));
+    writeFileSync(join(path, "package.json"), JSON.stringify(manifest));
+    assert.match(run("check").stderr, /缺少 test:browser/u);
+    manifest.scripts["test:browser"] = manifest.scripts.test;
+    writeFileSync(join(path, "package.json"), JSON.stringify(manifest));
+    assert.equal(run("test:browser").status, 0);
+    assert.equal(
+      readFileSync(join(directory, "order.txt"), "utf8"),
+      "b-dependency\na-consumer\nb-dependency\n",
+    );
     delete manifest.scripts["test:consumer"];
     writeFileSync(join(path, "package.json"), JSON.stringify(manifest));
     const missing = run();

@@ -9,6 +9,13 @@ import { HTTP_METHODS, assertObject } from "./primitives.js";
 /** 两种客户端共用的同步请求头处理契约；回调可修改收到的副本。 */
 export type HttpHeadersTransform = (headers: RawAxiosRequestHeaders) => RawAxiosRequestHeaders;
 
+/** Axios 分组名只供展开配置，含本库未开放请求入口的 query。 */
+const headerGroupNames = [
+  "common",
+  "query",
+  ...Array.from(HTTP_METHODS, (name) => name.toLowerCase()),
+];
+
 /** 保留 false/null/undefined 的屏蔽语义，且不共享调用方的多值数组。 */
 function copyHeaders(headers: AxiosHeaders): RawAxiosRequestHeaders {
   return Object.fromEntries(
@@ -24,6 +31,25 @@ function setHeaders(target: AxiosHeaders, headers: RawAxiosRequestHeaders | unde
   for (const [name, value] of Object.entries(headers ?? {})) target.set(name, value, true);
 }
 
+/** 快照自有扁平头，并保留按属性访问可见的 common 和当前方法组，供展开和屏蔽判断复用。 */
+function snapshotHeaderGroups(
+  headers: AxiosRequestConfig["headers"] | AxiosInstance["defaults"]["headers"],
+  method: string,
+): RawAxiosRequestHeaders | undefined {
+  if (headers == null) return undefined;
+  const snapshot: RawAxiosRequestHeaders = Object.create(null);
+  const methodGroup = method.toLowerCase();
+  // 按原有顺序读取两个分组，缺失与显式 undefined 分别表示继承与屏蔽。
+  for (const group of ["common", methodGroup]) {
+    if (group in headers) snapshot[group] = headers[group];
+  }
+  // 扁平头只取自有可枚举字段，其值最后覆盖分组，跳过已读取的组 getter。
+  for (const name of Object.keys(headers)) {
+    if (name !== "common" && name !== methodGroup) snapshot[name] = headers[name];
+  }
+  return snapshot;
+}
+
 /** 在计算去重身份前处理请求头，最后以大小写不敏感的方式应用请求级覆盖；formatNames 控制输出键的标题格式。 */
 export function transformRequestHeaders(
   headers: AxiosRequestConfig["headers"] | AxiosInstance["defaults"]["headers"],
@@ -35,9 +61,11 @@ export function transformRequestHeaders(
   const requested = new AxiosHeaders();
   setHeaders(requested, headers?.common);
   setHeaders(requested, headers?.[method.toLowerCase()]);
-  setHeaders(requested, headers);
-  // Axios 默认配置还包含 query 分组，即使本库不提供 QUERY 请求入口也不能将它发送为字段。
-  requested.delete(["common", "query", ...Array.from(HTTP_METHODS, (name) => name.toLowerCase())]);
+  // 分组内的保留名同样不发送。顶层只写入真正的扁平字段，避免 Axios 将组对象强制转为字符串。
+  requested.delete(headerGroupNames);
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    if (!headerGroupNames.includes(name.trim().toLowerCase())) requested.set(name, value, true);
+  }
   const transformed = transform(copyHeaders(requested));
   assertObject(transformed, "transformHeaders 必须同步返回 headers 对象");
   const prototype: unknown = Object.getPrototypeOf(transformed);
@@ -68,15 +96,17 @@ export function resolveRequestHeaders(
   formatNames = true,
 ): RawAxiosRequestHeaders {
   // 先处理当前请求，保持回调看不到实例默认值、请求级值始终优先的公开契约。
+  // 共用顶层快照，访问器产生的组值既用于展开，也用于判断是否屏蔽默认组。
+  const headerSnapshot = snapshotHeaderGroups(headers, method);
   const requested = transformRequestHeaders(
-    headers,
+    headerSnapshot,
     method,
     (input) => (transform === undefined ? input : transform(input)),
     formatNames,
   );
   // 显式屏蔽整个分组时先排除对应默认组；对象分组仍逐字段合并，保留回调客户端的既有契约。
   const suppressedGroups = new Set<string>();
-  for (const [name, value] of Object.entries(headers ?? {})) {
+  for (const [name, value] of Object.entries(headerSnapshot ?? {})) {
     const group = name.toLowerCase();
     if (
       (group === "common" || group === method.toLowerCase()) &&
@@ -85,7 +115,7 @@ export function resolveRequestHeaders(
       suppressedGroups.add(group);
     }
   }
-  const defaultSource = defaults === undefined ? undefined : { ...defaults };
+  const defaultSource = snapshotHeaderGroups(defaults, method);
   if (defaultSource !== undefined) {
     for (const name of Object.keys(defaultSource)) {
       if (suppressedGroups.has(name.toLowerCase())) defaultSource[name] = new AxiosHeaders();

@@ -1,12 +1,7 @@
 import { createHash } from "node:crypto";
 
-import {
-  type Md5Input,
-  type Md5StringEncoding,
-  bytesToBase64,
-  bytesToHex,
-  normalizeMd5Input,
-} from "./convert.js";
+import { Md5InputStream } from "../../internal/crypto/md5-input-stream.js";
+import { type Md5Input, type Md5StringEncoding, bytesToBase64, bytesToHex } from "./convert.js";
 
 /**
  * Node 专用的增量 MD5 工具。
@@ -15,11 +10,17 @@ import {
  * 让 Node 环境优先走内置实现，同时对外保持与浏览器侧完全一致的 API。
  */
 export class Md5 {
+  /** 处理已编码字节的 Node 原生摘要后端。 */
   private declare readonly instance: ReturnType<typeof createHash>;
+  /** 当前摘要独占的分块编码状态。 */
+  private declare readonly inputStream: Md5InputStream;
+  /** 首次完成摘要时缓存的字节，null 表示仍可追加输入。 */
   private declare digestBytes: number[] | null;
 
+  /** 创建一个空摘要，将输入流的字节按顺序传给原生 Hash。 */
   constructor() {
     this.instance = createHash("md5");
+    this.inputStream = new Md5InputStream((bytes) => this.instance.update(bytes));
     this.digestBytes = null;
   }
 
@@ -31,7 +32,8 @@ export class Md5 {
       throw new Error("MD5 摘要已经生成，不能继续 update。");
     }
 
-    this.instance.update(normalizeMd5Input(input, encoding));
+    // 与通用后端共用文本和字节的分块边界。
+    this.inputStream.update(input, encoding);
     return this;
   }
 
@@ -40,6 +42,8 @@ export class Md5 {
    */
   toBytes(): number[] {
     if (this.digestBytes === null) {
+      // 先处理尾部孤立代理项，再固定摘要，后续读取仅复制缓存。
+      this.inputStream.flush();
       this.digestBytes = [...this.instance.digest()];
     }
 

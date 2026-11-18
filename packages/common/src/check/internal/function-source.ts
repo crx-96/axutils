@@ -42,7 +42,7 @@ const skipWhitespaceAndComments = (source: string, start: number): number => {
     if (char === "/" && next === "/") {
       index += 2;
 
-      while (index < source.length && source[index] !== "\n") {
+      while (index < source.length && !/[\n\r\u2028\u2029]/u.test(source[index] ?? "")) {
         index += 1;
       }
 
@@ -137,41 +137,19 @@ const skipQuotedLiteral = (source: string, start: number): number => {
   return index;
 };
 
-/**
- * 判断当前位置的斜杠是否可作为正则字面量起始符。
- * 覆盖参数默认值中常见的标点与关键字表达式起始位置，避免把除法误当作正则。
- */
-const isRegularExpressionStart = (source: string, start: number): boolean => {
-  let index = start - 1;
-
-  // 先定位斜杠之前的有效字符；这些标点之后允许开始新的表达式。
-  while (index >= 0 && /\s/.test(source[index] ?? "")) {
-    index -= 1;
-  }
-
-  const previous = source[index];
-  if (previous === undefined || "=([{,:;!&|?~*%^<>".includes(previous)) {
-    return true;
-  }
-
-  // return 等关键字之后也可以开始正则表达式；普通标识符之后按除法处理。
-  let wordStart = index;
-  while (wordStart >= 0 && isIdentifierPart(source[wordStart])) {
-    wordStart -= 1;
-  }
-
-  const previousWord = source.slice(wordStart + 1, index + 1);
-  return (
-    previousWord === "return" ||
-    previousWord === "throw" ||
-    previousWord === "case" ||
-    previousWord === "delete" ||
-    previousWord === "void" ||
-    previousWord === "typeof" ||
-    previousWord === "yield" ||
-    previousWord === "await"
-  );
-};
+/** 参数默认值中允许开始正则字面量的常见标点与关键字。 */
+const regexpPrefixes = new Set([
+  ..."=([{,:;!&|?~*%^<>",
+  "...",
+  "return",
+  "throw",
+  "case",
+  "delete",
+  "void",
+  "typeof",
+  "yield",
+  "await",
+]);
 
 /**
  * 跳过正则字面量及其字符类；调用方先保证当前位置确实是正则起始斜杠。
@@ -208,47 +186,64 @@ const skipRegularExpressionLiteral = (source: string, start: number): number => 
 };
 
 /**
- * 跳过模板插值表达式。这里只需识别其边界，插值内部的圆括号不应影响外层参数列表深度。
+ * 从参数列表的 ( 或模板插值的 { 开始，返回配对结束符之后的下标。
+ * 空白和注释保留前一词法单元的含义，字面量内部的括号不参与计数。未闭合时返回源码末尾。
  */
-const skipTemplateExpression = (source: string, start: number): number => {
-  let index = start;
-  /** 已进入一层 ${...}，其内部嵌套的对象和代码块需要配对大括号。 */
+const skipBalancedExpression = (source: string, start: number, open: "(" | "{"): number => {
+  const close = open === "(" ? ")" : "}";
+  let index = start + 1;
   let depth = 1;
+  // 空字符串代表已经读完的值（包括成员名），随后的斜杠是除法。
+  let previousToken: string = open;
 
   while (index < source.length) {
+    index = skipWhitespaceAndComments(source, index);
     const char = source[index];
-    const next = source[index + 1];
+    if (char === undefined) break;
 
-    // 先跳过嵌套字面量和注释，防止它们内部的花括号结束插值。
+    // 跳过完整字面量，包括嵌套的模板插值。
     if (char === "'" || char === '"') {
       index = skipQuotedLiteral(source, index);
+      previousToken = "";
       continue;
     }
     if (char === "`") {
       index = skipTemplateLiteral(source, index);
+      previousToken = "";
       continue;
     }
-    if (char === "/" && (next === "*" || next === "/")) {
-      index = skipWhitespaceAndComments(source, index);
-      continue;
-    }
-    if (char === "/" && isRegularExpressionStart(source, index)) {
+    if (char === "/" && regexpPrefixes.has(previousToken)) {
       index = skipRegularExpressionLiteral(source, index);
+      previousToken = "";
       continue;
     }
-    // 仅对真实插值表达式中的大括号计数，回到外层前返回闭合花括号之后。
-    if (char === "{") {
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return index + 1;
-      }
+
+    // 点号（包括可选链）和私有字段前缀后的标识符是成员名，即使拼写与关键字相同。
+    const end = readIdentifierEnd(source, index);
+    if (end !== undefined) {
+      previousToken =
+        previousToken === "." || previousToken === "#" ? "" : source.slice(index, end);
+      index = end;
+      continue;
     }
+    // 展开运算符由三个点组成，其后仍是表达式的起始位置。
+    if (char === "." && source.startsWith("...", index)) {
+      previousToken = "...";
+      index += 3;
+      continue;
+    }
+
+    // 仅累计所需的分隔符，遇到与起点配对的结束符就交还外层。
+    if (char === open) {
+      depth += 1;
+    } else if (char === close) {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+    }
+    previousToken = char;
     index += 1;
   }
-
-  return index;
+  return source.length;
 };
 
 /**
@@ -270,7 +265,7 @@ const skipTemplateLiteral = (source: string, start: number): number => {
       return index + 1;
     }
     if (char === "$" && source[index + 1] === "{") {
-      index = skipTemplateExpression(source, index + 2);
+      index = skipBalancedExpression(source, index + 1, "{");
       continue;
     }
     index += 1;
@@ -316,54 +311,9 @@ export const isArrowSource = (source: string): boolean => {
 
   // 多参数、默认值及解构形式以括号包裹，需扫描到与首括号配对的结束位置。
   if (source[index] === "(") {
-    let depth = 0;
-
-    while (index < source.length) {
-      const char = source[index];
-      const next = source[index + 1];
-
-      // 字符串、模板、注释和正则内部的括号不参与参数深度。
-      if (char === "/" && (next === "*" || next === "/")) {
-        index = skipWhitespaceAndComments(source, index);
-        continue;
-      }
-
-      if (char === "'" || char === '"') {
-        index = skipQuotedLiteral(source, index);
-        continue;
-      }
-
-      if (char === "`") {
-        index = skipTemplateLiteral(source, index);
-        continue;
-      }
-
-      if (char === "/" && isRegularExpressionStart(source, index)) {
-        index = skipRegularExpressionLiteral(source, index);
-        continue;
-      }
-
-      // 只累计语法括号；最外层闭合后，函数头部的下一有效符号必须为 =>。
-      if (char === "(") {
-        depth += 1;
-      } else if (char === ")") {
-        depth -= 1;
-
-        if (depth === 0) {
-          index += 1;
-          break;
-        }
-      }
-
-      index += 1;
-    }
-
-    // 未闭合参数不能识别为箭头函数，不尝试用函数体内的 => 补救。
-    if (depth !== 0) {
-      return false;
-    }
-
-    index = skipWhitespaceAndComments(source, index);
+    const end = skipBalancedExpression(source, index, "(");
+    // 未闭合时 end 已在源码末尾，只有闭合参数列表之后的 => 才能匹配。
+    index = skipWhitespaceAndComments(source, end);
     return source[index] === "=" && source[index + 1] === ">";
   }
 

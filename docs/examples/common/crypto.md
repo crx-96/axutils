@@ -112,6 +112,10 @@ console.log(md5 instanceof Md5); // true
 ```ts
 import { Md5 } from "@axutils/common/crypto/md5";
 
+// 连续 UTF-8 块可以拆在代理对中间，空 UTF-8 块也保留待配对的码元。
+const split = new Md5().update("\ud83d").update("").update("\ude00");
+console.log(split.toHex() === new Md5().update("\u{1f600}").toHex()); // true
+
 const md5 = new Md5();
 md5.update("hel").update("lo");
 console.log(md5.toHex()); // 5d41402abc4b2a76b9719d911017c592
@@ -119,6 +123,8 @@ console.log(md5.toHex()); // 5d41402abc4b2a76b9719d911017c592
 const fromHex = new Md5().update("68656c6c6f", "hex");
 console.log(fromHex.toHex()); // 5d41402abc4b2a76b9719d911017c592
 ```
+
+字节输入、`hex` 或 `base64` 输入都会结束前一段 UTF-8 文本，即使新块解码后为空。此时或首次读取摘要时，尚未配对的高代理项按 `U+FFFD` 编码。校验失败的输入块可以纠正后重试。要计算另一份摘要，请创建新的 `Md5` 实例。
 
 ### `md5.toBytes()`
 

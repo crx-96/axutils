@@ -32,13 +32,14 @@
     "@changesets/cli": "3.0.3",
     "@playwright/test": "1.63.0",
     "@types/node": "24.19.1",
+    "node14-types": "npm:@types/node@14.18.63",
     "publint": "0.3.25",
     "typescript": "7.0.2",
     "vite": "8.3.3",
     "vitest": "4.1.11"
   },
   "engines": {
-    "node": "^22.12 || ^24 || >=26",
+    "node": "^22.13 || ^24 || >=26",
     "pnpm": ">=10.0.0"
   }
 }

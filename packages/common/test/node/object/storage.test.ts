@@ -187,4 +187,60 @@ describe("node/object/storage", () => {
       second.clear();
     }
   });
+
+  it("隔离不同前缀的同名物理键，保留同前缀的转换别名", () => {
+    const first = new StorageUtils({ key: () => "collision", prefix: "app:" });
+    const second = new StorageUtils({ key: () => "collision", prefix: "app:draft:" });
+    try {
+      first.set("draft:42", 1);
+      second.set("42", 2);
+      expect(first.get("other")).toBe(1);
+      first.set("other", 3);
+      expect(first.get("draft:42")).toBe(3);
+      expect(second.get("42")).toBe(2);
+      first.remove("draft:42");
+      expect(first.get("draft:42")).toBeNull();
+      expect(first.get("other")).toBeNull();
+      expect(second.get("42")).toBe(2);
+      first.clear();
+      expect(second.get("42")).toBe(2);
+    } finally {
+      first.clear();
+      second.clear();
+    }
+  });
+
+  it("连续写入逐批清理大命名空间，保留永久记录", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const storage = new StorageUtils({ prefix: "batch:" });
+    try {
+      for (let i = 0; i < 100; i++) storage.set(String(i), i, 1);
+      storage.set("keep", "live");
+      vi.setSystemTime(1000);
+      for (let i = 0; i < 20; i++) storage.set(`next:${i}`, i);
+      vi.setSystemTime(0);
+      for (let i = 0; i < 100; i++) expect(storage.get(String(i))).toBeNull();
+      expect(storage.get("keep")).toBe("live");
+    } finally {
+      storage.clear();
+    }
+  });
+
+  it("同前缀下写入新值时惰性回收未再读取的到期记录", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const storage = new StorageUtils({ prefix: "lazy:" });
+    try {
+      storage.set("expired", 1, 1);
+      storage.set("live", 2, 5);
+      vi.setSystemTime(1000);
+      storage.set("another", 3);
+      vi.setSystemTime(0);
+      expect(storage.get("expired")).toBeNull();
+      expect(storage.get("live")).toBe(2);
+    } finally {
+      storage.clear();
+    }
+  });
 });

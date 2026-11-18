@@ -95,6 +95,12 @@ export function consumerTypes(manifest, subpaths, format) {
       statements.push("}");
     }
     if (key === "./axios/http" || key === "./rxjs/http") {
+      if (key === "./axios/http") {
+        statements.push(
+          `{ const signal = new AbortController().signal;`,
+          `new ${api}.PromiseHttpClient().get("/", { signal }); }`,
+        );
+      }
       const prefix = key === "./axios/http" ? "PromiseHttp" : "Http";
       const client = key === "./axios/http" ? "PromiseHttpClient" : "RxHttpClient";
       const wrapper = key === "./axios/http" ? "Promise" : 'import("rxjs").Observable';
@@ -104,6 +110,10 @@ export function consumerTypes(manifest, subpaths, format) {
         "{",
         "type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;",
         "type Assert<T extends true> = T;",
+        'const axios = {} as import("axios").AxiosStatic;',
+        `const injected: ${api}.${prefix}ClientOptions = { axiosInstance: axios.create() };`,
+        'const upstream: import("axios").AxiosInstance = injected.axiosInstance!;',
+        `new ${api}.${client}({ axiosInstance: upstream }).get("/", { headers: new axios.AxiosHeaders({ Authorization: "token" }) });`,
         `const legacy = new ${api}.${client}();`,
         'const original = legacy.get<{ id: number }>("/users/1");',
         `type Original = Assert<Equal<typeof original, ${wrapper}<${api}.${prefix}Success<{ id: number }>>>>;`,

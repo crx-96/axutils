@@ -24,6 +24,69 @@ describe("rxjs/http 请求、错误与重试", () => {
     });
   });
 
+  it("request 按 URL、原型 method、自有选项的顺序各读取一次", async () => {
+    const reads: string[] = [];
+    class Input {
+      url = "/first";
+      get method(): "POST" {
+        reads.push("method");
+        return "POST";
+      }
+    }
+    const input = new Input();
+    const getter = (name: string, value: string) => () => {
+      reads.push(name);
+      return value;
+    };
+    Object.defineProperties(input, {
+      data: { enumerable: true, get: getter("data", "body") },
+      url: { enumerable: true, get: getter("url", "/first") },
+    });
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    const request = new RxHttpClient({ axiosInstance: instance }).request(input);
+    expect(reads).toEqual(["url", "method", "data"]);
+    await firstValueFrom(request);
+    expect(reads).toEqual(["url", "method", "data"]);
+    expect(context.configs[0]).toMatchObject({ data: "body", method: "post", url: "/first" });
+  });
+
+  it("request 的 URL 无效时同步报错并跳过其余 getter", () => {
+    const input = {
+      get data(): never {
+        throw new Error("提前读取 data");
+      },
+      get method(): never {
+        throw new Error("提前读取 method");
+      },
+      url: null as never,
+    };
+    expect(() => new RxHttpClient().request(input)).toThrow("请求 url 必须是字符串");
+  });
+
+  it.each([
+    "signal",
+    "timeout",
+  ])("%s getter 抛错后，错误转换沿用首次读取的 signal", async (field) => {
+    const controller = new AbortController();
+    const failure = new Error(field);
+    let reads = 0;
+    const client = new RxHttpClient({ transformError: (error) => error.error.cause });
+    const request = client.request({
+      method: "GET",
+      get signal() {
+        reads++;
+        if (field === "signal") throw failure;
+        return controller.signal;
+      },
+      get timeout(): never {
+        throw failure;
+      },
+      url: "/snapshot-error",
+    });
+    expect(await firstValueFrom(request)).toBe(failure);
+    expect(reads).toBe(1);
+  });
+
   it("拼接自定义 baseUrl，但绝对 URL 保持不变", async () => {
     const { context, instance } = createAxiosInstance((config) =>
       Promise.resolve(response(config)),

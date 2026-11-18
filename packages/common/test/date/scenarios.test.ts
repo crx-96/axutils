@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DATE_FORMAT,
@@ -6,6 +7,7 @@ import {
   Now,
   PlainDate,
   PlainDateTime,
+  PlainTime,
   TIMEZONE,
   ZonedDateTime,
 } from "../../src/date";
@@ -21,6 +23,88 @@ describe("date/usage-scenarios", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("跨 Realm Date 按 UTC 字段或内部时间点读取，无效 Date 抛 RangeError", () => {
+    const input = runInNewContext('new Date("2024-01-31T23:59:58.007Z")');
+    expect(PlainDate.toString(input)).toBe("2024-01-31");
+    expect(PlainTime.toString(input)).toBe("23:59:58.007");
+    expect(PlainDateTime.toString(input)).toBe("2024-01-31T23:59:58.007");
+    expect(ZonedDateTime.from(input, { timezone: "UTC" })).toEqual({
+      epochMs: Date.parse("2024-01-31T23:59:58.007Z"),
+      timezone: "UTC",
+    });
+    const invalid = runInNewContext("new Date(NaN)");
+    for (const api of [PlainDate, PlainTime, PlainDateTime, ZonedDateTime])
+      expect(() => api.from(invalid)).toThrow(RangeError);
+  });
+
+  it("字段对象只对可选时间单位补零", () => {
+    const date = { day: 31, month: 1, year: 2024 };
+    for (const missing of [{}, { hour: 0 }, { minute: 0 }, { hour: undefined, minute: 0 }]) {
+      expect(() => PlainTime.from(missing as never)).toThrow(RangeError);
+      expect(() => PlainDateTime.from({ ...date, ...missing } as never)).toThrow(RangeError);
+    }
+    expect(PlainTime.toString({ hour: 0, minute: 0 })).toBe("00:00:00");
+    expect(PlainDateTime.toString({ ...date, hour: 0, minute: 0 })).toBe("2024-01-31T00:00:00");
+  });
+
+  it("减法先校验参与运算的字段，保留纯日期和时间忽略其他单位的行为", () => {
+    const value = "2024-01-31T08:00:00";
+    for (const field of [
+      "years",
+      "months",
+      "days",
+      "hours",
+      "minutes",
+      "seconds",
+      "milliseconds",
+    ]) {
+      const bad = { [field]: "1" };
+      expect(() => PlainDateTime.subtract(value, bad)).toThrow(RangeError);
+      if (["years", "months", "days"].includes(field)) {
+        expect(() => PlainDate.subtract(value, bad)).toThrow(RangeError);
+        expect(PlainTime.toString(PlainTime.subtract(value, bad))).toBe("08:00:00");
+      } else {
+        expect(() => PlainTime.subtract(value, bad)).toThrow(RangeError);
+        expect(PlainDate.toString(PlainDate.subtract(value, bad))).toBe("2024-01-31");
+      }
+    }
+  });
+
+  it.each(["years", "months", "days"])("加减法拒绝参与运算的 %s 为 null", (unit) => {
+    const date = "2024-01-31T08:00:00";
+    const zdt = ZonedDateTime.from(`${date}Z`);
+    const invalid = { [unit]: null };
+    for (const op of ["add", "subtract"] as const) {
+      expect(() => PlainDate[op](date, invalid)).toThrow(RangeError);
+      expect(() => PlainDateTime[op](date, invalid)).toThrow(RangeError);
+      expect(() => ZonedDateTime[op](zdt, invalid)).toThrow(RangeError);
+    }
+  });
+
+  it("undefined 仍表示零，运算只读取需要的单位", () => {
+    const date = "2024-01-31T08:00:00";
+    const zdt = ZonedDateTime.from(`${date}Z`);
+    const fields = {
+      days: undefined,
+      months: undefined,
+      get weeks(): number {
+        throw new Error("读取了未使用的 weeks");
+      },
+      years: undefined,
+    };
+    const dateOnly = {
+      days: undefined,
+      get hours(): number {
+        throw new Error("读取了纯日期忽略的 hours");
+      },
+    };
+    for (const op of ["add", "subtract"] as const) {
+      expect(PlainDate[op](date, dateOnly)).toEqual(PlainDate.from(date));
+      expect(PlainDateTime[op](date, fields)).toEqual(PlainDateTime.from(date));
+      expect(ZonedDateTime[op](zdt, fields)).toEqual(zdt);
+    }
   });
 
   // ─────────── 1. 当前系统时间 ───────────

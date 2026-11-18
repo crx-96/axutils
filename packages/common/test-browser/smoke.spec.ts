@@ -43,6 +43,28 @@ for (const format of ["esm", "umd"] as const) {
       });
     });
 
+    test.describe("纽约宿主", () => {
+      test.use({ timezoneId: "America/New_York" });
+      test("夏令时跳时不改写 UTC，回拨时保留两个偏移", async ({ page }) => {
+        const values = await page.evaluate(() => {
+          const { ZonedDateTime } = window.AxutilsTest;
+          return [
+            ZonedDateTime.toString(ZonedDateTime.from("2024-03-10T02:30:00Z")),
+            ...["-04:00", "-05:00"].map((offset) =>
+              new Date(
+                ZonedDateTime.from(`2024-11-03T01:30:00${offset}[America/New_York]`).epochMs,
+              ).toISOString(),
+            ),
+          ];
+        });
+        expect(values).toEqual([
+          "2024-03-10T02:30:00Z",
+          "2024-11-03T05:30:00.000Z",
+          "2024-11-03T06:30:00.000Z",
+        ]);
+      });
+    });
+
     test("同步间隔守卫、RGB 混合及树路径可直接消费", async ({ page }) => {
       const result = await page.evaluate(() => {
         const { createActionGate, findTreePath, mixRgbColor } = window.AxutilsTest;
@@ -99,9 +121,9 @@ for (const format of ["esm", "umd"] as const) {
         return {
           local: new StorageUtils({ prefix: "browser:", type: "local" }).get("value"),
           // 直接读取 Web Storage，避免内存降级路径意外通过浏览器测试。
-          localKey: localStorage.getItem("browser:value") !== null,
+          localKey: localStorage.length > 0,
           session: new StorageUtils({ prefix: "browser:", type: "session" }).get("value"),
-          sessionKey: sessionStorage.getItem("browser:value") !== null,
+          sessionKey: sessionStorage.length > 0,
         };
       };
       expect(await page.evaluate(readStorage)).toEqual({
@@ -125,6 +147,22 @@ for (const format of ["esm", "umd"] as const) {
       }
     });
 
+    test("两个前缀拼成相同旧键时各自保留草稿", async ({ page }) => {
+      const result = await page.evaluate(() => {
+        const { StorageUtils } = window.AxutilsTest;
+        const parent = new StorageUtils({ prefix: "app:" });
+        const child = new StorageUtils({ prefix: "app:draft:" });
+        child.set("42", "child");
+        parent.remove("draft:42");
+        const afterRemove = child.get("42");
+        parent.set("draft:42", "parent");
+        const both = [parent.get("draft:42"), child.get("42")];
+        parent.clear();
+        return [afterRemove, both, child.get("42")];
+      });
+      expect(result).toEqual(["child", ["parent", "child"], "child"]);
+    });
+
     test("清理命名空间保留其它业务和另一种存储", async ({ page }) => {
       expect(
         await page.evaluate(() => {
@@ -136,9 +174,10 @@ for (const format of ["esm", "umd"] as const) {
           other.set("entry", { keep: true });
           session.set("entry", "session");
           localStorage.setItem("unrelated", "keep");
+          const count = localStorage.length;
           own.clear();
           return {
-            keyRemoved: localStorage.getItem("own:entry") === null,
+            keyRemoved: localStorage.length === count - 1,
             other: other.get("entry"),
             own: own.get("entry"),
             raw: localStorage.getItem("unrelated"),

@@ -1,3 +1,6 @@
+import { Readable } from "node:stream";
+import { text } from "node:stream/consumers";
+import { runInNewContext } from "node:vm";
 import { AxiosError, AxiosHeaders, type RawAxiosRequestHeaders } from "axios";
 import { type Observable, firstValueFrom, isObservable, of } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
@@ -210,6 +213,298 @@ describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind)
     expect(context.configs[0]?.headers.get("authorization")).toBe("request-token");
     expect(context.configs[0]?.headers.get("x-added")).toBe("added");
     expect(headers.has("x-added")).toBe(false);
+  });
+
+  it.each([
+    undefined,
+    "same",
+  ])("实例 baseURL 改变后获得各自目标的结果（key=%s）", async (dedupeKey) => {
+    const gate = deferred();
+    const { instance, started } = createAxiosInstance(async (config) => {
+      await gate.promise;
+      return response(config, instance.getUri(config));
+    });
+    const client = createClient(kind, { axiosInstance: instance });
+    const options = dedupeKey === undefined ? {} : { dedupeKey };
+    instance.defaults.baseURL = "https://one.test";
+    const first = resultOf(client.get("/profile", options));
+    await started;
+    instance.defaults.baseURL = "https://two.test";
+    const second = resultOf(client.get("/profile", options));
+    gate.resolve();
+    await expect(Promise.all([first, second])).resolves.toMatchObject([
+      { data: "https://one.test/profile" },
+      { data: "https://two.test/profile" },
+    ]);
+  });
+
+  it("请求重试继续使用首次传输的基础地址", async () => {
+    const targets: string[] = [];
+    const { instance } = createAxiosInstance((config) => {
+      targets.push(instance.getUri(config));
+      if (targets.length === 1) {
+        instance.defaults.baseURL = "/v2";
+        throw new AxiosError(
+          "unavailable",
+          AxiosError.ERR_BAD_RESPONSE,
+          config,
+          undefined,
+          response(config, null, 503),
+        );
+      }
+      return response(config);
+    });
+    instance.defaults.baseURL = "/v1";
+    const client = createClient(kind, { axiosInstance: instance, retryCount: 2, retryDelay: 0 });
+    await resultOf(client.get("/report"));
+    expect(targets).toEqual(["/v1/report", "/v1/report"]);
+  });
+
+  it("默认页码和超时在重试间保持首次值，下一个请求使用新值", async () => {
+    const { context, instance } = createAxiosInstance((config, current) => {
+      const actual = [instance.getUri(config), config.timeout];
+      if (current.calls === 1) {
+        instance.defaults.params.page = 2;
+        instance.defaults.timeout = 99;
+        return response(config, actual, 503);
+      }
+      return response(config, actual);
+    });
+    instance.defaults.params = { page: 1 };
+    instance.defaults.timeout = 12;
+    const client = createClient(kind, { axiosInstance: instance, retryCount: 2, retryDelay: 0 });
+    await expect(resultOf(client.get("/items"))).resolves.toMatchObject({
+      data: ["/items?page=1", 12],
+    });
+    await expect(resultOf(client.get("/items"))).resolves.toMatchObject({
+      data: ["/items?page=2", 99],
+    });
+    expect(context.calls).toBe(3);
+  });
+
+  it("缺省 baseURL 由原实例拦截器在每次尝试时设置", async () => {
+    const { context, instance } = createAxiosInstance((config, current) =>
+      response(config, instance.getUri(config), current.calls === 1 ? 503 : 200),
+    );
+    const bases: Array<string | undefined> = [];
+    instance.interceptors.request.use((config) => {
+      bases.push(config.baseURL);
+      config.baseURL ??= "/api";
+      return config;
+    });
+    const client = createClient(kind, { axiosInstance: instance, retryCount: 2, retryDelay: 0 });
+    await expect(resultOf(client.get("/items"))).resolves.toMatchObject({ data: "/api/items" });
+    expect(context.calls).toBe(2);
+    expect(bases).toEqual([undefined, undefined]);
+  });
+
+  it.each([
+    "params",
+    "nested",
+    "baseURL",
+    "withCredentials",
+    "paramsSerializer",
+  ] as const)("默认 %s 无法可靠重放时保留第一次传输错误", async (field) => {
+    const failure = new AxiosError("first request failed", AxiosError.ERR_NETWORK);
+    const { context, instance } = createAxiosInstance((config) => {
+      if (field === "params") instance.defaults.params = { extra: 2 };
+      if (field === "nested") instance.defaults.params.filter.extra = 2;
+      if (field === "baseURL") instance.defaults.baseURL = "/new";
+      if (field === "withCredentials") instance.defaults.withCredentials = true;
+      throw Object.assign(failure, { config });
+    });
+    if (field === "nested") instance.defaults.params = { filter: { page: 1 } };
+    if (field === "paramsSerializer")
+      instance.defaults.paramsSerializer = { serialize: () => "page=1" };
+    const client = createClient(kind, { axiosInstance: instance, retryCount: 2, retryDelay: 0 });
+    const result = resultOf(client.get("/items"));
+    await expect(result).rejects.toHaveProperty("error.cause", failure);
+    expect(context.calls).toBe(1);
+  });
+
+  it("重试等待期间新增默认参数时，返回前一次失败", async () => {
+    vi.useFakeTimers();
+    try {
+      const failure = new AxiosError("network offline", AxiosError.ERR_NETWORK);
+      const { context, instance } = createAxiosInstance(() => {
+        throw failure;
+      });
+      const client = createClient(kind, { axiosInstance: instance, retryCount: 2, retryDelay: 50 });
+      const rejected = expect(resultOf(client.get("/items"))).rejects.toHaveProperty(
+        "error.cause",
+        failure,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1);
+      instance.defaults.params = { tenant: "new" };
+      await vi.advanceTimersByTimeAsync(50);
+      await rejected;
+      expect(context.calls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    undefined,
+    "same",
+  ])("并发键 %s 区分有效 responseType，忽略已覆盖的默认 timeout", async (dedupeKey) => {
+    const release = deferred();
+    const { context, instance, started } = createAxiosInstance(async (config) => {
+      await release.promise;
+      return response(config, '{"page":1}');
+    });
+    instance.defaults.responseType = "text";
+    const secondResolved = deferred();
+    let resolved = 0;
+    const client = createClient(kind, {
+      axiosInstance: instance,
+      transformHeaders: (headers) => {
+        if (++resolved === 2) secondResolved.resolve();
+        return headers;
+      },
+    });
+    const options = { ...(dedupeKey === undefined ? {} : { dedupeKey }), timeout: 15 };
+    const first = resultOf(client.get("/format", options));
+    await started;
+    instance.defaults.timeout = 99;
+    const shared = resultOf(client.get("/format", options));
+    await secondResolved.promise;
+    instance.defaults.responseType = "json";
+    const different = resultOf(client.get("/format", options));
+    release.resolve();
+    await expect(Promise.all([first, shared, different])).resolves.toMatchObject([
+      { data: '{"page":1}' },
+      { data: '{"page":1}' },
+      { data: { page: 1 } },
+    ]);
+    expect(context.configs.map(({ responseType, timeout }) => [responseType, timeout])).toEqual([
+      ["text", 15],
+      ["json", 15],
+    ]);
+  });
+
+  it("普通 toJSON 数据字段与跨 Realm 数组可自动去重，真正的序列化钩子各自执行", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config, config.data));
+    const client = createClient(kind, { axiosInstance: instance });
+    const local = { list: [1, 2], toJSON: "plain" };
+    const foreign = { list: runInNewContext("[1, 2]"), toJSON: "plain" };
+    await Promise.all([local, foreign].map((body) => resultOf(client.post("/json", body))));
+    expect(context.calls).toBe(1);
+    let calls = 0;
+    const custom = { toJSON: () => ({ id: ++calls }) };
+    await expect(
+      Promise.all([custom, custom].map((body) => resultOf(client.post("/json", body)))),
+    ).resolves.toMatchObject([{ data: { id: 1 } }, { data: { id: 2 } }]);
+    expect(calls).toBe(2);
+    expect(context.calls).toBe(3);
+  });
+
+  it("默认 params 的继承与显式 undefined 屏蔽会发往不同 URI", async () => {
+    const { instance } = createAxiosInstance((config) => response(config, instance.getUri(config)));
+    instance.defaults.params = { page: 1 };
+    const client = createClient(kind, { axiosInstance: instance });
+    await expect(
+      Promise.all([
+        resultOf(client.get("/items", { params: {} })),
+        resultOf(client.get("/items", { params: { page: undefined } })),
+      ]),
+    ).resolves.toMatchObject([{ data: "/items?page=1" }, { data: "/items" }]);
+  });
+
+  it("自动去重不预读 params 与 data 中的 getter", async () => {
+    let reads = 0;
+    const changing = {
+      get id() {
+        return ++reads;
+      },
+    };
+    const { instance } = createAxiosInstance((config) =>
+      response(config, [config.params.id, config.data]),
+    );
+    const client = createClient(kind, { axiosInstance: instance });
+    const send = () => resultOf(client.post("/values", changing, { params: changing }));
+    const results = await Promise.all([send(), send()]);
+    expect(reads).toBe(4);
+    // Axios 在一次调度中分别读取查询与请求体；下一次发送不能复用第一次读到的值。
+    expect(results[0]).not.toEqual(results[1]);
+    expect(results).toMatchObject([
+      { data: [expect.any(Number), expect.any(String)] },
+      { data: [expect.any(Number), expect.any(String)] },
+    ]);
+  });
+
+  it("顶层字段与请求头分组的 getter 各读取一次，沿用首次屏蔽值", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    instance.defaults.headers.common["X-Default"] = "default";
+    const client = createClient(kind, { axiosInstance: instance });
+    const url = vi.fn(() => "/snapshot");
+    const method = vi.fn(() => "GET" as const);
+    const common = vi.fn().mockReturnValueOnce(null).mockReturnValue(new AxiosHeaders());
+    await resultOf(
+      client.request({
+        headers: Object.defineProperty({}, "common", { enumerable: true, get: common }),
+        get method() {
+          return method();
+        },
+        get url() {
+          return url();
+        },
+      }),
+    );
+    expect(url).toHaveBeenCalledOnce();
+    expect(method).toHaveBeenCalledOnce();
+    expect(common).toHaveBeenCalledOnce();
+    expect(context.configs[0]?.headers.get("X-Default")).toBeUndefined();
+  });
+
+  it("仅请求头名称大小写不同的并发调用共享传输", async () => {
+    const { context, instance } = createAxiosInstance((config) =>
+      response(config, config.headers.get("x-token")),
+    );
+    const client = createClient(kind, { axiosInstance: instance });
+    await expect(
+      Promise.all([
+        resultOf(client.get("/case", { headers: { "X-Token": "same" } })),
+        resultOf(client.get("/case", { headers: { "x-token": "same" } })),
+      ]),
+    ).resolves.toMatchObject([{ data: "same" }, { data: "same" }]);
+    expect(context.calls).toBe(1);
+  });
+
+  it("PUT 已消费的 Readable 遇到 503 时保留首次错误", async () => {
+    let failure: AxiosError | undefined;
+    const bodies: string[] = [];
+    const { instance } = createAxiosInstance(async (config) => {
+      if (!(config.data instanceof Readable)) throw new Error("请求体应为 Node 流");
+      bodies.push(await text(config.data));
+      if (bodies.length > 1) return response(config);
+      failure = new AxiosError(
+        "unavailable",
+        AxiosError.ERR_BAD_RESPONSE,
+        config,
+        undefined,
+        response(config, null, 503),
+      );
+      throw failure;
+    });
+    const client = createClient(kind, { axiosInstance: instance, retryNonIdempotent: true });
+    const request = resultOf(client.put("/upload", Readable.from(["payload"])));
+    await expect(request).rejects.toMatchObject({ code: 503, error: { kind: "http" } });
+    await expect(request).rejects.toHaveProperty("error.cause", failure);
+    expect(bodies).toEqual(["payload"]);
+  });
+
+  it("含 timeout 的 Axios 配置错误保留错误分类且只发送一次", async () => {
+    const failure = new AxiosError("invalid timeout", AxiosError.ERR_BAD_OPTION_VALUE);
+    const { context, instance } = createAxiosInstance(() => {
+      throw failure;
+    });
+    const client = createClient(kind, { axiosInstance: instance });
+    await expect(resultOf(client.get("/timeout"))).rejects.toMatchObject({
+      error: { cause: failure, kind: "config" },
+    });
+    expect(context.calls).toBe(1);
   });
 
   it("动态 token 参与去重身份，不同 token 的并发请求各自执行", async () => {

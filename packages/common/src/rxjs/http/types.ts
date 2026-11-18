@@ -154,11 +154,14 @@ export type HttpClientOptionsFor<
   C = unknown,
 > = M extends HttpResponseTypeMap ? HttpMappedClientOptions<M, C> : AnyHttpClientOptions<C>;
 
+/** 延迟条件索引可阻止回调反向推导 C，声明亦可由 TypeScript 5.3 消费。 */
+type ContextFromFactory<C> = [C][C extends unknown ? 0 : never];
+
 /** 单独从工厂推导 C，防止转换回调的参数反向扩大上下文类型。 */
 export type HttpClientOptionsInput<
   M extends HttpResponseTypeMap | undefined,
   C,
-> = HttpClientOptionsFor<M, NoInfer<C>> & {
+> = HttpClientOptionsFor<M, ContextFromFactory<C>> & {
   /** 独立推导点；不执行、不等待返回值，仅声明同步创建的上下文类型。 */
   createContext?: () => C;
 };

@@ -25,8 +25,10 @@ export const getResponseStatus = (error: unknown): number | undefined => {
   return undefined;
 };
 
+/** 明确的配置错误码优先于消息中的 timeout 字样。 */
 export const isTimeoutError = (error: unknown): boolean => {
-  if (!isAxiosError(error)) return false;
+  if (!isAxiosError(error) || (error.code !== undefined && CONFIG_ERROR_CODES.has(error.code)))
+    return false;
   return (
     error.code === AxiosError.ETIMEDOUT ||
     error.code === AxiosError.ECONNABORTED ||

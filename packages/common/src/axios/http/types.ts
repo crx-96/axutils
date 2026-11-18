@@ -71,6 +71,25 @@ export type PromiseHttpConfigFactory = () =>
   | Partial<PromiseHttpClientConfig>
   | Promise<Partial<PromiseHttpClientConfig>>;
 
+/** 配置等待与网络请求共用的取消信号，仅依赖两个宿主都能提供的监听能力。 */
+interface PromiseHttpSignal {
+  /** 是否已经中止。 */
+  readonly aborted: boolean;
+  /** 注册取消回调，支持一次性监听。 */
+  addEventListener(type: "abort", listener: () => void, options?: { once?: boolean }): void;
+  /** 调用结束时解除先前注册的取消回调。 */
+  removeEventListener(type: "abort", listener: () => void): void;
+}
+
+/** 旧版 Node 声明未列出原生 signal 的监听方法，仍接受宿主控制器实际生成的信号。 */
+type HostAbortSignal = typeof globalThis extends {
+  AbortController: {
+    prototype: { readonly signal: infer S extends { readonly aborted: boolean } };
+  };
+}
+  ? S
+  : never;
+
 /** 单个请求可以覆盖的客户端配置以及 Axios 常用请求字段。 */
 export interface PromiseHttpRequestOptions {
   params?: AxiosRequestConfig["params"];
@@ -88,7 +107,7 @@ export interface PromiseHttpRequestOptions {
   /** 非 JSON 请求体或其他无法稳定序列化的参数需要使用显式 key。 */
   dedupeKey?: string;
   /** 既可取消 Axios 请求，也可取消配置和重试等待阶段。 */
-  signal?: AxiosRequestConfig["signal"];
+  signal?: PromiseHttpSignal | HostAbortSignal | undefined;
 }
 
 /** 完整请求配置。调用 request/get 等方法时即开始执行，不提供 Observable 式懒执行。 */
@@ -139,5 +158,5 @@ export interface ResolvedRequest<D> {
   retryNonIdempotent: boolean;
   dedupe: boolean;
   dedupeKey?: string;
-  signal?: AxiosRequestConfig["signal"];
+  signal?: PromiseHttpSignal | HostAbortSignal | undefined;
 }

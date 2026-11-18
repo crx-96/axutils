@@ -24,7 +24,7 @@ export const DATE_FORMAT = {
   TIME_MS: "HH:mm:ss.SSS",
   /** 带 UTC 偏移的 ISO 8601 日期时间，例如 2025-12-12T12:12:12+08:00。 */
   ISO_OFFSET: "yyyy-MM-dd'T'HH:mm:ssXXX",
-  /** 带三位毫秒和字面量 Z 的 UTC 日期时间。 */
+  /** 固定按原始时刻输出 UTC 与三位毫秒，优先于显示时区。 */
   ISO_UTC: "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
 } as const;
 

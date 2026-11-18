@@ -100,9 +100,11 @@ const isStorageLike = (value: unknown): value is WebStorageLike => {
 /** 临时读写覆盖隐私模式、禁用存储和配额异常；探测失败后尽力清理临时键。 */
 const canUseStorage = (storage: WebStorageLike): boolean => {
   storageProbeSequence += 1;
-  const probeKey = `${STORAGE_RECORD_MARKER}/probe/${Date.now()}/${storageProbeSequence}`;
+  let probeKey = `${STORAGE_RECORD_MARKER}/probe/${Date.now()}/${storageProbeSequence}`;
   let shouldCleanup = false;
   try {
+    // 既有业务键不能用于探测，否则清理探测值时会删除原值。
+    while (storage.getItem(probeKey) !== null) probeKey += "_";
     storage.setItem(probeKey, probeKey);
     shouldCleanup = true;
     if (storage.getItem(probeKey) !== probeKey) return false;
@@ -110,7 +112,16 @@ const canUseStorage = (storage: WebStorageLike): boolean => {
     if (storage.getItem(probeKey) !== null) return false;
     shouldCleanup = false;
     return true;
-  } catch {
+  } catch (error) {
+    // 配额耗尽时保留可读后端，让后续写入直接报告真实配额错误。
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      (error as { name?: unknown }).name === "QuotaExceededError"
+    ) {
+      const existing = storage.key(0);
+      return existing !== null && storage.getItem(existing) !== null;
+    }
     return false;
   } finally {
     if (shouldCleanup) {
