@@ -76,28 +76,27 @@ describe("rxjs/http Observable 响应转换", () => {
     expect(finalized).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    "throw",
-    "promise",
-    "observable",
-  ] as const)("响应转换中的普通 Error 在 %s 路径下归类为 unknown", async (mode) => {
-    const { context, instance } = createAxiosInstance((config) => response(config));
-    const cause = mode === "promise" ? new TypeError("业务结构错误") : new Error("业务转换失败");
-    const client = new RxHttpClient({
-      axiosInstance: instance,
-      transformResponse: () => {
-        if (mode === "promise") return Promise.reject(cause);
-        if (mode === "observable") return throwError(() => cause);
-        throw cause;
-      },
-    });
+  it.each(["throw", "promise", "observable"] as const)(
+    "响应转换中的普通 Error 在 %s 路径下归类为 unknown",
+    async (mode) => {
+      const { context, instance } = createAxiosInstance((config) => response(config));
+      const cause = mode === "promise" ? new TypeError("业务结构错误") : new Error("业务转换失败");
+      const client = new RxHttpClient({
+        axiosInstance: instance,
+        transformResponse: () => {
+          if (mode === "promise") return Promise.reject(cause);
+          if (mode === "observable") return throwError(() => cause);
+          throw cause;
+        },
+      });
 
-    await expect(firstValueFrom(client.get("/plain-error"))).rejects.toMatchObject({
-      code: 0,
-      error: { cause, kind: "unknown", message: cause.message },
-    });
-    expect(context.calls).toBe(1);
-  });
+      await expect(firstValueFrom(client.get("/plain-error"))).rejects.toMatchObject({
+        code: 0,
+        error: { cause, kind: "unknown", message: cause.message },
+      });
+      expect(context.calls).toBe(1);
+    },
+  );
 
   it("响应转换抛出 HttpRequestError 或取消错误时保留原分类", async () => {
     const { instance } = createAxiosInstance((config) => response(config));

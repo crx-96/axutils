@@ -51,23 +51,23 @@ type TransportRequest<D> = ResolvedRequest<D> & {
  */
 export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = object> {
   /** 所有网络尝试使用的 Axios 传输实例。 */
-  private declare readonly axiosInstance: AxiosInstance;
+  declare private readonly axiosInstance: AxiosInstance;
   /** 构造阶段完成校验的同步配置。 */
-  private declare readonly baseConfig: PromiseHttpClientConfig;
+  declare private readonly baseConfig: PromiseHttpClientConfig;
   /** 首次请求时启动的可选配置工厂。 */
-  private declare readonly configFactory: PromiseHttpConfigFactory | undefined;
+  declare private readonly configFactory: PromiseHttpConfigFactory | undefined;
   /** 配置初始化的总尝试次数，固定采用同步选项的值。 */
-  private declare readonly configRetryCount: number;
+  declare private readonly configRetryCount: number;
   /** 配置首次成功后缓存的结果；失败不缓存。 */
-  private declare cachedConfig: PromiseHttpClientConfig | undefined;
+  declare private cachedConfig: PromiseHttpClientConfig | undefined;
   /** 所有首请求共享的初始化 Promise，不绑定单个调用方的取消信号。 */
-  private declare configLoading: Promise<PromiseHttpClientConfig> | undefined;
+  declare private configLoading: Promise<PromiseHttpClientConfig> | undefined;
   /** 按最终传输身份共享的进行中请求，完成或失败后清除。 */
-  private declare readonly inFlight: Map<string, Promise<PromiseHttpSuccess<unknown>>>;
+  declare private readonly inFlight: Map<string, Promise<PromiseHttpSuccess<unknown>>>;
   /** 每个调用方在解析配置后独立执行的请求头转换。 */
-  private declare readonly transformHeaders: PromiseHttpClientOptions["transformHeaders"];
+  declare private readonly transformHeaders: PromiseHttpClientOptions["transformHeaders"];
   /** 网络重试和共享传输之外的成功结果转换。 */
-  private declare readonly transformResponse: PromiseHttpClientOptions["transformResponse"];
+  declare private readonly transformResponse: PromiseHttpClientOptions["transformResponse"];
 
   /** 创建使用同步配置的客户端；构造函数不会执行网络请求或配置工厂。 */
   // 延迟上下文交叉类型，防止宽泛 options 被推导成 {} 而丢失可能存在的处理函数。

@@ -10,15 +10,15 @@
 
 ## 按任务读取
 
-| 当前工作 | 规则入口 |
-| --- | --- |
-| 实现、修复和代码审查 | [编码与审查规范](./docs/coding-standards.md)；common 的特殊行为见[包入口](./packages/common/AGENTS.md) |
-| 功能落位、职责拆分、依赖或公共入口调整 | [架构与兼容契约](./docs/architecture.md) |
-| 运行测试、构建和集成验收 | [开发与验证](./docs/development.md)，尤其是[验证范围](./docs/development.md#验证范围) |
-| 环境、浏览器或编辑器异常 | [工具与环境排查](./docs/troubleshooting.md)，只读相关场景 |
-| 版本与发布 | [发布流程](./docs/releasing.md) |
-| 新增发布包 | [新增子包 Skill](./docs/skills/add-axutils-package/SKILL.md) |
-| 全面审查、跨模块重构或规则重整 | [项目审查 Skill](./docs/skills/review-axutils-project/SKILL.md) |
+| 当前工作                               | 规则入口                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 实现、修复和代码审查                   | [编码与审查规范](./docs/coding-standards.md)；common 的特殊行为见[包入口](./packages/common/AGENTS.md) |
+| 功能落位、职责拆分、依赖或公共入口调整 | [架构与兼容契约](./docs/architecture.md)                                                               |
+| 运行测试、构建和集成验收               | [开发与验证](./docs/development.md)，尤其是[验证范围](./docs/development.md#验证范围)                  |
+| 环境、浏览器或编辑器异常               | [工具与环境排查](./docs/troubleshooting.md)，只读相关场景                                              |
+| 版本与发布                             | [发布流程](./docs/releasing.md)                                                                        |
+| 新增发布包                             | [新增子包 Skill](./docs/skills/add-axutils-package/SKILL.md)                                           |
+| 全面审查、跨模块重构或规则重整         | [项目审查 Skill](./docs/skills/review-axutils-project/SKILL.md)                                        |
 
 ## 规则分工与演进
 

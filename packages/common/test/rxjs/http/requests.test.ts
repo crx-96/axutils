@@ -63,29 +63,29 @@ describe("rxjs/http 请求、错误与重试", () => {
     expect(() => new RxHttpClient().request(input)).toThrow("请求 url 必须是字符串");
   });
 
-  it.each([
-    "signal",
-    "timeout",
-  ])("%s getter 抛错后，错误转换沿用首次读取的 signal", async (field) => {
-    const controller = new AbortController();
-    const failure = new Error(field);
-    let reads = 0;
-    const client = new RxHttpClient({ transformError: (error) => error.error.cause });
-    const request = client.request({
-      method: "GET",
-      get signal() {
-        reads++;
-        if (field === "signal") throw failure;
-        return controller.signal;
-      },
-      get timeout(): never {
-        throw failure;
-      },
-      url: "/snapshot-error",
-    });
-    expect(await firstValueFrom(request)).toBe(failure);
-    expect(reads).toBe(1);
-  });
+  it.each(["signal", "timeout"])(
+    "%s getter 抛错后，错误转换沿用首次读取的 signal",
+    async (field) => {
+      const controller = new AbortController();
+      const failure = new Error(field);
+      let reads = 0;
+      const client = new RxHttpClient({ transformError: (error) => error.error.cause });
+      const request = client.request({
+        method: "GET",
+        get signal() {
+          reads++;
+          if (field === "signal") throw failure;
+          return controller.signal;
+        },
+        get timeout(): never {
+          throw failure;
+        },
+        url: "/snapshot-error",
+      });
+      expect(await firstValueFrom(request)).toBe(failure);
+      expect(reads).toBe(1);
+    },
+  );
 
   it("拼接自定义 baseUrl，但绝对 URL 保持不变", async () => {
     const { context, instance } = createAxiosInstance((config) =>

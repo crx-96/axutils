@@ -243,28 +243,28 @@ describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind)
     expect(context.configs[0]?.headers.get("X-Origin")).toBe("req");
   });
 
-  it.each([
-    undefined,
-    "same",
-  ])("实例 baseURL 改变后获得各自目标的结果（key=%s）", async (dedupeKey) => {
-    const gate = deferred();
-    const { instance, started } = createAxiosInstance(async (config) => {
-      await gate.promise;
-      return response(config, instance.getUri(config));
-    });
-    const client = createClient(kind, { axiosInstance: instance });
-    const options = dedupeKey === undefined ? {} : { dedupeKey };
-    instance.defaults.baseURL = "https://one.test";
-    const first = resultOf(client.get("/profile", options));
-    await started;
-    instance.defaults.baseURL = "https://two.test";
-    const second = resultOf(client.get("/profile", options));
-    gate.resolve();
-    await expect(Promise.all([first, second])).resolves.toMatchObject([
-      { data: "https://one.test/profile" },
-      { data: "https://two.test/profile" },
-    ]);
-  });
+  it.each([undefined, "same"])(
+    "实例 baseURL 改变后获得各自目标的结果（key=%s）",
+    async (dedupeKey) => {
+      const gate = deferred();
+      const { instance, started } = createAxiosInstance(async (config) => {
+        await gate.promise;
+        return response(config, instance.getUri(config));
+      });
+      const client = createClient(kind, { axiosInstance: instance });
+      const options = dedupeKey === undefined ? {} : { dedupeKey };
+      instance.defaults.baseURL = "https://one.test";
+      const first = resultOf(client.get("/profile", options));
+      await started;
+      instance.defaults.baseURL = "https://two.test";
+      const second = resultOf(client.get("/profile", options));
+      gate.resolve();
+      await expect(Promise.all([first, second])).resolves.toMatchObject([
+        { data: "https://one.test/profile" },
+        { data: "https://two.test/profile" },
+      ]);
+    },
+  );
 
   it("请求重试继续使用首次传输的基础地址", async () => {
     const targets: string[] = [];
@@ -326,29 +326,26 @@ describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind)
     expect(bases).toEqual([undefined, undefined]);
   });
 
-  it.each([
-    "params",
-    "nested",
-    "baseURL",
-    "withCredentials",
-    "paramsSerializer",
-  ] as const)("默认 %s 无法可靠重放时保留第一次传输错误", async (field) => {
-    const failure = new AxiosError("first request failed", AxiosError.ERR_NETWORK);
-    const { context, instance } = createAxiosInstance((config) => {
-      if (field === "params") instance.defaults.params = { extra: 2 };
-      if (field === "nested") instance.defaults.params.filter.extra = 2;
-      if (field === "baseURL") instance.defaults.baseURL = "/new";
-      if (field === "withCredentials") instance.defaults.withCredentials = true;
-      throw Object.assign(failure, { config });
-    });
-    if (field === "nested") instance.defaults.params = { filter: { page: 1 } };
-    if (field === "paramsSerializer")
-      instance.defaults.paramsSerializer = { serialize: () => "page=1" };
-    const client = createClient(kind, { axiosInstance: instance, retryCount: 2, retryDelay: 0 });
-    const result = resultOf(client.get("/items"));
-    await expect(result).rejects.toHaveProperty("error.cause", failure);
-    expect(context.calls).toBe(1);
-  });
+  it.each(["params", "nested", "baseURL", "withCredentials", "paramsSerializer"] as const)(
+    "默认 %s 无法可靠重放时保留第一次传输错误",
+    async (field) => {
+      const failure = new AxiosError("first request failed", AxiosError.ERR_NETWORK);
+      const { context, instance } = createAxiosInstance((config) => {
+        if (field === "params") instance.defaults.params = { extra: 2 };
+        if (field === "nested") instance.defaults.params.filter.extra = 2;
+        if (field === "baseURL") instance.defaults.baseURL = "/new";
+        if (field === "withCredentials") instance.defaults.withCredentials = true;
+        throw Object.assign(failure, { config });
+      });
+      if (field === "nested") instance.defaults.params = { filter: { page: 1 } };
+      if (field === "paramsSerializer")
+        instance.defaults.paramsSerializer = { serialize: () => "page=1" };
+      const client = createClient(kind, { axiosInstance: instance, retryCount: 2, retryDelay: 0 });
+      const result = resultOf(client.get("/items"));
+      await expect(result).rejects.toHaveProperty("error.cause", failure);
+      expect(context.calls).toBe(1);
+    },
+  );
 
   it("重试等待期间新增默认参数时，返回前一次失败", async () => {
     vi.useFakeTimers();
@@ -373,44 +370,44 @@ describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind)
     }
   });
 
-  it.each([
-    undefined,
-    "same",
-  ])("并发键 %s 区分有效 responseType，忽略已覆盖的默认 timeout", async (dedupeKey) => {
-    const release = deferred();
-    const { context, instance, started } = createAxiosInstance(async (config) => {
-      await release.promise;
-      return response(config, '{"page":1}');
-    });
-    instance.defaults.responseType = "text";
-    const secondResolved = deferred();
-    let resolved = 0;
-    const client = createClient(kind, {
-      axiosInstance: instance,
-      transformHeaders: (headers) => {
-        if (++resolved === 2) secondResolved.resolve();
-        return headers;
-      },
-    });
-    const options = { ...(dedupeKey === undefined ? {} : { dedupeKey }), timeout: 15 };
-    const first = resultOf(client.get("/format", options));
-    await started;
-    instance.defaults.timeout = 99;
-    const shared = resultOf(client.get("/format", options));
-    await secondResolved.promise;
-    instance.defaults.responseType = "json";
-    const different = resultOf(client.get("/format", options));
-    release.resolve();
-    await expect(Promise.all([first, shared, different])).resolves.toMatchObject([
-      { data: '{"page":1}' },
-      { data: '{"page":1}' },
-      { data: { page: 1 } },
-    ]);
-    expect(context.configs.map(({ responseType, timeout }) => [responseType, timeout])).toEqual([
-      ["text", 15],
-      ["json", 15],
-    ]);
-  });
+  it.each([undefined, "same"])(
+    "并发键 %s 区分有效 responseType，忽略已覆盖的默认 timeout",
+    async (dedupeKey) => {
+      const release = deferred();
+      const { context, instance, started } = createAxiosInstance(async (config) => {
+        await release.promise;
+        return response(config, '{"page":1}');
+      });
+      instance.defaults.responseType = "text";
+      const secondResolved = deferred();
+      let resolved = 0;
+      const client = createClient(kind, {
+        axiosInstance: instance,
+        transformHeaders: (headers) => {
+          if (++resolved === 2) secondResolved.resolve();
+          return headers;
+        },
+      });
+      const options = { ...(dedupeKey === undefined ? {} : { dedupeKey }), timeout: 15 };
+      const first = resultOf(client.get("/format", options));
+      await started;
+      instance.defaults.timeout = 99;
+      const shared = resultOf(client.get("/format", options));
+      await secondResolved.promise;
+      instance.defaults.responseType = "json";
+      const different = resultOf(client.get("/format", options));
+      release.resolve();
+      await expect(Promise.all([first, shared, different])).resolves.toMatchObject([
+        { data: '{"page":1}' },
+        { data: '{"page":1}' },
+        { data: { page: 1 } },
+      ]);
+      expect(context.configs.map(({ responseType, timeout }) => [responseType, timeout])).toEqual([
+        ["text", 15],
+        ["json", 15],
+      ]);
+    },
+  );
 
   it("普通 toJSON 数据字段与跨 Realm 数组可自动去重，真正的序列化钩子各自执行", async () => {
     const { context, instance } = createAxiosInstance((config) => response(config, config.data));
@@ -600,22 +597,22 @@ describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind)
     await expect(resultOf(client.get("/primitive"))).resolves.toBe(value);
   });
 
-  it.each([
-    false,
-    true,
-  ])("响应转换的 Promise 会展开为最终返回值（create=%s）", async (useFactory) => {
-    const { instance } = createAxiosInstance((config) => response(config, { id: 7 }));
-    const client = createClient(
-      kind,
-      {
-        axiosInstance: instance,
-        transformResponse: async (value) => ({ payload: value.data }),
-      },
-      useFactory,
-    );
+  it.each([false, true])(
+    "响应转换的 Promise 会展开为最终返回值（create=%s）",
+    async (useFactory) => {
+      const { instance } = createAxiosInstance((config) => response(config, { id: 7 }));
+      const client = createClient(
+        kind,
+        {
+          axiosInstance: instance,
+          transformResponse: async (value) => ({ payload: value.data }),
+        },
+        useFactory,
+      );
 
-    await expect(resultOf(client.get("/async"))).resolves.toEqual({ payload: { id: 7 } });
-  });
+      await expect(resultOf(client.get("/async"))).resolves.toEqual({ payload: { id: 7 } });
+    },
+  );
 
   it("HTTP 失败沿原错误通道传播，不调用响应转换", async () => {
     const { context, instance } = createAxiosInstance((config) => response(config, {}, 400));
@@ -645,29 +642,29 @@ describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind)
     expect(context.calls).toBe(0);
   });
 
-  it.each([
-    false,
-    true,
-  ])("响应转换同步或异步失败不会触发网络重试（async=%s）", async (asyncFailure) => {
-    const { context, instance } = createAxiosInstance((config) => response(config));
-    const cause = new AxiosError("转换失败模拟可重试错误", AxiosError.ERR_NETWORK);
-    const transformResponse = vi.fn(() => {
-      if (asyncFailure) return Promise.reject(cause);
-      throw cause;
-    });
-    const client = createClient(kind, {
-      axiosInstance: instance,
-      retryCount: 3,
-      retryDelay: 0,
-      transformResponse,
-    });
-    const result = resultOf(client.get("/response-error"));
+  it.each([false, true])(
+    "响应转换同步或异步失败不会触发网络重试（async=%s）",
+    async (asyncFailure) => {
+      const { context, instance } = createAxiosInstance((config) => response(config));
+      const cause = new AxiosError("转换失败模拟可重试错误", AxiosError.ERR_NETWORK);
+      const transformResponse = vi.fn(() => {
+        if (asyncFailure) return Promise.reject(cause);
+        throw cause;
+      });
+      const client = createClient(kind, {
+        axiosInstance: instance,
+        retryCount: 3,
+        retryDelay: 0,
+        transformResponse,
+      });
+      const result = resultOf(client.get("/response-error"));
 
-    await expect(result).rejects.toBeInstanceOf(ErrorClass);
-    await expect(result).rejects.toMatchObject({ error: { cause, kind: "network" } });
-    expect(context.calls).toBe(1);
-    expect(transformResponse).toHaveBeenCalledOnce();
-  });
+      await expect(result).rejects.toBeInstanceOf(ErrorClass);
+      await expect(result).rejects.toMatchObject({ error: { cause, kind: "network" } });
+      expect(context.calls).toBe(1);
+      expect(transformResponse).toHaveBeenCalledOnce();
+    },
+  );
 
   it("取消信号可以结束等待异步响应转换", async () => {
     const transformStarted = deferred();
@@ -692,37 +689,34 @@ describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind)
     expect(context.calls).toBe(1);
   });
 
-  it.each([
-    "transformHeaders",
-    "transformResponse",
-  ] as const)("构造与 create 拒绝非法 %s", (field) => {
-    for (const invalid of [null, 42, {}]) {
-      // 故意绕过类型边界，验证 JavaScript 调用方的运行时输入。
-      const options = { [field]: invalid } as never;
-      expect(() => createClient(kind, options)).toThrow(`${field} 必须是函数`);
-      expect(() => createClient(kind, options, true)).toThrow(`${field} 必须是函数`);
-    }
-  });
+  it.each(["transformHeaders", "transformResponse"] as const)(
+    "构造与 create 拒绝非法 %s",
+    (field) => {
+      for (const invalid of [null, 42, {}]) {
+        // 故意绕过类型边界，验证 JavaScript 调用方的运行时输入。
+        const options = { [field]: invalid } as never;
+        expect(() => createClient(kind, options)).toThrow(`${field} 必须是函数`);
+        expect(() => createClient(kind, options, true)).toThrow(`${field} 必须是函数`);
+      }
+    },
+  );
 
-  it.each([
-    null,
-    [],
-    Promise.resolve({}),
-    new Date(0),
-    42,
-  ])("请求头回调拒绝非同步 headers 对象：%s", async (value) => {
-    const { context, instance } = createAxiosInstance((config) => response(config));
-    const client = createClient(kind, {
-      axiosInstance: instance,
-      // 故意构造不符合公开签名的返回值，验证实际边界校验。
-      transformHeaders: () => value as never,
-    });
+  it.each([null, [], Promise.resolve({}), new Date(0), 42])(
+    "请求头回调拒绝非同步 headers 对象：%s",
+    async (value) => {
+      const { context, instance } = createAxiosInstance((config) => response(config));
+      const client = createClient(kind, {
+        axiosInstance: instance,
+        // 故意构造不符合公开签名的返回值，验证实际边界校验。
+        transformHeaders: () => value as never,
+      });
 
-    await expect(resultOf(client.get("/invalid-headers"))).rejects.toMatchObject({
-      error: { kind: "config", message: "transformHeaders 必须同步返回 headers 对象" },
-    });
-    expect(context.calls).toBe(0);
-  });
+      await expect(resultOf(client.get("/invalid-headers"))).rejects.toMatchObject({
+        error: { kind: "config", message: "transformHeaders 必须同步返回 headers 对象" },
+      });
+      expect(context.calls).toBe(0);
+    },
+  );
 });
 
 it("RxJS 在每次订阅时重新执行请求头转换，创建 Observable 时不读取 token", async () => {

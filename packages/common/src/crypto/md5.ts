@@ -21,11 +21,11 @@ import {
  */
 export class Md5 {
   /** 处理已编码字节的通用摘要后端。 */
-  private declare readonly instance: InstanceType<typeof SparkMD5.ArrayBuffer>;
+  declare private readonly instance: InstanceType<typeof SparkMD5.ArrayBuffer>;
   /** 当前摘要独占的分块编码状态。 */
-  private declare readonly inputStream: Md5InputStream;
+  declare private readonly inputStream: Md5InputStream;
   /** 首次完成摘要时缓存的字节，null 表示仍可追加输入。 */
-  private declare digestBytes: number[] | null;
+  declare private digestBytes: number[] | null;
 
   /** 创建一个空摘要，绑定只接收完整字节缓冲区的 SparkMD5 后端。 */
   constructor() {

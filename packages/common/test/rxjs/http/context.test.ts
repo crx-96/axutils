@@ -168,72 +168,69 @@ describe("rxjs/http 每次订阅的业务上下文", () => {
     ]);
   });
 
-  it.each([
-    "explicit",
-    "",
-    null,
-    false,
-    undefined,
-  ])("最终请求头保留分层覆盖与显式值 %s，不修改调用方数据", async (authorization) => {
-    const { context, instance } = createAxiosInstance((config) => response(config));
-    instance.defaults.headers.common.Authorization = "instance-common";
-    instance.defaults.headers.get.Authorization = "instance-method";
-    instance.defaults.headers.common["Accept-Language"] = "default-language";
-    const headers = {
-      authorization,
-      common: new AxiosHeaders({ Authorization: "request-common", "X-Group": "common" }),
-      get: new AxiosHeaders({ Authorization: "request-method", "X-Group": "method" }),
-      "X-Multi": ["original"],
-    };
-    const client = new RxHttpClient({
-      axiosInstance: instance,
-      createContext: () => ({ token: "callback" }),
-      transformHeaders: (copy, request) => {
-        const values = copy["X-Multi"];
-        if (Array.isArray(values)) values.push("modified");
-        return { ...copy, Authorization: request.context?.token ?? null, "X-Added": "added" };
-      },
-      transformResponse: (_result, request) => request.headers,
-    });
-    const actual = await firstValueFrom(client.get("/headers", { headers }));
-    expect(actual?.Authorization).toBe(authorization);
-    expect(actual).toMatchObject({
-      "Accept-Language": "default-language",
-      "X-Added": "added",
-      "X-Group": "method",
-      "X-Multi": ["original"],
-    });
-    expect(actual).not.toHaveProperty("Common");
-    expect(actual).not.toHaveProperty("Get");
-    expect(actual).not.toHaveProperty("Query");
-    expect(Object.isFrozen(actual)).toBe(true);
-    expect(Object.isFrozen(actual?.["X-Multi"])).toBe(true);
-    expect(context.configs[0]?.headers.get("Authorization")).toBe(authorization);
-    expect(headers.authorization).toBe(authorization);
-    expect(headers.common.get("Authorization")).toBe("request-common");
-    expect(headers.get.get("Authorization")).toBe("request-method");
-    expect(headers["X-Multi"]).toEqual(["original"]);
-  });
+  it.each(["explicit", "", null, false, undefined])(
+    "最终请求头保留分层覆盖与显式值 %s，不修改调用方数据",
+    async (authorization) => {
+      const { context, instance } = createAxiosInstance((config) => response(config));
+      instance.defaults.headers.common.Authorization = "instance-common";
+      instance.defaults.headers.get.Authorization = "instance-method";
+      instance.defaults.headers.common["Accept-Language"] = "default-language";
+      const headers = {
+        authorization,
+        common: new AxiosHeaders({ Authorization: "request-common", "X-Group": "common" }),
+        get: new AxiosHeaders({ Authorization: "request-method", "X-Group": "method" }),
+        "X-Multi": ["original"],
+      };
+      const client = new RxHttpClient({
+        axiosInstance: instance,
+        createContext: () => ({ token: "callback" }),
+        transformHeaders: (copy, request) => {
+          const values = copy["X-Multi"];
+          if (Array.isArray(values)) values.push("modified");
+          return { ...copy, Authorization: request.context?.token ?? null, "X-Added": "added" };
+        },
+        transformResponse: (_result, request) => request.headers,
+      });
+      const actual = await firstValueFrom(client.get("/headers", { headers }));
+      expect(actual?.Authorization).toBe(authorization);
+      expect(actual).toMatchObject({
+        "Accept-Language": "default-language",
+        "X-Added": "added",
+        "X-Group": "method",
+        "X-Multi": ["original"],
+      });
+      expect(actual).not.toHaveProperty("Common");
+      expect(actual).not.toHaveProperty("Get");
+      expect(actual).not.toHaveProperty("Query");
+      expect(Object.isFrozen(actual)).toBe(true);
+      expect(Object.isFrozen(actual?.["X-Multi"])).toBe(true);
+      expect(context.configs[0]?.headers.get("Authorization")).toBe(authorization);
+      expect(headers.authorization).toBe(authorization);
+      expect(headers.common.get("Authorization")).toBe("request-common");
+      expect(headers.get.get("Authorization")).toBe("request-method");
+      expect(headers["X-Multi"]).toEqual(["original"]);
+    },
+  );
 
-  it.each([
-    "common",
-    "get",
-  ] as const)("请求级 %s 凭据覆盖默认 false，不会在 Axios 再合并时丢失", async (group) => {
-    const { context, instance } = createAxiosInstance((config) => response(config));
-    instance.defaults.headers[group].Authorization = false;
-    const client = new RxHttpClient({
-      axiosInstance: instance,
-      transformResponse: (_result, request) => request.headers,
-    });
-    const headers = await firstValueFrom(
-      client.get("/explicit-credential", {
-        headers: { [group]: new AxiosHeaders({ Authorization: "explicit-token" }) },
-      }),
-    );
-    expect(headers?.Authorization).toBe("explicit-token");
-    expect(context.configs[0]?.headers.get("Authorization")).toBe("explicit-token");
-    expect(instance.defaults.headers[group].Authorization).toBe(false);
-  });
+  it.each(["common", "get"] as const)(
+    "请求级 %s 凭据覆盖默认 false，不会在 Axios 再合并时丢失",
+    async (group) => {
+      const { context, instance } = createAxiosInstance((config) => response(config));
+      instance.defaults.headers[group].Authorization = false;
+      const client = new RxHttpClient({
+        axiosInstance: instance,
+        transformResponse: (_result, request) => request.headers,
+      });
+      const headers = await firstValueFrom(
+        client.get("/explicit-credential", {
+          headers: { [group]: new AxiosHeaders({ Authorization: "explicit-token" }) },
+        }),
+      );
+      expect(headers?.Authorization).toBe("explicit-token");
+      expect(context.configs[0]?.headers.get("Authorization")).toBe("explicit-token");
+      expect(instance.defaults.headers[group].Authorization).toBe(false);
+    },
+  );
 
   it("没有 Header 回调也捕获实例默认值，变化后的默认值参与去重", async () => {
     const gate = deferred();
@@ -371,37 +368,36 @@ describe("rxjs/http 上下文初始化、失败和取消", () => {
     expect(context.calls).toBe(0);
   });
 
-  it.each([
-    "throw",
-    "promise",
-    "observable",
-  ])("成功转换与错误转换的 %s 失败不重试或递归，保留订阅信息", async (mode) => {
-    const original = { identity: 1 };
-    const cause = new AxiosError("transform failed", AxiosError.ERR_NETWORK);
-    const fail = () => {
-      if (mode === "promise") return Promise.reject(cause);
-      if (mode === "observable") return throwError(() => cause);
-      throw cause;
-    };
-    const { context, instance } = createAxiosInstance((config) => response(config));
-    const transformError = vi.fn((_error, request: HttpRequestContext<typeof original>) => {
-      expect(request.context).toBe(original);
-      expect(request.headers?.Authorization).toBe("token");
-      return fail();
-    });
-    const client = new RxHttpClient({
-      axiosInstance: instance,
-      createContext: () => original,
-      transformError,
-      transformHeaders: () => ({ Authorization: "token" }),
-      transformResponse: fail,
-    });
-    await expect(firstValueFrom(client.get("/transform"))).rejects.toMatchObject({
-      error: { cause, kind: "unknown" },
-    });
-    expect(transformError).toHaveBeenCalledOnce();
-    expect(context.calls).toBe(1);
-  });
+  it.each(["throw", "promise", "observable"])(
+    "成功转换与错误转换的 %s 失败不重试或递归，保留订阅信息",
+    async (mode) => {
+      const original = { identity: 1 };
+      const cause = new AxiosError("transform failed", AxiosError.ERR_NETWORK);
+      const fail = () => {
+        if (mode === "promise") return Promise.reject(cause);
+        if (mode === "observable") return throwError(() => cause);
+        throw cause;
+      };
+      const { context, instance } = createAxiosInstance((config) => response(config));
+      const transformError = vi.fn((_error, request: HttpRequestContext<typeof original>) => {
+        expect(request.context).toBe(original);
+        expect(request.headers?.Authorization).toBe("token");
+        return fail();
+      });
+      const client = new RxHttpClient({
+        axiosInstance: instance,
+        createContext: () => original,
+        transformError,
+        transformHeaders: () => ({ Authorization: "token" }),
+        transformResponse: fail,
+      });
+      await expect(firstValueFrom(client.get("/transform"))).rejects.toMatchObject({
+        error: { cause, kind: "unknown" },
+      });
+      expect(transformError).toHaveBeenCalledOnce();
+      expect(context.calls).toBe(1);
+    },
+  );
 
   it.each([true, false])("配置等待时取消保留已捕获上下文（预先取消=%s）", async (preAborted) => {
     const source = new Subject<Partial<HttpClientConfig>>();
@@ -469,31 +465,31 @@ describe("rxjs/http 上下文初始化、失败和取消", () => {
     expect(pending.abortCount).toBe(1);
   });
 
-  it.each([
-    false,
-    true,
-  ])("主动退订不触发业务转换，保留底层自动取消策略 %s", async (cancelOnNoSubscribers) => {
-    const pending = createPendingAxiosInstance();
-    const transformError = vi.fn(() => "error");
-    const transformResponse = vi.fn(() => "success");
-    const client = new RxHttpClient({
-      axiosInstance: pending.instance,
-      cancelOnNoSubscribers,
-      createContext: () => ({ identity: 1 }),
-      transformError,
-      transformResponse,
-    });
-    const first = client.get("/shared").subscribe();
-    const second = client.get("/shared").subscribe();
-    await pending.started;
-    first.unsubscribe();
-    expect(pending.abortCount).toBe(0);
-    second.unsubscribe();
-    expect(pending.abortCount).toBe(cancelOnNoSubscribers ? 1 : 0);
-    pending.complete();
-    expect(transformError).not.toHaveBeenCalled();
-    expect(transformResponse).not.toHaveBeenCalled();
-  });
+  it.each([false, true])(
+    "主动退订不触发业务转换，保留底层自动取消策略 %s",
+    async (cancelOnNoSubscribers) => {
+      const pending = createPendingAxiosInstance();
+      const transformError = vi.fn(() => "error");
+      const transformResponse = vi.fn(() => "success");
+      const client = new RxHttpClient({
+        axiosInstance: pending.instance,
+        cancelOnNoSubscribers,
+        createContext: () => ({ identity: 1 }),
+        transformError,
+        transformResponse,
+      });
+      const first = client.get("/shared").subscribe();
+      const second = client.get("/shared").subscribe();
+      await pending.started;
+      first.unsubscribe();
+      expect(pending.abortCount).toBe(0);
+      second.unsubscribe();
+      expect(pending.abortCount).toBe(cancelOnNoSubscribers ? 1 : 0);
+      pending.complete();
+      expect(transformError).not.toHaveBeenCalled();
+      expect(transformResponse).not.toHaveBeenCalled();
+    },
+  );
 
   it("自定义精简 axiosInstance 缺省 response.config 时回退到请求头快照", async () => {
     let seenHeaders: HttpRequestContext<undefined>["headers"];

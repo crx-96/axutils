@@ -285,20 +285,18 @@ describe("object/storage", () => {
     expect(storage.get("key")).toBe(2);
   });
 
-  it.each([
-    "get",
-    "set",
-    "remove",
-    "remove-noop",
-  ] as const)("构造时探测到 Web Storage 的 %s 操作失败后降级到内存 Map", (operation) => {
-    vi.stubGlobal("localStorage", new ThrowingStorage(operation));
-    const storage = new StorageUtils({ prefix: `storage-probe-${operation}-` });
+  it.each(["get", "set", "remove", "remove-noop"] as const)(
+    "构造时探测到 Web Storage 的 %s 操作失败后降级到内存 Map",
+    (operation) => {
+      vi.stubGlobal("localStorage", new ThrowingStorage(operation));
+      const storage = new StorageUtils({ prefix: `storage-probe-${operation}-` });
 
-    storage.set("key", "value");
-    expect(storage.get("key")).toBe("value");
-    storage.remove("key");
-    expect(storage.get("key")).toBeNull();
-  });
+      storage.set("key", "value");
+      expect(storage.get("key")).toBe("value");
+      storage.remove("key");
+      expect(storage.get("key")).toBeNull();
+    },
+  );
 
   it("Web Storage 探测成功后不残留临时 key", () => {
     const store = new TestStorage();
@@ -325,17 +323,17 @@ describe("object/storage", () => {
     expect(session.get("key")).toBe("session");
   });
 
-  it.each([
-    Number.MAX_VALUE,
-    Number.MAX_SAFE_INTEGER,
-  ])("过期时间 %s 的计算结果越界时 set 抛 RangeError 且 setSafe 返回 false", (expired) => {
-    const storage = new StorageUtils({ prefix: "storage-expired-overflow-" });
+  it.each([Number.MAX_VALUE, Number.MAX_SAFE_INTEGER])(
+    "过期时间 %s 的计算结果越界时 set 抛 RangeError 且 setSafe 返回 false",
+    (expired) => {
+      const storage = new StorageUtils({ prefix: "storage-expired-overflow-" });
 
-    expect(() => storage.set("unsafe", "value", expired)).toThrow(RangeError);
-    expect(storage.setSafe("safe", "value", expired)).toBe(false);
-    expect(storage.get("unsafe")).toBeNull();
-    expect(storage.get("safe")).toBeNull();
-  });
+      expect(() => storage.set("unsafe", "value", expired)).toThrow(RangeError);
+      expect(storage.setSafe("safe", "value", expired)).toBe(false);
+      expect(storage.get("unsafe")).toBeNull();
+      expect(storage.get("safe")).toBeNull();
+    },
+  );
 
   it("四个 safe 方法吞掉探测成功后出现的底层存储异常", () => {
     const values = new Map<string, string>();
@@ -391,45 +389,45 @@ describe("object/storage", () => {
     expect(storage.get("cyclic")).toBeNull();
   });
 
-  it.each([
-    "Web Storage",
-    "Map 降级",
-  ])("%s 清理大集合时不漏项，也不删除其他命名空间、session 或业务原始值", (backend) => {
-    const localBackend = new TestStorage();
-    const sessionBackend = new TestStorage();
-    vi.stubGlobal("localStorage", backend === "Web Storage" ? localBackend : undefined);
-    vi.stubGlobal("sessionStorage", backend === "Web Storage" ? sessionBackend : undefined);
-    const prefix = `storage-large-${backend}-`;
-    const storage = new StorageUtils({ prefix });
-    const sameNamespace = new StorageUtils({ prefix });
-    const other = new StorageUtils({ prefix: `${prefix}other-` });
-    const session = new StorageUtils({ prefix, type: "session" });
-    const rawKey = `${prefix}foreign`;
-    localBackend.setItem(rawKey, "business value");
+  it.each(["Web Storage", "Map 降级"])(
+    "%s 清理大集合时不漏项，也不删除其他命名空间、session 或业务原始值",
+    (backend) => {
+      const localBackend = new TestStorage();
+      const sessionBackend = new TestStorage();
+      vi.stubGlobal("localStorage", backend === "Web Storage" ? localBackend : undefined);
+      vi.stubGlobal("sessionStorage", backend === "Web Storage" ? sessionBackend : undefined);
+      const prefix = `storage-large-${backend}-`;
+      const storage = new StorageUtils({ prefix });
+      const sameNamespace = new StorageUtils({ prefix });
+      const other = new StorageUtils({ prefix: `${prefix}other-` });
+      const session = new StorageUtils({ prefix, type: "session" });
+      const rawKey = `${prefix}foreign`;
+      localBackend.setItem(rawKey, "business value");
 
-    try {
-      for (let index = 0; index < 1000; index += 1) sameNamespace.set(String(index), index);
-      other.set("key", "other namespace");
-      session.set("key", "session value");
-      expect(storage.get("999")).toBe(999);
+      try {
+        for (let index = 0; index < 1000; index += 1) sameNamespace.set(String(index), index);
+        other.set("key", "other namespace");
+        session.set("key", "session value");
+        expect(storage.get("999")).toBe(999);
 
-      storage.clear();
+        storage.clear();
 
-      for (let index = 0; index < 1000; index += 1) {
-        expect(sameNamespace.get(String(index))).toBeNull();
+        for (let index = 0; index < 1000; index += 1) {
+          expect(sameNamespace.get(String(index))).toBeNull();
+        }
+        expect(other.get("key")).toBe("other namespace");
+        expect(session.get("key")).toBe("session value");
+        if (backend === "Web Storage") {
+          expect(localBackend.getItem(rawKey)).toBe("business value");
+          expect(localBackend.length).toBe(2);
+        }
+      } finally {
+        storage.clear();
+        other.clear();
+        session.clear();
       }
-      expect(other.get("key")).toBe("other namespace");
-      expect(session.get("key")).toBe("session value");
-      if (backend === "Web Storage") {
-        expect(localBackend.getItem(rawKey)).toBe("business value");
-        expect(localBackend.length).toBe(2);
-      }
-    } finally {
-      storage.clear();
-      other.clear();
-      session.clear();
-    }
-  });
+    },
+  );
 
   it("有状态 key 处理函数在 remove、clear 和重新写入后保持原映射", () => {
     vi.stubGlobal("localStorage", undefined);
@@ -533,41 +531,40 @@ describe("object/storage", () => {
     expect(storage.get("key")).toBe("最终值");
   });
 
-  it.each([
-    "remove",
-    "过期",
-    "clear",
-  ])("迁移提交后 %s 清理旧键失败时旧值不会重新可读", (operation) => {
-    vi.useFakeTimers();
-    const backend = new TestStorage();
-    vi.stubGlobal("localStorage", backend);
-    const storage = new StorageUtils();
-    const reader = new StorageUtils();
-    storage.set("key", "原新格式值");
-    backend.setItem("key", legacyRecord);
-    const removeItem = backend.removeItem.bind(backend);
-    const cleanup = vi.spyOn(backend, "removeItem").mockImplementation((key) => {
-      if (key === "key") throw new Error("旧键删除失败");
-      removeItem(key);
-    });
+  it.each(["remove", "过期", "clear"])(
+    "迁移提交后 %s 清理旧键失败时旧值不会重新可读",
+    (operation) => {
+      vi.useFakeTimers();
+      const backend = new TestStorage();
+      vi.stubGlobal("localStorage", backend);
+      const storage = new StorageUtils();
+      const reader = new StorageUtils();
+      storage.set("key", "原新格式值");
+      backend.setItem("key", legacyRecord);
+      const removeItem = backend.removeItem.bind(backend);
+      const cleanup = vi.spyOn(backend, "removeItem").mockImplementation((key) => {
+        if (key === "key") throw new Error("旧键删除失败");
+        removeItem(key);
+      });
 
-    expect(storage.setSafe("key", "新值", operation === "过期" ? 1 : 0)).toBe(true);
-    expect(reader.get("key")).toBe("新值");
-    if (operation === "过期") {
-      vi.advanceTimersByTime(1000);
-      expect(reader.getSafe("key")).toBeNull();
-      expect(() => reader.get("key")).toThrow("旧键删除失败");
-    } else {
-      expect(operation === "clear" ? storage.clearSafe() : storage.removeSafe("key")).toBe(false);
+      expect(storage.setSafe("key", "新值", operation === "过期" ? 1 : 0)).toBe(true);
       expect(reader.get("key")).toBe("新值");
-    }
+      if (operation === "过期") {
+        vi.advanceTimersByTime(1000);
+        expect(reader.getSafe("key")).toBeNull();
+        expect(() => reader.get("key")).toThrow("旧键删除失败");
+      } else {
+        expect(operation === "clear" ? storage.clearSafe() : storage.removeSafe("key")).toBe(false);
+        expect(reader.get("key")).toBe("新值");
+      }
 
-    cleanup.mockRestore();
-    if (operation === "remove") storage.remove("key");
-    if (operation === "clear") storage.clear();
-    expect(reader.get("key")).toBeNull();
-    expect(backend.length).toBe(0);
-  });
+      cleanup.mockRestore();
+      if (operation === "remove") storage.remove("key");
+      if (operation === "clear") storage.clear();
+      expect(reader.get("key")).toBeNull();
+      expect(backend.length).toBe(0);
+    },
+  );
 
   it("已有数据可读但配额已满时保留持久后端", () => {
     const backend = new TestStorage();
@@ -608,17 +605,14 @@ describe("object/storage", () => {
     expect(backend.length).toBe(0);
   });
 
-  it.each([
-    "Session",
-    "memory",
-    "toString",
-    null,
-    123,
-  ])("构造时传入非法 type (%s) 立即抛出 TypeError", (invalidType) => {
-    expect(() => new StorageUtils({ type: invalidType as unknown as "local" })).toThrow(
-      new TypeError('type 必须是 "local" 或 "session"'),
-    );
-  });
+  it.each(["Session", "memory", "toString", null, 123])(
+    "构造时传入非法 type (%s) 立即抛出 TypeError",
+    (invalidType) => {
+      expect(() => new StorageUtils({ type: invalidType as unknown as "local" })).toThrow(
+        new TypeError('type 必须是 "local" 或 "session"'),
+      );
+    },
+  );
 
   it("亚毫秒正 TTL 在常规时钟、Date.now() === 0 及负时钟边界下不会立即过期或永久有效", () => {
     vi.useFakeTimers();

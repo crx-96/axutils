@@ -28,15 +28,15 @@
     "version-packages": "changeset version"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.2",
+    "@biomejs/biome": "2.6.8",
     "@changesets/cli": "3.0.3",
-    "@playwright/test": "1.63.0",
-    "@types/node": "24.19.1",
-    "node14-types": "npm:@types/node@14.18.63",
+    "@playwright/test": "1.65.1",
+    "@types/node": "26.6.6",
+    "node18-types": "npm:@types/node@18.19.130",
     "publint": "0.3.25",
     "typescript": "7.0.2",
-    "vite": "8.3.3",
-    "vitest": "4.1.11"
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
   },
   "engines": {
     "node": "^22.13 || ^24 || >=26",

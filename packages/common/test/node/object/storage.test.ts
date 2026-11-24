@@ -91,17 +91,17 @@ describe("node/object/storage", () => {
     expect(storage.get("cyclic")).toBe(cyclic);
   });
 
-  it.each([
-    Number.MAX_VALUE,
-    Number.MAX_SAFE_INTEGER,
-  ])("过期时间 %s 的计算结果越界时 set 抛 RangeError 且 setSafe 返回 false", (expired) => {
-    const storage = new StorageUtils({ prefix: "storage-expired-overflow-node-" });
+  it.each([Number.MAX_VALUE, Number.MAX_SAFE_INTEGER])(
+    "过期时间 %s 的计算结果越界时 set 抛 RangeError 且 setSafe 返回 false",
+    (expired) => {
+      const storage = new StorageUtils({ prefix: "storage-expired-overflow-node-" });
 
-    expect(() => storage.set("unsafe", "value", expired)).toThrow(RangeError);
-    expect(storage.setSafe("safe", "value", expired)).toBe(false);
-    expect(storage.get("unsafe")).toBeNull();
-    expect(storage.get("safe")).toBeNull();
-  });
+      expect(() => storage.set("unsafe", "value", expired)).toThrow(RangeError);
+      expect(storage.setSafe("safe", "value", expired)).toBe(false);
+      expect(storage.get("unsafe")).toBeNull();
+      expect(storage.get("safe")).toBeNull();
+    },
+  );
 
   it("Node 保持值引用，通用 JSON 存储在写入和每次读取时形成独立值", () => {
     vi.stubGlobal("localStorage", undefined);

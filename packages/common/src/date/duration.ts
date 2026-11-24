@@ -42,7 +42,6 @@ export const Duration = {
 
   /** 将整数毫秒拆成天至毫秒，并在最前面显式补齐年月。 */
   fromMilliseconds(milliseconds: number): DurationFields {
-    // biome-ignore assist/source/useSortedKeys: 保留从年到毫秒的字段顺序。
     return {
       years: 0,
       months: 0,

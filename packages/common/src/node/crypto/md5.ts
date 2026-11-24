@@ -11,11 +11,11 @@ import { type Md5Input, type Md5StringEncoding, bytesToBase64, bytesToHex } from
  */
 export class Md5 {
   /** 处理已编码字节的 Node 原生摘要后端。 */
-  private declare readonly instance: ReturnType<typeof createHash>;
+  declare private readonly instance: ReturnType<typeof createHash>;
   /** 当前摘要独占的分块编码状态。 */
-  private declare readonly inputStream: Md5InputStream;
+  declare private readonly inputStream: Md5InputStream;
   /** 首次完成摘要时缓存的字节，null 表示仍可追加输入。 */
-  private declare digestBytes: number[] | null;
+  declare private digestBytes: number[] | null;
 
   /** 创建一个空摘要，将输入流的字节按顺序传给原生 Hash。 */
   constructor() {

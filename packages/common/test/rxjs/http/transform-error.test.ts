@@ -75,49 +75,52 @@ describe("rxjs/http 统一错误转换", () => {
     }
   });
 
-  it.each([
-    false,
-    true,
-  ])("错误转换保留非幂等请求的重试限制（显式开启=%s）", async (retryNonIdempotent) => {
-    const { context, instance } = createAxiosInstance(() => {
-      throw new Error("network down");
-    });
-    const transformError = vi.fn(() => "recovered");
-    const client = new RxHttpClient({ axiosInstance: instance, transformError });
+  it.each([false, true])(
+    "错误转换保留非幂等请求的重试限制（显式开启=%s）",
+    async (retryNonIdempotent) => {
+      const { context, instance } = createAxiosInstance(() => {
+        throw new Error("network down");
+      });
+      const transformError = vi.fn(() => "recovered");
+      const client = new RxHttpClient({ axiosInstance: instance, transformError });
 
-    await expect(
-      firstValueFrom(client.post("/write", { value: 1 }, { retryNonIdempotent })),
-    ).resolves.toBe("recovered");
-    expect(context.calls).toBe(retryNonIdempotent ? 3 : 1);
-    expect(transformError).toHaveBeenCalledOnce();
-  });
+      await expect(
+        firstValueFrom(client.post("/write", { value: 1 }, { retryNonIdempotent })),
+      ).resolves.toBe("recovered");
+      expect(context.calls).toBe(retryNonIdempotent ? 3 : 1);
+      expect(transformError).toHaveBeenCalledOnce();
+    },
+  );
 
-  it.each([
-    200, 201, 204,
-  ])("使用方可原样返回 HTTP 200 的业务失败并自行处理 HTTP %s", async (status) => {
-    const body = {
-      code: 1001,
-      data: null,
-      message: "业务校验失败",
-      request_id: "business-42",
-      signature: "signature",
-      timestamp: 123,
-    };
-    const { context, instance } = createAxiosInstance((config) => response(config, body, status));
-    const transformError = vi.fn(() => ({ ...body, message: "请求异常" }));
-    const client = new RxHttpClient({
-      axiosInstance: instance,
-      transformError,
-      transformResponse: (result: HttpSuccess<typeof body>) =>
-        result.code === 200 ? result.data : { ...body, code: result.code, message: "非 200 响应" },
-    });
+  it.each([200, 201, 204])(
+    "使用方可原样返回 HTTP 200 的业务失败并自行处理 HTTP %s",
+    async (status) => {
+      const body = {
+        code: 1001,
+        data: null,
+        message: "业务校验失败",
+        request_id: "business-42",
+        signature: "signature",
+        timestamp: 123,
+      };
+      const { context, instance } = createAxiosInstance((config) => response(config, body, status));
+      const transformError = vi.fn(() => ({ ...body, message: "请求异常" }));
+      const client = new RxHttpClient({
+        axiosInstance: instance,
+        transformError,
+        transformResponse: (result: HttpSuccess<typeof body>) =>
+          result.code === 200
+            ? result.data
+            : { ...body, code: result.code, message: "非 200 响应" },
+      });
 
-    await expect(firstValueFrom(client.get("/business"))).resolves.toEqual(
-      status === 200 ? body : { ...body, code: status, message: "非 200 响应" },
-    );
-    expect(context.calls).toBe(1);
-    expect(transformError).not.toHaveBeenCalled();
-  });
+      await expect(firstValueFrom(client.get("/business"))).resolves.toEqual(
+        status === 200 ? body : { ...body, code: status, message: "非 200 响应" },
+      );
+      expect(context.calls).toBe(1);
+      expect(transformError).not.toHaveBeenCalled();
+    },
+  );
 
   it("配置初始化保持懒执行、并发共享和失败重试，成功后缓存配置", async () => {
     const gate = deferred<Partial<HttpClientConfig>>();
@@ -169,54 +172,52 @@ describe("rxjs/http 统一错误转换", () => {
     expect(context.calls).toBe(0);
   });
 
-  it.each([
-    "throw",
-    "promise",
-    "observable",
-  ])("响应转换的 %s 异常只进入一次错误转换，不重发请求", async (mode) => {
-    const cause = new AxiosError("response transform failed", AxiosError.ERR_NETWORK);
-    const { context, instance } = createAxiosInstance((config) => response(config));
-    const transformError = vi.fn((_error: HttpRequestError) => "fallback");
-    const client = new RxHttpClient({
-      axiosInstance: instance,
-      transformError,
-      transformResponse: () => {
+  it.each(["throw", "promise", "observable"])(
+    "响应转换的 %s 异常只进入一次错误转换，不重发请求",
+    async (mode) => {
+      const cause = new AxiosError("response transform failed", AxiosError.ERR_NETWORK);
+      const { context, instance } = createAxiosInstance((config) => response(config));
+      const transformError = vi.fn((_error: HttpRequestError) => "fallback");
+      const client = new RxHttpClient({
+        axiosInstance: instance,
+        transformError,
+        transformResponse: () => {
+          if (mode === "promise") return Promise.reject(cause);
+          if (mode === "observable") return throwError(() => cause);
+          throw cause;
+        },
+      });
+
+      await expect(firstValueFrom(client.get("/response-error"))).resolves.toBe("fallback");
+      expect(transformError.mock.calls[0]?.[0].error.cause).toBe(cause);
+      expect(transformError).toHaveBeenCalledOnce();
+      expect(context.calls).toBe(1);
+    },
+  );
+
+  it.each(["throw", "promise", "observable"])(
+    "错误转换自身的 %s 异常保留原因，不递归转换或重试",
+    async (mode) => {
+      const cause = new AxiosError("recovery failed", AxiosError.ERR_NETWORK);
+      const { context, instance } = createAxiosInstance(() => {
+        throw new Error("transport failed");
+      });
+      const transformError = vi.fn(() => {
         if (mode === "promise") return Promise.reject(cause);
         if (mode === "observable") return throwError(() => cause);
         throw cause;
-      },
-    });
+      });
+      const request$ = new RxHttpClient({ axiosInstance: instance, transformError }).get(
+        "/recovery-error",
+      );
 
-    await expect(firstValueFrom(client.get("/response-error"))).resolves.toBe("fallback");
-    expect(transformError.mock.calls[0]?.[0].error.cause).toBe(cause);
-    expect(transformError).toHaveBeenCalledOnce();
-    expect(context.calls).toBe(1);
-  });
-
-  it.each([
-    "throw",
-    "promise",
-    "observable",
-  ])("错误转换自身的 %s 异常保留原因，不递归转换或重试", async (mode) => {
-    const cause = new AxiosError("recovery failed", AxiosError.ERR_NETWORK);
-    const { context, instance } = createAxiosInstance(() => {
-      throw new Error("transport failed");
-    });
-    const transformError = vi.fn(() => {
-      if (mode === "promise") return Promise.reject(cause);
-      if (mode === "observable") return throwError(() => cause);
-      throw cause;
-    });
-    const request$ = new RxHttpClient({ axiosInstance: instance, transformError }).get(
-      "/recovery-error",
-    );
-
-    await expect(firstValueFrom(request$)).rejects.toMatchObject({
-      error: { cause, kind: "unknown" },
-    });
-    expect(transformError).toHaveBeenCalledOnce();
-    expect(context.calls).toBe(3);
-  });
+      await expect(firstValueFrom(request$)).rejects.toMatchObject({
+        error: { cause, kind: "unknown" },
+      });
+      expect(transformError).toHaveBeenCalledOnce();
+      expect(context.calls).toBe(3);
+    },
+  );
 
   it("响应流发值后失败时追加恢复结果，保留已发出的值且不重放请求", async () => {
     const cause = new Error("response stream failed");
@@ -386,30 +387,30 @@ describe("rxjs/http 参数校验的错误转换边界", () => {
 });
 
 describe("rxjs/http 错误恢复与取消生命周期", () => {
-  it.each([
-    false,
-    true,
-  ])("主动退订不执行错误转换，保留 cancelOnNoSubscribers=%s", async (cancelOnNoSubscribers) => {
-    vi.useFakeTimers();
-    const pending = createPendingAxiosInstance();
-    const transformError = vi.fn(() => "fallback");
-    const next = vi.fn();
-    const subscription = new RxHttpClient({
-      axiosInstance: pending.instance,
-      cancelOnNoSubscribers,
-      transformError,
-    })
-      .get("/unsubscribe")
-      .subscribe({ next });
-    await pending.started;
-    subscription.unsubscribe();
-    expect(pending.abortCount).toBe(cancelOnNoSubscribers ? 1 : 0);
-    pending.complete();
-    await vi.runAllTimersAsync();
+  it.each([false, true])(
+    "主动退订不执行错误转换，保留 cancelOnNoSubscribers=%s",
+    async (cancelOnNoSubscribers) => {
+      vi.useFakeTimers();
+      const pending = createPendingAxiosInstance();
+      const transformError = vi.fn(() => "fallback");
+      const next = vi.fn();
+      const subscription = new RxHttpClient({
+        axiosInstance: pending.instance,
+        cancelOnNoSubscribers,
+        transformError,
+      })
+        .get("/unsubscribe")
+        .subscribe({ next });
+      await pending.started;
+      subscription.unsubscribe();
+      expect(pending.abortCount).toBe(cancelOnNoSubscribers ? 1 : 0);
+      pending.complete();
+      await vi.runAllTimersAsync();
 
-    expect(transformError).not.toHaveBeenCalled();
-    expect(next).not.toHaveBeenCalled();
-  });
+      expect(transformError).not.toHaveBeenCalled();
+      expect(next).not.toHaveBeenCalled();
+    },
+  );
 
   it("重试等待期间退订会释放定时器，不发送后续请求或合成结果", async () => {
     vi.useFakeTimers();
@@ -436,27 +437,27 @@ describe("rxjs/http 错误恢复与取消生命周期", () => {
     expect(transformError).not.toHaveBeenCalled();
   });
 
-  it.each([
-    false,
-    true,
-  ])("显式取消进入错误转换，其恢复流仍可正常发值（订阅前取消=%s）", async (abortBeforeSubscribe) => {
-    const pending = createPendingAxiosInstance();
-    const controller = new AbortController();
-    const transformError = vi.fn((error: HttpRequestError) => of(error.error.kind, "finished"));
-    const client = new RxHttpClient({ axiosInstance: pending.instance, transformError });
-    const request$ = client.get("/abort", { signal: controller.signal });
-    if (abortBeforeSubscribe) controller.abort();
-    const result = lastValueFrom(request$.pipe(toArray()));
-    if (!abortBeforeSubscribe) {
-      await pending.started;
-      controller.abort();
-    }
+  it.each([false, true])(
+    "显式取消进入错误转换，其恢复流仍可正常发值（订阅前取消=%s）",
+    async (abortBeforeSubscribe) => {
+      const pending = createPendingAxiosInstance();
+      const controller = new AbortController();
+      const transformError = vi.fn((error: HttpRequestError) => of(error.error.kind, "finished"));
+      const client = new RxHttpClient({ axiosInstance: pending.instance, transformError });
+      const request$ = client.get("/abort", { signal: controller.signal });
+      if (abortBeforeSubscribe) controller.abort();
+      const result = lastValueFrom(request$.pipe(toArray()));
+      if (!abortBeforeSubscribe) {
+        await pending.started;
+        controller.abort();
+      }
 
-    await expect(result).resolves.toEqual(["cancel", "finished"]);
-    expect(transformError).toHaveBeenCalledOnce();
-    expect(pending.context.calls).toBe(abortBeforeSubscribe ? 0 : 1);
-    expect(pending.abortCount).toBe(abortBeforeSubscribe ? 0 : 1);
-  });
+      await expect(result).resolves.toEqual(["cancel", "finished"]);
+      expect(transformError).toHaveBeenCalledOnce();
+      expect(pending.context.calls).toBe(abortBeforeSubscribe ? 0 : 1);
+      expect(pending.abortCount).toBe(abortBeforeSubscribe ? 0 : 1);
+    },
+  );
 
   it("显式取消在重试等待期间也恢复一次并释放等待", async () => {
     vi.useFakeTimers();
@@ -503,46 +504,44 @@ describe("rxjs/http 错误恢复与取消生命周期", () => {
     expect(transformError).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    "network",
-    "parameter",
-    "url",
-    "adapter-cancel",
-  ])("%s 错误的恢复流仍响应后续取消并释放订阅，不递归恢复", async (kind) => {
-    const controller = new AbortController();
-    const recovering = deferred();
-    const source = new Subject<string>();
-    const finalized = vi.fn();
-    const { context, instance } = createAxiosInstance(() => {
-      if (kind === "adapter-cancel")
-        throw new AxiosError("adapter canceled", AxiosError.ERR_CANCELED);
-      throw new Error("network down");
-    });
-    const transformError = vi.fn(() =>
-      new Observable<string>((subscriber) => {
-        subscriber.next("initial");
-        recovering.resolve();
-        return source.subscribe(subscriber);
-      }).pipe(finalize(finalized)),
-    );
-    const values: unknown[] = [];
-    const finished = deferred<unknown>();
-    new RxHttpClient({ axiosInstance: instance, transformError })
-      // 故意传入非法参数，验证错误恢复期间仍保留合法 signal。
-      .get(kind === "url" ? (42 as never) : "/recovery-abort", {
-        retryCount: kind === "parameter" ? 0 : 1,
-        signal: controller.signal,
-      })
-      .subscribe({ error: finished.resolve, next: (value) => values.push(value) });
-    await recovering.promise;
-    controller.abort();
+  it.each(["network", "parameter", "url", "adapter-cancel"])(
+    "%s 错误的恢复流仍响应后续取消并释放订阅，不递归恢复",
+    async (kind) => {
+      const controller = new AbortController();
+      const recovering = deferred();
+      const source = new Subject<string>();
+      const finalized = vi.fn();
+      const { context, instance } = createAxiosInstance(() => {
+        if (kind === "adapter-cancel")
+          throw new AxiosError("adapter canceled", AxiosError.ERR_CANCELED);
+        throw new Error("network down");
+      });
+      const transformError = vi.fn(() =>
+        new Observable<string>((subscriber) => {
+          subscriber.next("initial");
+          recovering.resolve();
+          return source.subscribe(subscriber);
+        }).pipe(finalize(finalized)),
+      );
+      const values: unknown[] = [];
+      const finished = deferred<unknown>();
+      new RxHttpClient({ axiosInstance: instance, transformError })
+        // 故意传入非法参数，验证错误恢复期间仍保留合法 signal。
+        .get(kind === "url" ? (42 as never) : "/recovery-abort", {
+          retryCount: kind === "parameter" ? 0 : 1,
+          signal: controller.signal,
+        })
+        .subscribe({ error: finished.resolve, next: (value) => values.push(value) });
+      await recovering.promise;
+      controller.abort();
 
-    expect(await finished.promise).toMatchObject({ error: { kind: "cancel" } });
-    source.next("too late");
-    source.complete();
-    expect(values).toEqual(["initial"]);
-    expect(finalized).toHaveBeenCalledOnce();
-    expect(transformError).toHaveBeenCalledOnce();
-    expect(context.calls).toBe(kind === "parameter" || kind === "url" ? 0 : 1);
-  });
+      expect(await finished.promise).toMatchObject({ error: { kind: "cancel" } });
+      source.next("too late");
+      source.complete();
+      expect(values).toEqual(["initial"]);
+      expect(finalized).toHaveBeenCalledOnce();
+      expect(transformError).toHaveBeenCalledOnce();
+      expect(context.calls).toBe(kind === "parameter" || kind === "url" ? 0 : 1);
+    },
+  );
 });

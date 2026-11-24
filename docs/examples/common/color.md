@@ -13,10 +13,10 @@ CJS：`const { mixRgbColor } = require("@axutils/common/color/rgb")`，也可使
 
 ## `mixRgbColor(color, target, amount): string`
 
-| 参数 | 语义 |
-| --- | --- |
-| `color` | 起始色，只接受 `#` 加六位十六进制字符，大小写均可 |
-| `target` | 目标色，格式与起始色相同 |
+| 参数     | 语义                                                |
+| -------- | --------------------------------------------------- |
+| `color`  | 起始色，只接受 `#` 加六位十六进制字符，大小写均可   |
+| `target` | 目标色，格式与起始色相同                            |
 | `amount` | 目标色占比，必填有限数字，范围 `[0, 1]`，不自动截断 |
 
 红、绿、蓝分别使用 `Math.round(source + (target - source) * amount)`，然后转小写十六进制并补齐两位，返回 `#rrggbb`。`amount = 0` 返回起始色的小写形式，`1` 返回目标色的小写形式；端点同样校验两个颜色。不作 gamma 校正、线性色彩空间转换或 alpha 混合。

@@ -105,7 +105,7 @@ export const TIMEZONE = {
   EUROPE_ATHENS: "Europe/Athens",
   EUROPE_ISTANBUL: "Europe/Istanbul",
   EUROPE_MOSCOW: "Europe/Moscow",
-  /** 需要运行环境提供 tzdata >= 2022b；Node 14.18.0 内置 ICU 为 tzdata 2021a，不包含该名称。 */
+  /** 需要运行环境提供 tzdata >= 2022b；Node 18.20.8 内置 ICU 74.2（tzdata 2024a）已包含该名称。 */
   EUROPE_KYIV: "Europe/Kyiv",
 
   // 北美和南美：覆盖美国、加拿大、墨西哥及主要拉美国家。

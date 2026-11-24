@@ -30,15 +30,15 @@ pnpm add safe-stable-stringify
 
 `@axutils/common` 根入口只聚合不需要第三方运行时依赖的对象工具。JSON 配置化工具保持在精确的 `object/json` 子路径中，因为该模块静态依赖可选 peer `safe-stable-stringify`；根入口不会加载它，也不会加载 Axios、RxJS、日期、通用加密或 Node 专用模块。以下表格覆盖 `package.json#exports` 中与对象工具有关的每个入口。
 
-| `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
-| --- | --- | --- | --- |
-| `@axutils/common` (`.`) | `deepClone`、`StorageUtils`、`createActionGate`、`debounce`、`throttle`、`findTreePath`、`objectToQuery`、`queryToObject` | `StorageType`、`StorageKeyHandler`、`StorageOptions`、`DebouncedFunction`、`ThrottledFunction` | 无 |
-| `@axutils/common/object/object` | `deepClone` | 无 | 无 |
-| `@axutils/common/object/json` | `jsonStringify`、`jsonParse`、`jsonStringifySafe`、`jsonParseSafe`、`JsonCircularReferenceError` | `JsonStringifyOptions`、`JsonParseOptions` | `safe-stable-stringify` |
-| `@axutils/common/object/storage` | `StorageUtils` | `StorageType`、`StorageKeyHandler`、`StorageOptions` | 无 |
-| `@axutils/common/object/timing` | `createActionGate`、`debounce`、`throttle` | `DebouncedFunction`、`ThrottledFunction` | 无 |
-| `@axutils/common/object/tree` | `findTreePath` | 无 | 无 |
-| `@axutils/common/object/url` | `objectToQuery`、`queryToObject` | `QueryScalar`、`QueryValue`、`QueryRecord`、`SortQueryKeysOption`、`ObjectToQueryOptions`、`QueryObject` | 无 |
+| `package.json#exports` 入口      | 运行时 API                                                                                                                | 命名类型                                                                                                 | 所需 peer               |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `@axutils/common` (`.`)          | `deepClone`、`StorageUtils`、`createActionGate`、`debounce`、`throttle`、`findTreePath`、`objectToQuery`、`queryToObject` | `StorageType`、`StorageKeyHandler`、`StorageOptions`、`DebouncedFunction`、`ThrottledFunction`           | 无                      |
+| `@axutils/common/object/object`  | `deepClone`                                                                                                               | 无                                                                                                       | 无                      |
+| `@axutils/common/object/json`    | `jsonStringify`、`jsonParse`、`jsonStringifySafe`、`jsonParseSafe`、`JsonCircularReferenceError`                          | `JsonStringifyOptions`、`JsonParseOptions`                                                               | `safe-stable-stringify` |
+| `@axutils/common/object/storage` | `StorageUtils`                                                                                                            | `StorageType`、`StorageKeyHandler`、`StorageOptions`                                                     | 无                      |
+| `@axutils/common/object/timing`  | `createActionGate`、`debounce`、`throttle`                                                                                | `DebouncedFunction`、`ThrottledFunction`                                                                 | 无                      |
+| `@axutils/common/object/tree`    | `findTreePath`                                                                                                            | 无                                                                                                       | 无                      |
+| `@axutils/common/object/url`     | `objectToQuery`、`queryToObject`                                                                                          | `QueryScalar`、`QueryValue`、`QueryRecord`、`SortQueryKeysOption`、`ObjectToQueryOptions`、`QueryObject` | 无                      |
 
 ESM 的合法导入方式如下；表中没有列出的目录入口（例如 `@axutils/common/object`）没有被 `package.json#exports` 声明：
 
@@ -118,10 +118,7 @@ import type {
   StorageType,
   ThrottledFunction,
 } from "@axutils/common";
-import type {
-  JsonParseOptions,
-  JsonStringifyOptions,
-} from "@axutils/common/object/json";
+import type { JsonParseOptions, JsonStringifyOptions } from "@axutils/common/object/json";
 import type {
   ObjectToQueryOptions,
   QueryObject,
@@ -279,9 +276,19 @@ interface Item {
 const nodes: readonly Item[] = [
   { id: "root", children: [{ id: "branch", children: [{ id: "leaf" }] }] },
 ];
-const path = findTreePath(nodes, (node) => node.id === "leaf", (node) => node.children);
+const path = findTreePath(
+  nodes,
+  (node) => node.id === "leaf",
+  (node) => node.children,
+);
 console.log(path.map((node) => node.id)); // ["root", "branch", "leaf"]
-console.log(findTreePath(nodes, (node) => node.id === "missing", (node) => node.children)); // []
+console.log(
+  findTreePath(
+    nodes,
+    (node) => node.id === "missing",
+    (node) => node.children,
+  ),
+); // []
 
 // 只查找可展开节点：此规则由调用方的匹配条件表达。
 const expanded = findTreePath(
@@ -310,10 +317,7 @@ console.log(expanded.map((node) => node.id)); // ["root", "branch"]
 import { objectToQuery } from "@axutils/common/object/url";
 
 console.log(
-  objectToQuery(
-    { page: 1, tag: ["typescript", "utils"], empty: null },
-    { sortKeys: "asc" },
-  ),
+  objectToQuery({ page: 1, tag: ["typescript", "utils"], empty: null }, { sortKeys: "asc" }),
 ); // empty=... 会被过滤，输出 page=1&tag=typescript&tag=utils（具体 key 顺序取决于排序）
 
 console.log(objectToQuery({ value: null }, { filterNullish: false })); // value=null
@@ -370,10 +374,9 @@ console.log(text);
 ```ts
 import { jsonParse } from "@axutils/common/object/json";
 
-const value = jsonParse<{ a: number; nested: { b: number } }>(
-  '{"nested":{"b":2},"a":1}',
-  { sortKeys: "asc" },
-);
+const value = jsonParse<{ a: number; nested: { b: number } }>('{"nested":{"b":2},"a":1}', {
+  sortKeys: "asc",
+});
 console.log(value.a, value.nested.b); // 1 2
 ```
 
@@ -408,10 +411,7 @@ console.log(jsonParseSafe<null>("null")); // null，同样表示合法 JSON null
 循环引用错误类继承 `Error`，可通过 `instanceof` 区分。`path` 属性目前始终为空字符串，仅为接口兼容，不应依赖它取得实际路径。构造函数参数是可选语义上的路径文本，通常由库内部传空字符串。
 
 ```ts
-import {
-  JsonCircularReferenceError,
-  jsonStringify,
-} from "@axutils/common/object/json";
+import { JsonCircularReferenceError, jsonStringify } from "@axutils/common/object/json";
 
 const cyclic: { self?: unknown } = {};
 cyclic.self = cyclic;

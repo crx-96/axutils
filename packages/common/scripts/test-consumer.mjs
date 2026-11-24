@@ -180,31 +180,30 @@ try {
     );
     run(process.execPath, [tsc, "-p", join(fixture, "tsconfig.json")], fixture, env);
     if (dependencies.includes("axios")) {
-      // 用真正的 Node 14 声明替代开发机的 Node 24 类型，严格禁止 DOM 或全局 Fetch 混入。
+      // 用真正的 Node 18 声明替代开发机的 Node 26 类型，严格禁止 DOM 混入。
       const typeRoot = join(modules, "@types");
       mkdirSync(typeRoot);
       symlinkSync(
-        dirname(require.resolve("node14-types/package.json")),
+        dirname(require.resolve("node18-types/package.json")),
         join(typeRoot, "node"),
         process.platform === "win32" ? "junction" : "dir",
       );
       writeFileSync(
         join(fixture, "node-only.ts"),
-        "// @ts-expect-error Node 14 未声明浏览器文档\nvoid document;\n// @ts-expect-error Node 14 未声明全局 Fetch 请求\nvoid Request;\n",
+        "// @ts-expect-error Node 18 未声明浏览器文档\nvoid document;\n// @ts-expect-error Node 18 未声明浏览器窗口\nvoid window;\n",
       );
       writeFileSync(
-        join(fixture, "node14.json"),
+        join(fixture, "node18.json"),
         JSON.stringify({
           compilerOptions: {
-            // @types/node 14 引入 esnext.intl，TS 7 的该标准库依赖 ES2021.Intl 的 DateTimeRangeFormatPart。
-            lib: ["ES2020", "ES2021.Intl"],
+            lib: ["ES2020"],
             types: ["node"],
           },
           extends: "./tsconfig.json",
           files: [...typeFiles, "node-only.ts"],
         }),
       );
-      run(process.execPath, [tsc, "-p", join(fixture, "node14.json")], fixture, env);
+      run(process.execPath, [tsc, "-p", join(fixture, "node18.json")], fixture, env);
     }
     console.log(`打包消费通过：${subpaths.join("、")}；peer：${dependencies.join(", ") || "无"}`);
   }

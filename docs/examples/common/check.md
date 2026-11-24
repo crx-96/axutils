@@ -17,21 +17,17 @@ pnpm add @axutils/common
 
 检查工具没有第三方运行时依赖。包根入口 `@axutils/common` 只聚合这些无依赖的检查方法；下面的三个精确子路径也都是 `package.json#exports` 明确声明的入口。根入口不会加载 Axios、RxJS、日期、加密或 Node 专用模块。
 
-| `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
-| --- | --- | --- | --- |
-| `@axutils/common` (`.`) | `isNumber`、`isString`、`isBoolean`、`isArray`、`isObject`、`isNil`、`isFunction`、`isAsyncFunction`、`isNormalFunction`、`isArrowFunction`、`isAsyncArrowFunction`、`isDate`、`isPlainObject`、`isPhoneCn`、`isEmail`、`isHttpUrl`、`isIpv4`、`isIdCardCn`、`isHexColor`、`isBrowser`、`isNode`、`isWebWorker`、`isBrowserLike`、`isServer`、`isDeno`、`isBun` | 无独立命名类型；类型守卫由函数返回类型提供 | 无 |
-| `@axutils/common/check/type` | 上述 `check/type` 的 13 个类型判断方法 | 无独立命名类型 | 无 |
-| `@axutils/common/check/reg` | `isPhoneCn`、`isEmail`、`isHttpUrl`、`isIpv4`、`isIdCardCn`、`isHexColor` | 无独立命名类型 | 无 |
-| `@axutils/common/check/platform` | `isBrowser`、`isNode`、`isWebWorker`、`isBrowserLike`、`isServer`、`isDeno`、`isBun` | 无独立命名类型 | 无 |
+| `package.json#exports` 入口      | 运行时 API                                                                                                                                                                                                                                                                                                                                                      | 命名类型                                   | 所需 peer |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | --------- |
+| `@axutils/common` (`.`)          | `isNumber`、`isString`、`isBoolean`、`isArray`、`isObject`、`isNil`、`isFunction`、`isAsyncFunction`、`isNormalFunction`、`isArrowFunction`、`isAsyncArrowFunction`、`isDate`、`isPlainObject`、`isPhoneCn`、`isEmail`、`isHttpUrl`、`isIpv4`、`isIdCardCn`、`isHexColor`、`isBrowser`、`isNode`、`isWebWorker`、`isBrowserLike`、`isServer`、`isDeno`、`isBun` | 无独立命名类型；类型守卫由函数返回类型提供 | 无        |
+| `@axutils/common/check/type`     | 上述 `check/type` 的 13 个类型判断方法                                                                                                                                                                                                                                                                                                                          | 无独立命名类型                             | 无        |
+| `@axutils/common/check/reg`      | `isPhoneCn`、`isEmail`、`isHttpUrl`、`isIpv4`、`isIdCardCn`、`isHexColor`                                                                                                                                                                                                                                                                                       | 无独立命名类型                             | 无        |
+| `@axutils/common/check/platform` | `isBrowser`、`isNode`、`isWebWorker`、`isBrowserLike`、`isServer`、`isDeno`、`isBun`                                                                                                                                                                                                                                                                            | 无独立命名类型                             | 无        |
 
 ESM 可以按功能子路径导入，也可以从根入口导入根入口聚合的全部检查方法：
 
 ```ts
-import {
-  isEmail,
-  isNode,
-  isPlainObject,
-} from "@axutils/common";
+import { isEmail, isNode, isPlainObject } from "@axutils/common";
 import {
   isArray,
   isAsyncArrowFunction,
@@ -47,13 +43,7 @@ import {
   isPlainObject as isPlainObjectFromType,
   isString,
 } from "@axutils/common/check/type";
-import {
-  isHexColor,
-  isHttpUrl,
-  isIdCardCn,
-  isIpv4,
-  isPhoneCn,
-} from "@axutils/common/check/reg";
+import { isHexColor, isHttpUrl, isIdCardCn, isIpv4, isPhoneCn } from "@axutils/common/check/reg";
 import {
   isBrowser,
   isBrowserLike,
@@ -264,7 +254,11 @@ const value: unknown = async () => 1;
 if (isAsyncFunction(value)) {
   console.log(await value()); // 1
 }
-console.log(isAsyncFunction(function () { return 1; })); // false
+console.log(
+  isAsyncFunction(function () {
+    return 1;
+  }),
+); // false
 ```
 
 ### `isAsyncArrowFunction(value)`

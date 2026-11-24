@@ -14,11 +14,11 @@ pnpm add @axutils/common spark-md5
 
 通用加密模块的 peer 依赖只影响对应的精确子路径：`crypto/md5` 静态依赖 `spark-md5`，`crypto/convert` 不依赖第三方包。当前 `package.json#exports` 仍只为这两个模块声明精确子路径，因此二者都不属于 `@axutils/common` 根入口；Node 专用实现也只能从 `node` 入口导入。根入口因此继续保持零第三方运行时依赖。
 
-| `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
-| --- | --- | --- | --- |
-| `@axutils/common/crypto/md5` | `Md5`（`update`、`toBytes`、`toHex`、`toBase64`） | `Md5Input`、`Md5StringEncoding` | `spark-md5` |
-| `@axutils/common/crypto/convert` | `normalizeMd5Input`、`toByteArray`、`binaryStringToBytes`、`decodeHex`、`decodeBase64`、`bytesToHex`、`bytesToBase64` | `Md5Input`、`Md5StringEncoding` | 无 |
-| `@axutils/common` (`.`) | 不导出本节任何 API | 不导出 `Md5Input` 或 `Md5StringEncoding` | 根入口无第三方运行时依赖 |
+| `package.json#exports` 入口      | 运行时 API                                                                                                            | 命名类型                                 | 所需 peer                |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------ |
+| `@axutils/common/crypto/md5`     | `Md5`（`update`、`toBytes`、`toHex`、`toBase64`）                                                                     | `Md5Input`、`Md5StringEncoding`          | `spark-md5`              |
+| `@axutils/common/crypto/convert` | `normalizeMd5Input`、`toByteArray`、`binaryStringToBytes`、`decodeHex`、`decodeBase64`、`bytesToHex`、`bytesToBase64` | `Md5Input`、`Md5StringEncoding`          | 无                       |
+| `@axutils/common` (`.`)          | 不导出本节任何 API                                                                                                    | 不导出 `Md5Input` 或 `Md5StringEncoding` | 根入口无第三方运行时依赖 |
 
 ESM 导入必须使用已声明的精确路径：
 
@@ -33,10 +33,7 @@ import {
   normalizeMd5Input,
   toByteArray,
 } from "@axutils/common/crypto/convert";
-import type {
-  Md5Input,
-  Md5StringEncoding,
-} from "@axutils/common/crypto/convert";
+import type { Md5Input, Md5StringEncoding } from "@axutils/common/crypto/convert";
 ```
 
 CJS 使用同样的两个精确路径：
@@ -57,10 +54,7 @@ const {
 `Md5Input` 和 `Md5StringEncoding` 可以从 `crypto/md5` 或 `crypto/convert` 的类型入口导入；它们不是根入口类型：
 
 ```ts
-import type {
-  Md5Input,
-  Md5StringEncoding,
-} from "@axutils/common/crypto/md5";
+import type { Md5Input, Md5StringEncoding } from "@axutils/common/crypto/md5";
 import type {
   Md5Input as ConvertMd5Input,
   Md5StringEncoding as ConvertMd5StringEncoding,
@@ -237,11 +231,7 @@ console.log(bytesToBase64([104, 105])); // aGk=
 ## 常见流程
 
 ```ts
-import {
-  bytesToBase64,
-  bytesToHex,
-  decodeBase64,
-} from "@axutils/common/crypto/convert";
+import { bytesToBase64, bytesToHex, decodeBase64 } from "@axutils/common/crypto/convert";
 import { Md5 } from "@axutils/common/crypto/md5";
 
 const digest = new Md5().update("payload");

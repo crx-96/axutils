@@ -144,27 +144,27 @@ export class RxHttpClient<
   C = unknown,
 > {
   /** 用于所有网络尝试的 Axios 实例。 */
-  private declare readonly axiosInstance: AxiosInstance;
+  declare private readonly axiosInstance: AxiosInstance;
   /** 构造阶段校验完成的同步配置。 */
-  private declare readonly baseConfig: HttpClientConfig;
+  declare private readonly baseConfig: HttpClientConfig;
   /** 可选的异步配置来源，首次订阅时才启动。 */
-  private declare readonly configFactory: HttpConfigFactory | undefined;
+  declare private readonly configFactory: HttpConfigFactory | undefined;
   /** 初始化配置的总尝试次数，固定取自同步选项。 */
-  private declare readonly configRetryCount: number;
+  declare private readonly configRetryCount: number;
   /** 初始化首次成功后缓存的配置。 */
-  private declare cachedConfig: HttpClientConfig | undefined;
+  declare private cachedConfig: HttpClientConfig | undefined;
   /** 供并发订阅共享的配置加载流，失败后释放。 */
-  private declare configLoading$: Observable<HttpClientConfig> | undefined;
+  declare private configLoading$: Observable<HttpClientConfig> | undefined;
   /** 按传输身份共享的进行中请求，不保存业务上下文或业务转换结果。 */
-  private declare readonly inFlight: Map<string, Observable<HttpTransportResult<unknown>>>;
+  declare private readonly inFlight: Map<string, Observable<HttpTransportResult<unknown>>>;
   /** 在当前订阅开始时捕获使用方状态，不参与共享网络流。 */
-  private declare readonly createContext: AnyHttpClientOptions<C>["createContext"];
+  declare private readonly createContext: AnyHttpClientOptions<C>["createContext"];
   /** 为当前订阅生成默认 Header；只在配置解析后调用一次。 */
-  private declare readonly transformHeaders: AnyHttpClientOptions<C>["transformHeaders"];
+  declare private readonly transformHeaders: AnyHttpClientOptions<C>["transformHeaders"];
   /** 每个订阅独立处理统一成功响应。 */
-  private declare readonly transformResponse: AnyHttpClientOptions<C>["transformResponse"];
+  declare private readonly transformResponse: AnyHttpClientOptions<C>["transformResponse"];
   /** 每个订阅在最终失败后至多执行一次错误转换。 */
-  private declare readonly transformError: AnyHttpClientOptions<C>["transformError"];
+  declare private readonly transformError: AnyHttpClientOptions<C>["transformError"];
 
   /** 创建使用同步配置的客户端；未传 baseUrl 时默认为空字符串。 */
   // 延迟上下文交叉类型，防止宽泛 options 被推导成 {} 而丢失可能存在的处理函数。

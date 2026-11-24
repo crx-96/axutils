@@ -14,10 +14,10 @@ pnpm add @axutils/common date-fns date-fns-tz
 
 日期 API 全部位于 `package.json#exports` 声明的 `@axutils/common/date` 精确子路径；根入口只提供六个无依赖的毫秒/秒常量，不提供任何日期命名空间。`@axutils/common/date` 静态依赖 `date-fns` 和 `date-fns-tz`，因此不能从根入口加载。UMD 构建会把日期模块及其浏览器侧依赖内置到产物中。
 
-| `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
-| --- | --- | --- | --- |
-| `@axutils/common/date` | `DATE_FORMAT`、`TIMEZONE`、`Duration`（`from`、`fromMilliseconds`、`totalMilliseconds`、`negated`、`abs`、`add`、`subtract`）、`Instant`（`from`、`fromEpochMilliseconds`、`toZonedDateTime`、`epochMilliseconds`、`add`、`subtract`、`since`、`equals`、`compare`）、`Now`（`plainDateISO`、`plainTimeISO`、`plainDateTimeISO`、`zonedDateTimeISO`、`instant`）、`PlainDate`（`from`、`of`、`toZonedDateTime`、`toPlainDateTime`、`add`、`subtract`、`since`、`equals`、`compare`、`isBefore`、`isAfter`、`isBetween`、`yearOf`、`monthOf`、`dayOf`、`dayOfWeek`、`daysInMonth`、`startOfWeek`、`endOfWeek`、`toString`、`format`）、`PlainTime`（`from`、`of`、`add`、`subtract`、`since`、`equals`、`compare`、`isBefore`、`isAfter`、`hourOf`、`minuteOf`、`secondOf`、`millisecondOf`、`toString`）、`PlainDateTime`（`from`、`toZonedDateTime`、`add`、`subtract`、`since`、`equals`、`compare`、`toPlainDate`、`toPlainTime`、`isBefore`、`isAfter`、`format`、`toString`）、`ZonedDateTime`（`from`、`toInstant`、`toPlainDate`、`toPlainTime`、`toPlainDateTime`、`withTimeZone`、`add`、`subtract`、`since`、`equals`、`compare`、`format`、`toString`） | `DateFormatPattern`、`Timezone`、`DateFormatOptions`、`DurationFields`、`PlainDateInput`、`PlainTimeInput`、`PlainDateTimeInput`、`ZonedDateTimeInput`、`ZonedDateTimeValue`、`ZonedDateTimeOptions` | `date-fns`、`date-fns-tz` |
-| `@axutils/common` (`.`) | `MS_PER_SECOND`、`MS_PER_MINUTE`、`MS_PER_HOUR`、`MS_PER_DAY`、`SECONDS_PER_MINUTE`、`SECONDS_PER_HOUR` | 不导出日期模块类型 | 无 |
+| `package.json#exports` 入口 | 运行时 API                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | 命名类型                                                                                                                                                                                             | 所需 peer                 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `@axutils/common/date`      | `DATE_FORMAT`、`TIMEZONE`、`Duration`（`from`、`fromMilliseconds`、`totalMilliseconds`、`negated`、`abs`、`add`、`subtract`）、`Instant`（`from`、`fromEpochMilliseconds`、`toZonedDateTime`、`epochMilliseconds`、`add`、`subtract`、`since`、`equals`、`compare`）、`Now`（`plainDateISO`、`plainTimeISO`、`plainDateTimeISO`、`zonedDateTimeISO`、`instant`）、`PlainDate`（`from`、`of`、`toZonedDateTime`、`toPlainDateTime`、`add`、`subtract`、`since`、`equals`、`compare`、`isBefore`、`isAfter`、`isBetween`、`yearOf`、`monthOf`、`dayOf`、`dayOfWeek`、`daysInMonth`、`startOfWeek`、`endOfWeek`、`toString`、`format`）、`PlainTime`（`from`、`of`、`add`、`subtract`、`since`、`equals`、`compare`、`isBefore`、`isAfter`、`hourOf`、`minuteOf`、`secondOf`、`millisecondOf`、`toString`）、`PlainDateTime`（`from`、`toZonedDateTime`、`add`、`subtract`、`since`、`equals`、`compare`、`toPlainDate`、`toPlainTime`、`isBefore`、`isAfter`、`format`、`toString`）、`ZonedDateTime`（`from`、`toInstant`、`toPlainDate`、`toPlainTime`、`toPlainDateTime`、`withTimeZone`、`add`、`subtract`、`since`、`equals`、`compare`、`format`、`toString`） | `DateFormatPattern`、`Timezone`、`DateFormatOptions`、`DurationFields`、`PlainDateInput`、`PlainTimeInput`、`PlainDateTimeInput`、`ZonedDateTimeInput`、`ZonedDateTimeValue`、`ZonedDateTimeOptions` | `date-fns`、`date-fns-tz` |
+| `@axutils/common` (`.`)     | `MS_PER_SECOND`、`MS_PER_MINUTE`、`MS_PER_HOUR`、`MS_PER_DAY`、`SECONDS_PER_MINUTE`、`SECONDS_PER_HOUR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 不导出日期模块类型                                                                                                                                                                                   | 无                        |
 
 ESM 入口示例：
 
@@ -136,7 +136,7 @@ console.log(DATE_FORMAT.ISO_UTC); // yyyy-MM-dd'T'HH:mm:ss.SSS'Z'
 
 提供 `UTC`、`ASIA_SHANGHAI`/`CHINA`、东京、首尔、新加坡、伦敦、巴黎、柏林、纽约、芝加哥、洛杉矶、开罗、悉尼、奥克兰等常用 IANA 城市标识，以及源码中列出的其他亚洲、欧洲、美洲、非洲和大洋洲时区。完整对象可通过 IDE 的 `TIMEZONE.` 补全查看；`CHINA` 是 `Asia/Shanghai` 的语义别名。
 
-> 兼容提示：`TIMEZONE.EUROPE_KYIV`（`Europe/Kyiv`）需要运行环境提供 `tzdata >= 2022b`；Node 14.18.0 内置 ICU 为 `tzdata 2021a`，在该运行时下传入该值会由 `Intl` 校验并抛 `RangeError`。
+> 兼容提示：`TIMEZONE.EUROPE_KYIV`（`Europe/Kyiv`）需要运行环境提供 `tzdata >= 2022b`。Node 18.20.8 内置 ICU 74.2（tzdata 2024a）已包含该名称；更旧的运行时传入该值可能由 `Intl` 校验并抛 `RangeError`。
 
 ```ts
 import { TIMEZONE, ZonedDateTime } from "@axutils/common/date";
@@ -778,10 +778,7 @@ console.log(PlainDateTime.toString(value)); // 2024-06-15T10:30:00
 ```ts
 import { PlainDateTime, TIMEZONE } from "@axutils/common/date";
 
-const value = PlainDateTime.toZonedDateTime(
-  "2024-06-15T10:30:00",
-  TIMEZONE.CHINA,
-);
+const value = PlainDateTime.toZonedDateTime("2024-06-15T10:30:00", TIMEZONE.CHINA);
 console.log(value.timezone, value.epochMs);
 ```
 
@@ -793,9 +790,7 @@ console.log(value.timezone, value.epochMs);
 import { PlainDateTime } from "@axutils/common/date";
 
 console.log(
-  PlainDateTime.toString(
-    PlainDateTime.add("2024-01-31T23:30:00", { months: 1, hours: 1 }),
-  ),
+  PlainDateTime.toString(PlainDateTime.add("2024-01-31T23:30:00", { months: 1, hours: 1 })),
 ); // 2024-03-01T00:30:00
 ```
 
@@ -806,11 +801,7 @@ console.log(
 ```ts
 import { PlainDateTime } from "@axutils/common/date";
 
-console.log(
-  PlainDateTime.toString(
-    PlainDateTime.subtract("2024-02-01T00:30:00", { hours: 1 }),
-  ),
-); // 2024-01-31T23:30:00
+console.log(PlainDateTime.toString(PlainDateTime.subtract("2024-02-01T00:30:00", { hours: 1 }))); // 2024-01-31T23:30:00
 ```
 
 ### `PlainDateTime.since(dateTime, other)`
@@ -831,9 +822,15 @@ console.log(PlainDateTime.since("2024-01-02T01:00:00", "2024-01-01T00:00:00"));
 ```ts
 import { PlainDateTime } from "@axutils/common/date";
 
-console.log(PlainDateTime.equals("2024-01-01T00:00:00", {
-  year: 2024, month: 1, day: 1, hour: 0, minute: 0,
-})); // true
+console.log(
+  PlainDateTime.equals("2024-01-01T00:00:00", {
+    year: 2024,
+    month: 1,
+    day: 1,
+    hour: 0,
+    minute: 0,
+  }),
+); // true
 ```
 
 ### `PlainDateTime.compare(first, second)`
@@ -895,9 +892,7 @@ console.log(PlainDateTime.isAfter("2024-01-01T02:00:00", "2024-01-01T01:00:00"))
 ```ts
 import { DATE_FORMAT, PlainDateTime } from "@axutils/common/date";
 
-console.log(
-  PlainDateTime.format("2024-01-02T03:04:05", DATE_FORMAT.DATE_TIME),
-); // 2024-01-02 03:04:05
+console.log(PlainDateTime.format("2024-01-02T03:04:05", DATE_FORMAT.DATE_TIME)); // 2024-01-02 03:04:05
 ```
 
 ### `PlainDateTime.toString(dateTime)`

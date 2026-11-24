@@ -24,7 +24,7 @@ interface GlobalStorageObjects {
 
 /** 内存降级仍保存 JSON 字符串，避免因运行环境改变值的复制语义。 */
 class MapStorage implements StorageBackend {
-  private declare readonly values: Map<string, string>;
+  declare private readonly values: Map<string, string>;
 
   constructor() {
     this.values = new Map();
@@ -49,7 +49,7 @@ class MapStorage implements StorageBackend {
 
 /** Web Storage 先取得完整键快照，再删除条目，避免索引移动导致漏删。 */
 class WebStorage implements StorageBackend {
-  private declare readonly storage: WebStorageLike;
+  declare private readonly storage: WebStorageLike;
 
   constructor(storage: WebStorageLike) {
     this.storage = storage;

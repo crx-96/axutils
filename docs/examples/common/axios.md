@@ -12,18 +12,15 @@ pnpm add @axutils/common axios safe-stable-stringify spark-md5
 
 `@axutils/common/axios/http` 是 `package.json#exports` 中唯一的 Axios Promise HTTP 入口。它不是根入口的一部分，`PromiseHttpClient` 和本节类型只能从该精确子路径取得。该子路径静态使用 `axios`、`safe-stable-stringify` 和 `spark-md5`：前者提供 HTTP 实现和 Axios 类型，后两者用于请求去重键的稳定序列化与 MD5 压缩。
 
-| `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
-| --- | --- | --- | --- |
+| `package.json#exports` 入口  | 运行时 API                                                                                                     | 命名类型                                                                                                                                                                                                                                                                                                                                        | 所需 peer                                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | `@axutils/common/axios/http` | `PromiseHttpClient`（`create`、`request`、`get`、`post`、`put`、`patch`、`delete`）、`PromiseHttpRequestError` | `PromiseHttpMethod`、`PromiseHttpClientConfig`、`PromiseHttpClientOptions`、`PromiseHttpConfigFactory`、`PromiseHttpRequestOptions`、`PromiseHttpRequestConfig`、`PromiseHttpSuccess`、`PromiseHttpFailure`、`PromiseHttpResult`、`PromiseHttpErrorKind`、`PromiseHttpErrorInfo`、`PromiseHttpResponseTransformer`、`PromiseHttpResponseResult` | `axios`、`safe-stable-stringify`、`spark-md5` |
-| `@axutils/common` (`.`) | 不导出 Axios HTTP API | 不导出上述类型 | 根入口无第三方运行时依赖 |
+| `@axutils/common` (`.`)      | 不导出 Axios HTTP API                                                                                          | 不导出上述类型                                                                                                                                                                                                                                                                                                                                  | 根入口无第三方运行时依赖                      |
 
 ESM 使用精确子路径导入全部运行时 API：
 
 ```ts
-import {
-  PromiseHttpClient,
-  PromiseHttpRequestError,
-} from "@axutils/common/axios/http";
+import { PromiseHttpClient, PromiseHttpRequestError } from "@axutils/common/axios/http";
 import type {
   PromiseHttpClientConfig,
   PromiseHttpClientOptions,
@@ -44,10 +41,7 @@ import type {
 CJS 使用同一精确子路径的 `require`：
 
 ```js
-const {
-  PromiseHttpClient,
-  PromiseHttpRequestError,
-} = require("@axutils/common/axios/http");
+const { PromiseHttpClient, PromiseHttpRequestError } = require("@axutils/common/axios/http");
 ```
 
 类型中引用 Axios 配置的 `PromiseHttpClientOptions`、`PromiseHttpRequestOptions` 和 `PromiseHttpRequestConfig` 仍然只从本子路径导入；它们不会被根入口重新导出。UMD 构建把 Axios、`safe-stable-stringify` 和 `spark-md5` 一并打包，浏览器侧使用全局对象：
@@ -110,7 +104,11 @@ const client = PromiseHttpClient.create(
 `constructor` 的第一个参数和 `create(factory, options)` 的第二个参数都支持这两个字段。它们属于客户端选项，不放在配置工厂返回的 `PromiseHttpClientConfig` 中。
 
 ```ts
-import { PromiseHttpClient, type PromiseHttpSuccess, type PromiseHttpClientOptions } from "@axutils/common/axios/http";
+import {
+  PromiseHttpClient,
+  type PromiseHttpSuccess,
+  type PromiseHttpClientOptions,
+} from "@axutils/common/axios/http";
 
 interface UserResponse {
   user: { id: number; name: string };
@@ -211,10 +209,7 @@ TypeScript 无法把任意泛型函数重新应用到每次请求的 `T`：`<T>(
 - `error.cause` / `cause`：Axios、配置工厂或其他原始错误。
 
 ```ts
-import {
-  PromiseHttpClient,
-  PromiseHttpRequestError,
-} from "@axutils/common/axios/http";
+import { PromiseHttpClient, PromiseHttpRequestError } from "@axutils/common/axios/http";
 
 try {
   const client = new PromiseHttpClient({ baseUrl: "https://api.example.com" });
@@ -312,10 +307,9 @@ console.log(result.data.id);
 import { PromiseHttpClient } from "@axutils/common/axios/http";
 
 const client = new PromiseHttpClient({ baseUrl: "https://api.example.com" });
-const result = await client.put<{ ok: boolean }, { name: string }>(
-  "/users/1",
-  { name: "Ada Lovelace" },
-);
+const result = await client.put<{ ok: boolean }, { name: string }>("/users/1", {
+  name: "Ada Lovelace",
+});
 console.log(result.data.ok);
 ```
 
@@ -327,10 +321,9 @@ console.log(result.data.ok);
 import { PromiseHttpClient } from "@axutils/common/axios/http";
 
 const client = new PromiseHttpClient({ baseUrl: "https://api.example.com" });
-const result = await client.patch<{ updated: boolean }, { enabled: boolean }>(
-  "/users/1",
-  { enabled: true },
-);
+const result = await client.patch<{ updated: boolean }, { enabled: boolean }>("/users/1", {
+  enabled: true,
+});
 console.log(result.data.updated);
 ```
 

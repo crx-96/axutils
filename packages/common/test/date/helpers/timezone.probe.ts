@@ -15,17 +15,17 @@ describe(`date/独立宿主 ${process.env.TZ}`, () => {
     expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(process.env.TZ);
   });
 
-  it.each([
-    "2024-03-10T02:30:00",
-    "2011-12-30T02:30:00",
-  ])("%s 的墙上字段不被宿主 DST 或跳日提前改写", (wallTime) => {
-    const expected = Date.parse(`${wallTime}Z`);
-    expect(PlainDateTime.toZonedDateTime(wallTime, "UTC").epochMs).toBe(expected);
-    expect(ZonedDateTime.from(`${wallTime}[UTC]`).epochMs).toBe(expected);
-    expect(ZonedDateTime.from(wallTime, { timezone: "UTC" }).epochMs).toBe(expected);
-    const date = wallTime.slice(0, 10);
-    expect(PlainDate.toZonedDateTime(date, "UTC").epochMs).toBe(Date.parse(`${date}T00:00:00Z`));
-  });
+  it.each(["2024-03-10T02:30:00", "2011-12-30T02:30:00"])(
+    "%s 的墙上字段不被宿主 DST 或跳日提前改写",
+    (wallTime) => {
+      const expected = Date.parse(`${wallTime}Z`);
+      expect(PlainDateTime.toZonedDateTime(wallTime, "UTC").epochMs).toBe(expected);
+      expect(ZonedDateTime.from(`${wallTime}[UTC]`).epochMs).toBe(expected);
+      expect(ZonedDateTime.from(wallTime, { timezone: "UTC" }).epochMs).toBe(expected);
+      const date = wallTime.slice(0, 10);
+      expect(PlainDate.toZonedDateTime(date, "UTC").epochMs).toBe(Date.parse(`${date}T00:00:00Z`));
+    },
+  );
 
   it.each([
     ["2024-03-10T02:30:00.123", "2024-03-09T18:30:00.123Z"],
@@ -112,15 +112,15 @@ describe(`date/独立宿主 ${process.env.TZ}`, () => {
     }
   });
 
-  it.each([
-    "2024-03-10T02:30:00",
-    "2024-11-03T01:30:00",
-  ])("目标纽约的 %s 保留公开 peer 的 DST 消歧策略", (wallTime) => {
-    // 此契约不假设 peer 对重复时刻跨宿主一致，只约束库继续采用其公开转换语义。
-    const expected = fromZonedTime(wallTime, "America/New_York").getTime();
-    expect(PlainDateTime.toZonedDateTime(wallTime, "America/New_York").epochMs).toBe(expected);
-    expect(ZonedDateTime.from(`${wallTime}[America/New_York]`).epochMs).toBe(expected);
-  });
+  it.each(["2024-03-10T02:30:00", "2024-11-03T01:30:00"])(
+    "目标纽约的 %s 保留公开 peer 的 DST 消歧策略",
+    (wallTime) => {
+      // 此契约不假设 peer 对重复时刻跨宿主一致，只约束库继续采用其公开转换语义。
+      const expected = fromZonedTime(wallTime, "America/New_York").getTime();
+      expect(PlainDateTime.toZonedDateTime(wallTime, "America/New_York").epochMs).toBe(expected);
+      expect(ZonedDateTime.from(`${wallTime}[America/New_York]`).epochMs).toBe(expected);
+    },
+  );
 
   it.each([
     [0, -62_373_763_799_877],

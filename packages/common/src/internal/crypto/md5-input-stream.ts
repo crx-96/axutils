@@ -5,7 +5,7 @@ export class Md5InputStream {
   /** 上一个 UTF-8 块末尾待配对的高代理项，空串表示没有待处理的码元。 */
   private pendingHigh = "";
   /** 按输入顺序把已经确定的字节交给当前摘要后端。 */
-  private declare readonly append: (bytes: Uint8Array) => void;
+  declare private readonly append: (bytes: Uint8Array) => void;
 
   /** 绑定本实例的字节接收端，每个新摘要都有独立的待配对状态。 */
   constructor(append: (bytes: Uint8Array) => void) {

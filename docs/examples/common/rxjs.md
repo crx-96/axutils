@@ -14,18 +14,15 @@ pnpm add @axutils/common rxjs axios safe-stable-stringify spark-md5
 
 `@axutils/common/rxjs/http` 是 `package.json#exports` 中唯一的 RxJS HTTP 入口。它不是根入口的一部分；`@axutils/common` 不导出 `RxHttpClient`、`HttpRequestError` 或本节类型。该子路径静态使用 `rxjs`、`axios`、`safe-stable-stringify` 和 `spark-md5`：分别用于 Observable、HTTP 适配、稳定请求去重序列化和 MD5 压缩。
 
-| `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer |
-| --- | --- | --- | --- |
+| `package.json#exports` 入口 | 运行时 API                                                                                                      | 命名类型                                                                                                                                                                                                                                                                                                                                                                                                                   | 所需 peer                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | `@axutils/common/rxjs/http` | `RxHttpClient`（`create`、`withTypes`、`request`、`get`、`post`、`put`、`patch`、`delete`）、`HttpRequestError` | `HttpMethod`、`HttpClientConfig`、`HttpClientOptions`、`HttpConfigFactory`、`HttpRequestOptions`、`HttpRequestConfig`、`HttpRequestContext`、`HttpRequestHeaders`、`HttpSuccess`、`HttpFailure`、`HttpResult`、`HttpErrorKind`、`HttpErrorInfo`、`HttpResponseTransformer`、`HttpErrorTransformer`、`HttpResponseResult`、`HttpResponseTypeMap`、`HttpMappedClientOptions`、`HttpTransformValue`、`HttpTypedClientFactory` | `rxjs`、`axios`、`safe-stable-stringify`、`spark-md5` |
-| `@axutils/common` (`.`) | 不导出 RxJS HTTP API | 不导出上述类型 | 根入口无第三方运行时依赖 |
+| `@axutils/common` (`.`)     | 不导出 RxJS HTTP API                                                                                            | 不导出上述类型                                                                                                                                                                                                                                                                                                                                                                                                             | 根入口无第三方运行时依赖                              |
 
 ESM 使用精确子路径导入全部运行时 API和类型：
 
 ```ts
-import {
-  HttpRequestError,
-  RxHttpClient,
-} from "@axutils/common/rxjs/http";
+import { HttpRequestError, RxHttpClient } from "@axutils/common/rxjs/http";
 import type {
   HttpClientConfig,
   HttpClientOptions,
@@ -53,10 +50,7 @@ import type {
 CJS 使用同一精确子路径的 `require`：
 
 ```js
-const {
-  HttpRequestError,
-  RxHttpClient,
-} = require("@axutils/common/rxjs/http");
+const { HttpRequestError, RxHttpClient } = require("@axutils/common/rxjs/http");
 ```
 
 UMD 构建把 RxJS、Axios、`safe-stable-stringify` 和 `spark-md5` 一并打包，浏览器侧使用全局对象；根入口不会加载这些 peer：
@@ -145,9 +139,11 @@ client.get("/user").subscribe((user) => console.log(user.name));
 configured.get("/user").subscribe((user) => console.log(user.id));
 
 token = "refreshed-token";
-client.get("/user", {
-  headers: { authorization: "Bearer request-token" },
-}).subscribe(); // 此请求使用 request-token
+client
+  .get("/user", {
+    headers: { authorization: "Bearer request-token" },
+  })
+  .subscribe(); // 此请求使用 request-token
 ```
 
 ### 请求头优先级与执行时机
@@ -185,17 +181,17 @@ interface HttpRequestContext<C> {
 
 #### 初始化和失败行为
 
-| 阶段 | 上下文和 Header | 错误通道与重试 |
-| --- | --- | --- |
-| 客户端构造选项非法（含非函数 createContext） | 不创建上下文 | 同步抛错，保持原构造校验行为 |
-| 请求参数非法且没有 transformError | 不创建上下文，也没有可订阅请求 | 调用请求方法时同步抛错，兼容旧 API |
-| 请求参数非法且配置了 transformError | 订阅时仍先创建上下文；headers 为 undefined | 一次 config 错误转换，不加载配置或发请求 |
-| createContext 抛错 | context、headers 都为 undefined | 订阅的 config 错误；配置了 transformError 则交给它一次；不内部重试 |
-| 配置加载最终失败 | 保留上下文，headers 为 undefined | 配置按既有规则重试，结束后只转换一次 |
-| Header 转换失败 | 保留上下文，headers 为 undefined | config 错误，只转换一次，不网络重试 |
-| 网络最终失败或成功转换失败 | 保留上下文和已确定的请求头 | 一次错误转换；业务转换失败不重发网络请求 |
-| transformError 自身失败 | 保留原始 cause | 直接进入 Observable.error，不递归转换或重试 |
-| 主动 unsubscribe | 不执行最终错误转换 | 保持原有取消、共享请求和资源释放语义 |
+| 阶段                                         | 上下文和 Header                            | 错误通道与重试                                                     |
+| -------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
+| 客户端构造选项非法（含非函数 createContext） | 不创建上下文                               | 同步抛错，保持原构造校验行为                                       |
+| 请求参数非法且没有 transformError            | 不创建上下文，也没有可订阅请求             | 调用请求方法时同步抛错，兼容旧 API                                 |
+| 请求参数非法且配置了 transformError          | 订阅时仍先创建上下文；headers 为 undefined | 一次 config 错误转换，不加载配置或发请求                           |
+| createContext 抛错                           | context、headers 都为 undefined            | 订阅的 config 错误；配置了 transformError 则交给它一次；不内部重试 |
+| 配置加载最终失败                             | 保留上下文，headers 为 undefined           | 配置按既有规则重试，结束后只转换一次                               |
+| Header 转换失败                              | 保留上下文，headers 为 undefined           | config 错误，只转换一次，不网络重试                                |
+| 网络最终失败或成功转换失败                   | 保留上下文和已确定的请求头                 | 一次错误转换；业务转换失败不重发网络请求                           |
+| transformError 自身失败                      | 保留原始 cause                             | 直接进入 Observable.error，不递归转换或重试                        |
+| 主动 unsubscribe                             | 不执行最终错误转换                         | 保持原有取消、共享请求和资源释放语义                               |
 
 如果请求参数错误与上下文工厂错误同时存在，订阅先遇到的上下文工厂错误进入转换。已取消的 `signal` 仍先创建上下文，然后遵循现有取消通道；未配置工厂时 `context` 为 `undefined`。工厂可选且可能失败，因此公开类型始终保留 `C | undefined`，应用回调必须处理缺失情况。
 
@@ -241,9 +237,7 @@ interface User {
 const client = new RxHttpClient({
   transformHeaders: (headers) => ({ ...headers, test: "123" }),
   transformResponse: (result: HttpSuccess<ApiUser>): Observable<User> =>
-    of(result).pipe(
-      map(({ data }) => ({ id: data.user_id, name: data.user_name })),
-    ),
+    of(result).pipe(map(({ data }) => ({ id: data.user_id, name: data.user_name }))),
 });
 
 // 自动展开转换流，结果是 Observable<User>
@@ -295,12 +289,12 @@ TypeScript 无法把任意泛型回调重新应用到每次请求的 `T`。仅�
 
 映射接口继承 `HttpResponseTypeMap`，通过 `this["data"]` 引用单次请求的 `T`：
 
-| 字段 | 含义 |
-| --- | --- |
-| `data` | `get<T>`、`post<T, D>` 等请求中的 `T`；保留基接口的 `unknown`，由请求实例化 |
-| `body` | 接口原始响应体；成功回调接收 `HttpSuccess<body>` |
-| `result` | 成功回调展开后的发值类型 |
-| `error` | 错误回调展开后的发值类型 |
+| 字段     | 含义                                                                        |
+| -------- | --------------------------------------------------------------------------- |
+| `data`   | `get<T>`、`post<T, D>` 等请求中的 `T`；保留基接口的 `unknown`，由请求实例化 |
+| `body`   | 接口原始响应体；成功回调接收 `HttpSuccess<body>`                            |
+| `result` | 成功回调展开后的发值类型                                                    |
+| `error`  | 错误回调展开后的发值类型                                                    |
 
 `withTypes<Map>()` 返回 `HttpTypedClientFactory<Map>`；其 `.configure(options)` 创建同步配置实例，`.create(factory, options)` 创建异步配置实例。映射声明一次即可，各请求方法共享同一套类型关系。两个回调都要对任意 `T` 满足声明的输入和输出关系；不需要给每个接口增加断言。
 
@@ -341,11 +335,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // 错误体不能保证含有 T，因此恢复结果始终使用 null，不将未知数据断言为 T。
-function failureResult<T>(
-  value: unknown,
-  code: number,
-  message: string,
-): ApiResult<T> {
+function failureResult<T>(value: unknown, code: number, message: string): ApiResult<T> {
   const metadata = isRecord(value) ? value : {};
   return {
     code,
@@ -392,10 +382,7 @@ export const api = RxHttpClient.withTypes<ApiMap>().configure(options);
 若基础地址需要异步初始化，可在同一模块中使用 `.create` 替代 `.configure`，复用 `options`：
 
 ```ts
-export const api = RxHttpClient.withTypes<ApiMap>().create(
-  () => of({ baseUrl: "/api" }),
-  options,
-);
+export const api = RxHttpClient.withTypes<ApiMap>().create(() => of({ baseUrl: "/api" }), options);
 ```
 
 调用方直接导入客户端，不再包装各请求方法：
@@ -419,18 +406,20 @@ interface LoginDTO {
 }
 
 const user$: Observable<ApiResult<UserVO>> = api.get<UserVO>("/users/me");
-const login$: Observable<ApiResult<LoginVO>> = api.post<LoginVO, LoginDTO>(
-  "/login",
-  { username: "Ada", password: "example-password" },
-);
+const login$: Observable<ApiResult<LoginVO>> = api.post<LoginVO, LoginDTO>("/login", {
+  username: "Ada",
+  password: "example-password",
+});
 
 user$.subscribe((result) => console.log(result.data?.name, result.request_id));
 login$.subscribe((result) => console.log(result.data?.accessToken));
 
 // 请求级 Header 始终优先，同名字段大小写不敏感。
-api.get<UserVO>("/users/me", {
-  headers: { authorization: "Bearer request-token" },
-}).subscribe();
+api
+  .get<UserVO>("/users/me", {
+    headers: { authorization: "Bearer request-token" },
+  })
+  .subscribe();
 ```
 
 这个例子面向浏览器，展示不使用上下文的旧 API；它在配置就绪后读取 token，没有实现会话隔离。需要跨配置等待保持身份、处理 401 或续期时，使用前面的 [上下文示例](./rxjs-context.ts)。SSR 项目应从当前应用请求的作用域捕获凭据。映射不校验服务器实际数据；HTTP 200 的 `ApiResult<T>` 仍基于项目的接口契约，需要运行时校验时应在成功回调中完成。错误回调可根据 `error.error.kind` 区分超时、取消等场景；修改业务失败码、通知或跳转策略也由使用方完成。
@@ -452,10 +441,7 @@ api.get<UserVO>("/users/me", {
 `HttpRequestError` 包含 `code`、`success: false`、`data: null` 和 `error`。`error.kind` 是 `config`、`http`、`network`、`timeout`、`cancel` 或 `unknown`；没有 HTTP 响应时 `code` 为 `0`；原始 Axios/配置错误保存在 `error.cause`。
 
 ```ts
-import {
-  HttpRequestError,
-  RxHttpClient,
-} from "@axutils/common/rxjs/http";
+import { HttpRequestError, RxHttpClient } from "@axutils/common/rxjs/http";
 
 try {
   const client = new RxHttpClient({ baseUrl: "https://api.example.com" });
@@ -503,15 +489,17 @@ console.log(error.code, error.success, error.data); // 503 false null
 import { RxHttpClient } from "@axutils/common/rxjs/http";
 
 const client = new RxHttpClient({ baseUrl: "https://api.example.com" });
-client.request<{ ok: boolean }, { name: string }>({
-  method: "POST",
-  url: "/users",
-  data: { name: "Ada" },
-  params: { dryRun: true },
-}).subscribe({
-  next: (result) => console.log(result.data.ok),
-  error: console.error,
-});
+client
+  .request<{ ok: boolean }, { name: string }>({
+    method: "POST",
+    url: "/users",
+    data: { name: "Ada" },
+    params: { dryRun: true },
+  })
+  .subscribe({
+    next: (result) => console.log(result.data.ok),
+    error: console.error,
+  });
 ```
 
 HEAD 和 OPTIONS 通过同一方法：
@@ -529,9 +517,11 @@ client.request({ method: "OPTIONS", url: "/users" }).subscribe();
 import { RxHttpClient } from "@axutils/common/rxjs/http";
 
 const client = new RxHttpClient({ baseUrl: "https://api.example.com" });
-client.get<{ id: number }>("/users/1", {
-  params: { include: "roles" },
-}).subscribe((result) => console.log(result.data.id));
+client
+  .get<{ id: number }>("/users/1", {
+    params: { include: "roles" },
+  })
+  .subscribe((result) => console.log(result.data.id));
 ```
 
 ## `client.post<T, D>(url, data?, options?)`
@@ -542,11 +532,9 @@ client.get<{ id: number }>("/users/1", {
 import { RxHttpClient } from "@axutils/common/rxjs/http";
 
 const client = new RxHttpClient({ baseUrl: "https://api.example.com" });
-client.post<{ id: number }, { name: string }>(
-  "/users",
-  { name: "Ada" },
-  { retryNonIdempotent: true },
-).subscribe((result) => console.log(result.data.id));
+client
+  .post<{ id: number }, { name: string }>("/users", { name: "Ada" }, { retryNonIdempotent: true })
+  .subscribe((result) => console.log(result.data.id));
 ```
 
 ## `client.put<T, D>(url, data?, options?)`
@@ -557,9 +545,11 @@ client.post<{ id: number }, { name: string }>(
 import { RxHttpClient } from "@axutils/common/rxjs/http";
 
 const client = new RxHttpClient({ baseUrl: "https://api.example.com" });
-client.put<{ ok: boolean }, { name: string }>("/users/1", {
-  name: "Ada Lovelace",
-}).subscribe((result) => console.log(result.data.ok));
+client
+  .put<{ ok: boolean }, { name: string }>("/users/1", {
+    name: "Ada Lovelace",
+  })
+  .subscribe((result) => console.log(result.data.ok));
 ```
 
 ## `client.patch<T, D>(url, data?, options?)`
@@ -570,9 +560,11 @@ client.put<{ ok: boolean }, { name: string }>("/users/1", {
 import { RxHttpClient } from "@axutils/common/rxjs/http";
 
 const client = new RxHttpClient({ baseUrl: "https://api.example.com" });
-client.patch<{ updated: boolean }, { enabled: boolean }>("/users/1", {
-  enabled: true,
-}).subscribe((result) => console.log(result.data.updated));
+client
+  .patch<{ updated: boolean }, { enabled: boolean }>("/users/1", {
+    enabled: true,
+  })
+  .subscribe((result) => console.log(result.data.updated));
 ```
 
 ## `client.delete<T>(url, options?)`
@@ -607,10 +599,12 @@ const request$ = client.get("/profile", {
   cancelOnNoSubscribers: true,
 });
 const first = request$.subscribe((result) => console.log(result.data));
-const second = client.get("/profile", {
-  params: { tenant: "demo" },
-  cancelOnNoSubscribers: true,
-}).subscribe();
+const second = client
+  .get("/profile", {
+    params: { tenant: "demo" },
+    cancelOnNoSubscribers: true,
+  })
+  .subscribe();
 first.unsubscribe(); // second 仍在，底层请求继续
 second.unsubscribe(); // 最后一个订阅者离开，触发 abort
 ```

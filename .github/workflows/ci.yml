@@ -80,7 +80,7 @@ jobs:
         if: matrix.node == '24'
         uses: actions/setup-node@v7
         with:
-          node-version: 14.18.0
+          node-version: 18.20.8
       - name: Remember consumer runtime
         if: matrix.node == '24'
         run: node -e "require('fs').appendFileSync(process.env.GITHUB_ENV, 'AXUTILS_TEST_NODE=' + process.execPath + '\n')"
@@ -89,9 +89,9 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
-      - name: Same artifacts on Node 14.18.0
+      - name: Same artifacts on Node 18.20.8
         if: matrix.node == '24'
         run: pnpm test:runtime
-      - name: Packed consumers on Node 14.18.0
+      - name: Packed consumers on Node 18.20.8
         if: matrix.node == '24'
         run: pnpm test:consumer

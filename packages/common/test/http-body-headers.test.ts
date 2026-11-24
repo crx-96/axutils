@@ -21,46 +21,48 @@ describe.each(["Promise", "RxJS"])("%s HTTP 请求体重试与请求头快照", 
     return kind === "Promise" ? new PromiseHttpClient(options) : new RxHttpClient(options);
   }
 
-  it.each([
-    false,
-    true,
-  ])("multipart 文件流只消费一次并保留首个 503 cause（嵌套数组=%s）", async (nested) => {
-    let failure: AxiosError | undefined;
-    let received: string | undefined;
-    const { context, instance } = createAxiosInstance(async (config, attempt) => {
-      if (attempt.calls > 1) return response(config);
-      if (!(config.data instanceof Stream)) throw new Error("预期 Axios 生成 multipart 流");
-      received = await text(config.data.pipe(new PassThrough()));
-      failure = new AxiosError(
-        "upload failed",
-        AxiosError.ERR_BAD_RESPONSE,
-        config,
-        undefined,
-        response(config, null, 503),
+  it.each([false, true])(
+    "multipart 文件流只消费一次并保留首个 503 cause（嵌套数组=%s）",
+    async (nested) => {
+      let failure: AxiosError | undefined;
+      let received: string | undefined;
+      const { context, instance } = createAxiosInstance(async (config, attempt) => {
+        if (attempt.calls > 1) return response(config);
+        if (!(config.data instanceof Stream)) throw new Error("预期 Axios 生成 multipart 流");
+        received = await text(config.data.pipe(new PassThrough()));
+        failure = new AxiosError(
+          "upload failed",
+          AxiosError.ERR_BAD_RESPONSE,
+          config,
+          undefined,
+          response(config, null, 503),
+        );
+        throw failure;
+      });
+      const http = client({
+        axiosInstance: instance,
+        retryCount: 2,
+        retryDelay: 0,
+        retryNonIdempotent: true,
+      });
+      const file = Readable.from(["file contents"], { objectMode: false });
+      const body = nested ? { uploads: [{ file }] } : { file };
+      const request = resultOf(
+        http.put("/upload", body, { headers: { "Content-Type": "multipart/form-data" } }),
       );
-      throw failure;
-    });
-    const http = client({
-      axiosInstance: instance,
-      retryCount: 2,
-      retryDelay: 0,
-      retryNonIdempotent: true,
-    });
-    const file = Readable.from(["file contents"], { objectMode: false });
-    const body = nested ? { uploads: [{ file }] } : { file };
-    const request = resultOf(
-      http.put("/upload", body, { headers: { "Content-Type": "multipart/form-data" } }),
-    );
 
-    const rejection: unknown = await request.catch((error: unknown) => error);
-    if (!(rejection instanceof PromiseHttpRequestError || rejection instanceof HttpRequestError)) {
-      throw new Error("预期客户端传播首次传输错误");
-    }
-    expect(rejection).toMatchObject({ code: 503, error: { kind: "http" } });
-    expect(rejection.error.cause).toBe(failure);
-    expect(received).toContain("file contents");
-    expect(context.calls).toBe(1);
-  });
+      const rejection: unknown = await request.catch((error: unknown) => error);
+      if (
+        !(rejection instanceof PromiseHttpRequestError || rejection instanceof HttpRequestError)
+      ) {
+        throw new Error("预期客户端传播首次传输错误");
+      }
+      expect(rejection).toMatchObject({ code: 503, error: { kind: "http" } });
+      expect(rejection.error.cause).toBe(failure);
+      expect(received).toContain("file contents");
+      expect(context.calls).toBe(1);
+    },
+  );
 
   it("普通 JSON 中与流方法同名的数据可原样重发", async () => {
     const { context, instance } = createAxiosInstance((config, attempt) =>

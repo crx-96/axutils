@@ -40,10 +40,10 @@ const memoryStorage = new Map<string, Namespace>();
  * `Key` 可指定业务 key 的字符串联合类型，默认接受任意字符串；仅提供静态提示与约束。
  */
 export class StorageUtils<Key extends string = string> {
-  private declare readonly expired: number;
-  private declare readonly prefix: string;
-  private declare readonly keyHandler: StorageKeyHandler | undefined;
-  private declare readonly keyCache: Map<string, string> | undefined;
+  declare private readonly expired: number;
+  declare private readonly prefix: string;
+  declare private readonly keyHandler: StorageKeyHandler | undefined;
+  declare private readonly keyCache: Map<string, string> | undefined;
 
   constructor(options: StorageOptions = {}) {
     this.expired = normalizeExpired(options.expired);

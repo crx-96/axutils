@@ -39,16 +39,13 @@ describe("date/Instant", () => {
     });
   });
 
-  it.each([
-    "days",
-    "hours",
-    "minutes",
-    "seconds",
-    "milliseconds",
-  ])("拒绝 %s 的小数字段而不返回小数毫秒或静默截断", (field) => {
-    expect(() => Instant.add(0, { [field]: 0.5 })).toThrow(RangeError);
-    expect(() => Instant.subtract(0, { [field]: 0.5 })).toThrow(RangeError);
-  });
+  it.each(["days", "hours", "minutes", "seconds", "milliseconds"])(
+    "拒绝 %s 的小数字段而不返回小数毫秒或静默截断",
+    (field) => {
+      expect(() => Instant.add(0, { [field]: 0.5 })).toThrow(RangeError);
+      expect(() => Instant.subtract(0, { [field]: 0.5 })).toThrow(RangeError);
+    },
+  );
 
   it("允许时间值边界，拒绝加减后超出 Date 范围的结果", () => {
     const maximum = 8_640_000_000_000_000;

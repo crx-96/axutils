@@ -1,6 +1,6 @@
 # `@axutils/common` Node.js 进程内缓存
 
-本文档对应 `packages/common/src/node/object/storage`，适用于 Node.js `>=14.18.0`。它不依赖浏览器 `localStorage`，也不做 JSON 编解码：缓存值直接保留对象引用，因此支持循环对象、`BigInt`、函数等内存值，但只在当前 Node.js 进程内有效，不跨进程或重启持久化。
+本文档对应 `packages/common/src/node/object/storage`，适用于 Node.js `>=18.0.0`。它不依赖浏览器 `localStorage`，也不做 JSON 编解码：缓存值直接保留对象引用，因此支持循环对象、`BigInt`、函数等内存值，但只在当前 Node.js 进程内有效，不跨进程或重启持久化。
 
 ```ts
 import { StorageUtils } from "@axutils/common/node/object/storage";
@@ -12,21 +12,18 @@ import { StorageUtils } from "@axutils/common/node/object/storage";
 
 Node 缓存只使用进程内 `Map`，没有第三方 peer；它不是通用对象缓存的 JSON/Web Storage 实现。`@axutils/common` 根入口不导出 Node `StorageUtils`，UMD 浏览器构建也不包含 Node 入口。
 
-| `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer / 运行时 |
-| --- | --- | --- | --- |
-| `@axutils/common/node` | `StorageUtils`（`set`、`get`、`remove`、`clear`、`getSafe`、`setSafe`、`removeSafe`、`clearSafe`）；同一入口还聚合 Node 加密 API，见 [Node.js 加密文档](https://github.com/crx-96/axutils/blob/main/docs/examples/common/node/crypto.md) | `StorageKeyHandler`、`StorageOptions` | 无第三方 peer；Node.js `>=14.18.0` |
-| `@axutils/common/node/object/storage` | `StorageUtils`（上述全部实例方法） | `StorageKeyHandler`、`StorageOptions` | 无第三方 peer；Node.js `>=14.18.0` |
-| `@axutils/common` (`.`) | 不导出 Node `StorageUtils` | 不导出 Node 缓存类型 | 根入口无第三方运行时依赖 |
+| `package.json#exports` 入口           | 运行时 API                                                                                                                                                                                                                               | 命名类型                              | 所需 peer / 运行时                |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | --------------------------------- |
+| `@axutils/common/node`                | `StorageUtils`（`set`、`get`、`remove`、`clear`、`getSafe`、`setSafe`、`removeSafe`、`clearSafe`）；同一入口还聚合 Node 加密 API，见 [Node.js 加密文档](https://github.com/crx-96/axutils/blob/main/docs/examples/common/node/crypto.md) | `StorageKeyHandler`、`StorageOptions` | 无第三方 peer；Node.js `>=18.0.0` |
+| `@axutils/common/node/object/storage` | `StorageUtils`（上述全部实例方法）                                                                                                                                                                                                       | `StorageKeyHandler`、`StorageOptions` | 无第三方 peer；Node.js `>=18.0.0` |
+| `@axutils/common` (`.`)               | 不导出 Node `StorageUtils`                                                                                                                                                                                                               | 不导出 Node 缓存类型                  | 根入口无第三方运行时依赖          |
 
 ESM 可以使用 Node 聚合入口或精确子路径；`@axutils/common/node/object` 目录入口未声明，不能使用：
 
 ```ts
 import { StorageUtils } from "@axutils/common/node/object/storage";
 import { StorageUtils as AggregatedStorageUtils } from "@axutils/common/node";
-import type {
-  StorageKeyHandler,
-  StorageOptions,
-} from "@axutils/common/node/object/storage";
+import type { StorageKeyHandler, StorageOptions } from "@axutils/common/node/object/storage";
 ```
 
 CJS 使用对应的 `require` 入口：

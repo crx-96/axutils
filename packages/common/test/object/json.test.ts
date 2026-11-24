@@ -513,22 +513,19 @@ describe("object/json", () => {
     expect(result?.a).toBe(1);
   });
 
-  it.each([
-    "ignore",
-    "",
-    null,
-    true,
-    123,
-  ])("非法 onCycle (%s) 由 jsonStringify 抛 TypeError、jsonStringifySafe 返回 null", (invalid) => {
-    const options = { onCycle: invalid as unknown as "throw" };
-    expect(() => jsonStringify({ a: 1 }, options)).toThrow(
-      new TypeError('onCycle 必须是 "throw" 或 "skip"'),
-    );
-    expect(() => jsonStringify({ a: 1 }, { ...options, sortKeys: true })).toThrow(
-      new TypeError('onCycle 必须是 "throw" 或 "skip"'),
-    );
-    expect(jsonStringifySafe({ a: 1 }, options)).toBeNull();
-  });
+  it.each(["ignore", "", null, true, 123])(
+    "非法 onCycle (%s) 由 jsonStringify 抛 TypeError、jsonStringifySafe 返回 null",
+    (invalid) => {
+      const options = { onCycle: invalid as unknown as "throw" };
+      expect(() => jsonStringify({ a: 1 }, options)).toThrow(
+        new TypeError('onCycle 必须是 "throw" 或 "skip"'),
+      );
+      expect(() => jsonStringify({ a: 1 }, { ...options, sortKeys: true })).toThrow(
+        new TypeError('onCycle 必须是 "throw" 或 "skip"'),
+      );
+      expect(jsonStringifySafe({ a: 1 }, options)).toBeNull();
+    },
+  );
 
   it("配置化路径的包装对象与非法 space 归一化与原生 JSON.stringify 一致", () => {
     // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证配置化路径下的 space 归一化。

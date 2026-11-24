@@ -5,8 +5,8 @@
 ## 环境
 
 - 开发 Node：`^22.13 || ^24 || >=26`，其中锁定的 Changesets 传递依赖 `@pnpm/deps.graph-sequencer` 要求 Node `>=22.13`；pnpm `>=10`，仓库不通过 `packageManager` 固定其版本。发布工具调用的 npm 需 `>=10.9.0`。
-- 包消费：默认 Node `>=14.18.0`、ES2020，提供 ESM/CJS 与双格式声明。common 另支持浏览器和 UMD；改变包运行环境时，同步构建目标、声明与 CI 消费矩阵。
-- CI：Node 24 在 Linux、Windows 中文路径中构建验证，再用 Node 14.18.0 消费同一份产物；Linux 另验证 Node 22.13.0、26，详见 [CI 覆盖与排错](#ci-覆盖与排错)。
+- 包消费：默认 Node `>=18.0.0`、ES2020，提供 ESM/CJS 与双格式声明。common 另支持浏览器和 UMD；改变包运行环境时，同步构建目标、声明与 CI 消费矩阵。
+- CI：Node 24 在 Linux、Windows 中文路径中构建验证，再用 Node 18 末版 18.20.8 消费同一份产物；Linux 另验证 Node 22.13.0、26，详见 [CI 覆盖与排错](#ci-覆盖与排错)。
 - 依赖按锁文件恢复，检查使用仓库本地工具；不靠全局 Biome 或 TypeScript 代替。
 - 文本文件由根 [`.gitattributes`](../.gitattributes) 统一以 LF 检出，与 Biome 的换行配置保持一致，避免 Windows 的 `core.autocrlf` 将文件转换为 CRLF 后导致 CI 格式检查失败。
 
@@ -26,21 +26,21 @@ $env:PLAYWRIGHT_CHANNEL = "msedge" # 已安装 Chrome 时可用 chrome
 pnpm check
 ```
 
-| 命令 | 职责 |
-| --- | --- |
-| `pnpm lint` / `pnpm biome:check` | 本地 Biome 格式、导入、对象键排序与质量检查，只读 |
-| `pnpm format` | 全仓格式化；局部编辑按[修改后检查](#编辑器与修改后检查)限定文件 |
-| `pnpm typecheck` | 各包源码和单元测试的类型检查 |
-| `pnpm test` | 各包单元测试 |
-| `pnpm test:tooling` | 共享构建、声明转换、包发现与调度测试 |
-| `pnpm build` | 构建所有包 |
-| `pnpm test:dist` | 已构建产物的公开入口、导出快照与行为契约 |
-| `pnpm test:consumer` | 真实 tarball、最小 peer 组合及 NodeNext ESM/CJS 类型消费 |
-| `pnpm publint` | 发布清单与打包检查 |
-| `pnpm test:browser` | 浏览器消费类型检查与 Playwright 真实浏览器测试 |
-| `pnpm test:runtime` | 使用 `AXUTILS_TEST_NODE` 指定的 Node 执行产物冒烟 |
-| `pnpm check` | lint → 工具测试 → build → typecheck → 单元测试 → dist → consumer → publint → browser |
-| `pnpm release` | 发布未发布的本地包版本并创建 Git 标签；见[发布流程](./releasing.md) |
+| 命令                             | 职责                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------ |
+| `pnpm lint` / `pnpm biome:check` | 本地 Biome 格式、导入、对象键排序与质量检查，只读                                    |
+| `pnpm format`                    | 全仓格式化；局部编辑按[修改后检查](#编辑器与修改后检查)限定文件                      |
+| `pnpm typecheck`                 | 各包源码和单元测试的类型检查                                                         |
+| `pnpm test`                      | 各包单元测试                                                                         |
+| `pnpm test:tooling`              | 共享构建、声明转换、包发现与调度测试                                                 |
+| `pnpm build`                     | 构建所有包                                                                           |
+| `pnpm test:dist`                 | 已构建产物的公开入口、导出快照与行为契约                                             |
+| `pnpm test:consumer`             | 真实 tarball、最小 peer 组合及 NodeNext ESM/CJS 类型消费                             |
+| `pnpm publint`                   | 发布清单与打包检查                                                                   |
+| `pnpm test:browser`              | 浏览器消费类型检查与 Playwright 真实浏览器测试                                       |
+| `pnpm test:runtime`              | 使用 `AXUTILS_TEST_NODE` 指定的 Node 执行产物冒烟                                    |
+| `pnpm check`                     | lint → 工具测试 → build → typecheck → 单元测试 → dist → consumer → publint → browser |
+| `pnpm release`                   | 发布未发布的本地包版本并创建 Git 标签；见[发布流程](./releasing.md)                  |
 
 包目录可以单独运行包脚本；common 的 `pnpm check:dist` 组合构建与产物检查。依赖安装、完整 workspace 检查仍在根目录执行。
 
@@ -48,28 +48,28 @@ pnpm check
 
 [CI 工作流](../.github/workflows/ci.yml) 在推送到 `main`、PR 更新或 Actions 页面手动触发时运行。CI 固定使用 pnpm `12.10.1` 并按锁文件安装，本地仍遵循 `engines`，不新增 `packageManager` 限制。
 
-| 环境 | 验证范围 |
-| --- | --- |
-| Linux、Windows / Node 24 | 完整 `pnpm check`；再以 Node 14.18.0 执行同一份产物的 `test:runtime`、`test:consumer` |
-| Linux / Node 22.13.0、26 | 完整 `pnpm check`，覆盖开发依赖的最低版本和新版 Node |
+| 环境                     | 验证范围                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| Linux、Windows / Node 24 | 完整 `pnpm check`；再以 Node 18.20.8 执行同一份产物的 `test:runtime`、`test:consumer` |
+| Linux / Node 22.13.0、26 | 完整 `pnpm check`，覆盖开发依赖的最低版本和新版 Node                                  |
 
 所有任务都在中文路径下运行，浏览器使用 Playwright Chromium，验证 ESM 打包消费与 UMD 全局消费。每个任务只构建工具包一次；最低运行时验证继续使用已有产物，类型编译器仍由开发 Node 执行。
 
 同一分支或 PR 的新运行会取消未完成的旧运行，单个任务超时为 20 分钟。浏览器失败时，在该次运行的 Artifacts 下载 `browser-failure-<os>-node-<version>`，其中包含测试截图和 Playwright trace，保留 7 天；浏览器启动前的阶段失败时可能没有附件，应查看首条日志错误。
 
-当前 CI 不运行 npm 发布，也未覆盖 macOS、Firefox/WebKit 或测试覆盖率阈值。隔离消费验证使用锁定安装树中的最小 peer **集合**，不代表已验证各 peer 版本范围的最低版本或所有组合。
+当前 CI 不运行 npm 发布，也未覆盖 macOS、Firefox/WebKit 或测试覆盖率阈值。消费阶段验证的是 Node 18 末代版本（18.20.8），未在 CI 中实测精确下限 18.0.0；隔离消费验证使用锁定安装树中的最小 peer **集合**，不代表已验证各 peer 版本范围的最低版本或所有组合。
 
 ## 验证层次与子包接入
 
-| 层次 | 能证明什么 |
-| --- | --- |
-| 工具链测试 | 入口派生、声明词法转换、包发现、缺失脚本与拓扑调度 |
-| 源码类型与单元测试 | 公开函数行为、类型边界和可控失败路径；mock 不代表真实宿主兼容 |
-| 产物冒烟 | ESM/CJS 加载全部公开入口并复用行为断言；独立导出快照防止意外增删；UMD 另检查 require、浏览器全局和跨 Realm |
-| 隔离打包消费 | 在工作区外消费 tarball，按最小 peer 检查运行时和 `NodeNext / skipLibCheck:false` 双格式声明 |
-| 发布清单 | publint 和实际 tarball 文件检查；工作区存在的文件不代表已发布 |
-| 真实浏览器 | 通过真实包名打包，拒绝 Node 内置模块，检查存储、计时器、摘要和 HTTP |
-| 最低运行时 | 用最低消费 Node 执行已经构建的产物，不能把开发 Node 的成功当作最低版本通过 |
+| 层次               | 能证明什么                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------------- |
+| 工具链测试         | 入口派生、声明词法转换、包发现、缺失脚本与拓扑调度                                                         |
+| 源码类型与单元测试 | 公开函数行为、类型边界和可控失败路径；mock 不代表真实宿主兼容                                              |
+| 产物冒烟           | ESM/CJS 加载全部公开入口并复用行为断言；独立导出快照防止意外增删；UMD 另检查 require、浏览器全局和跨 Realm |
+| 隔离打包消费       | 在工作区外消费 tarball，按最小 peer 检查运行时和 `NodeNext / skipLibCheck:false` 双格式声明                |
+| 发布清单           | publint 和实际 tarball 文件检查；工作区存在的文件不代表已发布                                              |
+| 真实浏览器         | 通过真实包名打包，拒绝 Node 内置模块，检查存储、计时器、摘要和 HTTP                                        |
+| 最低运行时         | 用最低消费 Node 执行已经构建的产物，不能把开发 Node 的成功当作最低版本通过                                 |
 
 隔离消费从已锁定安装树挂载各入口需要的 peer，不访问网络，也不等同于全新安装验证。
 
@@ -93,7 +93,7 @@ pnpm check
 已有最低版本二进制时，可在不切换全局 Node 的情况下验证：
 
 ```powershell
-$env:AXUTILS_TEST_NODE = "C:\path\to\node-v14.18.0\node.exe"
+$env:AXUTILS_TEST_NODE = "C:\path\to\node-v18.20.8\node.exe"
 pnpm test:runtime
 pnpm test:consumer
 Remove-Item Env:AXUTILS_TEST_NODE

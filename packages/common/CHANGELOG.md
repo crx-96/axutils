@@ -1,5 +1,11 @@
 # @axutils/common
 
+## 3.0.0
+
+### Major Changes
+
+- 破坏性变更：可选 peer 依赖 `safe-stable-stringify` 升级到 `^3.0.0`，包消费运行时基线由 Node.js 14.18 提升到 Node.js 18。公开入口、API 与使用方式保持不变。
+
 ## 2.3.0
 
 ### Minor Changes

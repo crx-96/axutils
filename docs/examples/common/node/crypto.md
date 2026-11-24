@@ -1,6 +1,6 @@
 # `@axutils/common` Node.js 加密与字节转换
 
-本文档对应 `packages/common/src/node/crypto`。它使用 Node.js 内置 `node:crypto` 计算 MD5，不依赖 `spark-md5`，适合 Node.js 服务、脚本和构建工具。包最低运行时版本为 Node.js `>=14.18.0`。
+本文档对应 `packages/common/src/node/crypto`。它使用 Node.js 内置 `node:crypto` 计算 MD5，不依赖 `spark-md5`，适合 Node.js 服务、脚本和构建工具。包最低运行时版本为 Node.js `>=18.0.0`。
 
 公开子路径必须精确导入：
 
@@ -24,12 +24,12 @@ Node 与通用转换入口共享相同的字节校验和编码语义。Buffer、
 
 Node 加密模块不需要第三方 peer，MD5 实现使用 Node.js 内置 `node:crypto`；它只适用于 Node.js 运行时。`@axutils/common` 根入口不导出任何 Node API，UMD 浏览器构建也不包含这些入口。
 
-| `package.json#exports` 入口 | 运行时 API | 命名类型 | 所需 peer / 运行时 |
-| --- | --- | --- | --- |
-| `@axutils/common/node` | `Md5`（`update`、`toBytes`、`toHex`、`toBase64`）、`normalizeMd5Input`、`toByteArray`、`binaryStringToBytes`、`decodeHex`、`decodeBase64`、`bytesToHex`、`bytesToBase64` | `Md5Input`、`Md5StringEncoding`（Node 聚合入口还导出缓存类型，见 [Node.js 进程内缓存文档](https://github.com/crx-96/axutils/blob/main/docs/examples/common/node/object.md)） | 无第三方 peer；Node.js `>=14.18.0`，内置 `node:crypto` |
-| `@axutils/common/node/crypto/md5` | `Md5` | `Md5Input`、`Md5StringEncoding` | 无第三方 peer；Node.js 内置 `node:crypto` |
-| `@axutils/common/node/crypto/convert` | `normalizeMd5Input`、`toByteArray`、`binaryStringToBytes`、`decodeHex`、`decodeBase64`、`bytesToHex`、`bytesToBase64` | `Md5Input`、`Md5StringEncoding` | 无 |
-| `@axutils/common` (`.`) | 不导出 Node `Md5` 或转换 API | 不导出 Node 加密类型 | 根入口无第三方运行时依赖 |
+| `package.json#exports` 入口           | 运行时 API                                                                                                                                                               | 命名类型                                                                                                                                                                     | 所需 peer / 运行时                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `@axutils/common/node`                | `Md5`（`update`、`toBytes`、`toHex`、`toBase64`）、`normalizeMd5Input`、`toByteArray`、`binaryStringToBytes`、`decodeHex`、`decodeBase64`、`bytesToHex`、`bytesToBase64` | `Md5Input`、`Md5StringEncoding`（Node 聚合入口还导出缓存类型，见 [Node.js 进程内缓存文档](https://github.com/crx-96/axutils/blob/main/docs/examples/common/node/object.md)） | 无第三方 peer；Node.js `>=18.0.0`，内置 `node:crypto` |
+| `@axutils/common/node/crypto/md5`     | `Md5`                                                                                                                                                                    | `Md5Input`、`Md5StringEncoding`                                                                                                                                              | 无第三方 peer；Node.js 内置 `node:crypto`             |
+| `@axutils/common/node/crypto/convert` | `normalizeMd5Input`、`toByteArray`、`binaryStringToBytes`、`decodeHex`、`decodeBase64`、`bytesToHex`、`bytesToBase64`                                                    | `Md5Input`、`Md5StringEncoding`                                                                                                                                              | 无                                                    |
+| `@axutils/common` (`.`)               | 不导出 Node `Md5` 或转换 API                                                                                                                                             | 不导出 Node 加密类型                                                                                                                                                         | 根入口无第三方运行时依赖                              |
 
 ESM 可以从两个精确子路径导入，也可以从 Node 聚合入口导入；`@axutils/common/node/crypto` 目录入口未声明，不能使用：
 
@@ -44,14 +44,8 @@ import {
   normalizeMd5Input,
   toByteArray,
 } from "@axutils/common/node/crypto/convert";
-import {
-  Md5 as AggregatedMd5,
-  bytesToHex as aggregatedBytesToHex,
-} from "@axutils/common/node";
-import type {
-  Md5Input,
-  Md5StringEncoding,
-} from "@axutils/common/node/crypto/md5";
+import { Md5 as AggregatedMd5, bytesToHex as aggregatedBytesToHex } from "@axutils/common/node";
+import type { Md5Input, Md5StringEncoding } from "@axutils/common/node/crypto/md5";
 ```
 
 CJS 使用对应的 `require` 入口：
@@ -67,10 +61,7 @@ const {
   normalizeMd5Input,
   toByteArray,
 } = require("@axutils/common/node/crypto/convert");
-const {
-  Md5: AggregatedMd5,
-  bytesToHex: aggregatedBytesToHex,
-} = require("@axutils/common/node");
+const { Md5: AggregatedMd5, bytesToHex: aggregatedBytesToHex } = require("@axutils/common/node");
 ```
 
 `Md5Input` 和 `Md5StringEncoding` 在 `node/crypto/md5`、`node/crypto/convert` 以及 Node 聚合入口均可作为类型导入；它们不能从根入口导入：
@@ -235,11 +226,7 @@ console.log(bytesToBase64([104, 105])); // aGk=
 ## 聚合入口示例
 
 ```ts
-import {
-  Md5,
-  bytesToHex,
-  decodeHex,
-} from "@axutils/common/node";
+import { Md5, bytesToHex, decodeHex } from "@axutils/common/node";
 
 const bytes = decodeHex("68656c6c6f");
 console.log(bytesToHex(bytes)); // 68656c6c6f
