@@ -17,14 +17,16 @@ function mapFields(fields: DurationFields, mapper: (value: number) => number): D
   return result;
 }
 
-/** 逐单位合并两个已校验的快照，不跨单位进位。 */
+/** 逐单位合并两个已校验的快照，不跨单位进位；校验结果仍为有限整数并归一化 -0。 */
 function combine(first: DurationFields, second: DurationFields, direction: 1 | -1): DurationFields {
   const left = readDuration(first);
   const right = readDuration(second);
   const result: DurationFields = {};
   for (const unit of DURATION_UNITS) {
     if (left[unit] !== undefined || right[unit] !== undefined) {
-      result[unit] = (left[unit] ?? 0) + direction * (right[unit] ?? 0);
+      const sum = (left[unit] ?? 0) + direction * (right[unit] ?? 0);
+      const validated = assertInteger(sum, unit);
+      result[unit] = validated === 0 ? 0 : validated;
     }
   }
   return result;
@@ -53,9 +55,9 @@ export const Duration = {
     return totalDurationMilliseconds(fields);
   },
 
-  /** 对每个已存在字段取反，不进行跨字段借位或归约。 */
+  /** 对每个已存在字段取反，不进行跨字段借位或归约，零值保持 +0。 */
   negated(fields: DurationFields): DurationFields {
-    return mapFields(fields, (value) => -value);
+    return mapFields(fields, (value) => (value === 0 ? 0 : -value));
   },
 
   /** 对每个已存在字段独立取绝对值，允许混合符号。 */

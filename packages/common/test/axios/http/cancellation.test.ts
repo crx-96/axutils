@@ -171,4 +171,45 @@ describe("axios/http 取消生命周期", () => {
     expect(error.error.kind).toBe("cancel");
     expect(factoryCalls).toBe(2);
   });
+
+  it("响应拦截器或响应完成微任务窗口中取消时，不执行 transformResponse", async () => {
+    const controller = new AbortController();
+    const transformResponse = vi.fn((result) => result);
+    const { instance } = createAxiosInstance((config) => response(config, { ok: true }));
+    instance.interceptors.response.use((res) => {
+      controller.abort();
+      return res;
+    });
+    const client = new PromiseHttpClient({ axiosInstance: instance, transformResponse });
+
+    const error = await expectRequestError(
+      client.get("/abort-in-interceptor", { signal: controller.signal }),
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(error.error.kind).toBe("cancel");
+    expect(transformResponse).not.toHaveBeenCalled();
+
+    const gate = deferred<void>();
+    const microtaskController = new AbortController();
+    const microtaskTransform = vi.fn((result) => result);
+    const microtaskAxios = createAxiosInstance(async (config) => {
+      await gate.promise;
+      return response(config, { ok: true });
+    });
+    const microtaskClient = new PromiseHttpClient({
+      axiosInstance: microtaskAxios.instance,
+      transformResponse: microtaskTransform,
+    });
+    const request = microtaskClient.get("/abort-in-microtask", {
+      signal: microtaskController.signal,
+    });
+    await microtaskAxios.started;
+    gate.resolve();
+    microtaskController.abort();
+
+    const microtaskError = await expectRequestError(request);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(microtaskError.error.kind).toBe("cancel");
+    expect(microtaskTransform).not.toHaveBeenCalled();
+  });
 });

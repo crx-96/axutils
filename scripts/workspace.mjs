@@ -63,7 +63,8 @@ const action = process.argv[2];
 if (action === "check") {
   run(["run", "lint"]);
   run(["run", "test:tooling"]);
-  for (const phase of ["typecheck", "test", "build", "test:dist", "test:consumer", "publint"]) {
+  // 先完成上游构建产物与声明生成，再执行各包类型检查与单元测试，避免干净工作树下跨包引用失配。
+  for (const phase of ["build", "typecheck", "test", "test:dist", "test:consumer", "publint"]) {
     runPhase(phase);
   }
   runPhase(

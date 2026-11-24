@@ -512,4 +512,93 @@ describe("object/json", () => {
     const result = jsonParseSafe<{ a: number }>('{"a":1}');
     expect(result?.a).toBe(1);
   });
+
+  it.each([
+    "ignore",
+    "",
+    null,
+    true,
+    123,
+  ])("非法 onCycle (%s) 由 jsonStringify 抛 TypeError、jsonStringifySafe 返回 null", (invalid) => {
+    const options = { onCycle: invalid as unknown as "throw" };
+    expect(() => jsonStringify({ a: 1 }, options)).toThrow(
+      new TypeError('onCycle 必须是 "throw" 或 "skip"'),
+    );
+    expect(() => jsonStringify({ a: 1 }, { ...options, sortKeys: true })).toThrow(
+      new TypeError('onCycle 必须是 "throw" 或 "skip"'),
+    );
+    expect(jsonStringifySafe({ a: 1 }, options)).toBeNull();
+  });
+
+  it("配置化路径的包装对象与非法 space 归一化与原生 JSON.stringify 一致", () => {
+    // biome-ignore assist/source/useSortedKeys: 故意保留非排序输入，验证配置化路径下的 space 归一化。
+    const input = { b: 2, a: 1 };
+    const sorted = { a: 1, b: 2 };
+    const spaces: unknown[] = [
+      new Number(2),
+      new Number(15),
+      new Number(-1),
+      new Number(NaN),
+      new Number(Infinity),
+      new Number(-Infinity),
+      new String("  "),
+      new String("0123456789xyz"),
+      runInNewContext("new Number(3)"),
+      runInNewContext('new String("\\t")'),
+      true,
+      false,
+      null,
+      undefined,
+      {},
+      [],
+      new Boolean(true),
+      Object(1n),
+      Symbol("space"),
+      () => undefined,
+    ];
+
+    for (const space of spaces) {
+      const expected = JSON.stringify(sorted, null, space as string | number);
+      expect(jsonStringify(input, { sortKeys: true, space: space as string | number })).toBe(
+        expected,
+      );
+    }
+  });
+
+  it("jsonParse 处理 3000 层深度嵌套数组与对象时不栈溢出", () => {
+    const depth = 3000;
+
+    // 3000 层嵌套数组，最内层包含需排序与过滤的对象以及数组 null 占位
+    const deepArrayText = `${"[".repeat(depth)}{"z":1,"empty":null,"a":2},null${"]".repeat(depth)}`;
+    const parsedArray = jsonParse<unknown>(deepArrayText, {
+      filterNullish: true,
+      sortKeys: true,
+    });
+    let cursor: unknown = parsedArray;
+    for (let i = 0; i < depth - 1; i += 1) {
+      expect(Array.isArray(cursor)).toBe(true);
+      cursor = (cursor as unknown[])[0];
+    }
+    expect(Array.isArray(cursor)).toBe(true);
+    const leafArray = cursor as [Record<string, unknown>, null];
+    expect(leafArray[1]).toBeNull();
+    expect(Object.keys(leafArray[0])).toEqual(["a", "z"]);
+    expect(leafArray[0]).toEqual({ a: 2, z: 1 });
+
+    // 3000 层嵌套对象，每层携带待过滤 null 字段与逆序键
+    const deepObjectText = `${'{"z":null,"n":'.repeat(depth)}42${"}".repeat(depth)}`;
+    const parsedObject = jsonParse<Record<string, unknown>>(deepObjectText, {
+      filterNullish: true,
+      sortKeys: true,
+    });
+    let objCursor: unknown = parsedObject;
+    for (let i = 0; i < depth; i += 1) {
+      expect(typeof objCursor).toBe("object");
+      expect(objCursor).not.toBeNull();
+      const record = objCursor as Record<string, unknown>;
+      expect(Object.keys(record)).toEqual(["n"]);
+      objCursor = record.n;
+    }
+    expect(objCursor).toBe(42);
+  });
 });

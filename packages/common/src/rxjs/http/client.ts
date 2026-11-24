@@ -415,11 +415,11 @@ export class RxHttpClient<
       }),
       catchError((cause: unknown) => {
         const error = toHttpRequestError(cause);
-        // HTTP/网络错误通常携带最终 config；配置或取消等早期失败保留已有阶段的快照。
+        // HTTP/网络错误通常携带最终 config.headers；缺失 config 或 headers 时保留已有阶段的快照。
         if (
           error.error.kind !== "config" &&
           axios.isAxiosError<unknown, unknown>(error.error.cause) &&
-          error.error.cause.config !== undefined
+          error.error.cause.config?.headers !== undefined
         ) {
           onHeaders(snapshotRequestHeaders(error.error.cause.config.headers));
         }
@@ -452,7 +452,8 @@ export class RxHttpClient<
       first(),
       map((partial) => {
         assertObject(partial, "异步 HTTP 配置必须是对象");
-        return normalizeConfig({ ...this.baseConfig, ...partial });
+        // 过滤显式 undefined 键与无关字段，避免覆盖构造期已传入的同步选项。
+        return normalizeConfig({ ...this.baseConfig, ...getConfigOptions(partial) });
       }),
       // 配置初始化使用同步选项中的 retryCount；异步配置中的 retryCount 只影响后续请求。
       retry({ count: this.configRetryCount - 1, delay: this.baseConfig.retryDelay }),
@@ -567,10 +568,10 @@ export class RxHttpClient<
           },
         }),
         map((response) => {
-          // 传输完成后记录 Axios 实际使用的头；拦截器和序列化仍可按其契约改变字段。
+          // 传输完成后记录 Axios 实际使用的头；精简自定义实例缺省 config 或 headers 时回退到已解析请求头。
           settled = true;
           return {
-            headers: snapshotRequestHeaders(response.config.headers),
+            headers: snapshotRequestHeaders(response.config?.headers ?? request.headers),
             response: this.toSuccess<T>(response),
           };
         }),

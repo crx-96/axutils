@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import {
   type Observable,
   catchError,
@@ -9,8 +10,9 @@ import {
   takeUntil,
   throwError,
 } from "rxjs";
+import { isCancellationError } from "../../internal/http/error-utils.js";
 import { createCallerAbort$ } from "./abort.js";
-import { toHttpRequestError } from "./errors.js";
+import { HttpRequestError, toHttpRequestError } from "./errors.js";
 import type {
   AnyHttpClientOptions,
   HttpRequestContext,
@@ -38,7 +40,21 @@ export function applyResponseTransforms<C>(
     transformResponse === undefined
       ? source$
       : source$.pipe(
-          switchMap((result) => transformValue(() => transformResponse(result, getRequest()))),
+          switchMap((result) =>
+            transformValue(() => transformResponse(result, getRequest())).pipe(
+              // 响应转换发生于传输完成后：已有 HttpRequestError、取消错误和 AxiosError 沿用原分类，普通异常归类为 unknown。
+              catchError((conversionError: unknown) => {
+                if (
+                  conversionError instanceof HttpRequestError ||
+                  isCancellationError(conversionError) ||
+                  isAxiosError(conversionError)
+                ) {
+                  return throwError(() => toHttpRequestError(conversionError));
+                }
+                return throwError(() => toHttpRequestError(conversionError, "unknown"));
+              }),
+            ),
+          ),
         );
   // 取消监听覆盖配置等待、网络重试和异步成功转换，而不仅是 Axios 的传输阶段。
   const callerAbort$ = createCallerAbort$(signal);

@@ -20,7 +20,15 @@ const require = createRequire(import.meta.url);
 
 /** 按实际 CJS 输出生成 Node 的 ESM 命名门面，两种加载器共享同一模块缓存。 */
 function nodeFacades(manifest) {
-  const entries = Object.values(manifest.exports).filter((entry) => entry.import.node);
+  // 按 Node 门面路径去重，避免多个 exports 别名指向同一 .node.mjs 时重复 emitFile。
+  const seen = new Set();
+  const entries = [];
+  for (const entry of Object.values(manifest.exports)) {
+    const target = entry?.import?.node;
+    if (!target || seen.has(target)) continue;
+    seen.add(target);
+    entries.push(entry);
+  }
   return {
     generateBundle(options, bundle) {
       if (options.format !== "cjs") return;
@@ -28,15 +36,21 @@ function nodeFacades(manifest) {
         const filename = entry.require.default.slice("./dist/".length);
         const chunk = bundle[filename];
         if (chunk?.type !== "chunk") throw new Error(`找不到 Node 门面的 CJS 入口：${filename}`);
-        // 默认导入读取真实 module.exports，不依赖不同 Node 版本对 CJS 命名导出的静态识别。
-        const imports = `import api from "./${filename.split("/").at(-1)}";\n`;
-        const exports = chunk.exports.map(
-          (name, index) =>
-            `const v${index} = api[${JSON.stringify(name)}]; export { v${index} as ${name} };`,
-        );
+        const basename = filename.split("/").at(-1);
+        // 仅含 default 导出时 Rolldown CJS 输出 module.exports = value，直接透传默认导出；其余情形沿用具名桥接。
+        const source =
+          chunk.exports.length === 1 && chunk.exports[0] === "default"
+            ? `export { default } from "./${basename}";\n`
+            : // 默认导入读取真实 module.exports，不依赖不同 Node 版本对 CJS 命名导出的静态识别。
+              `import api from "./${basename}";\n${chunk.exports
+                .map(
+                  (name, index) =>
+                    `const v${index} = api[${JSON.stringify(name)}]; export { v${index} as ${name} };`,
+                )
+                .join("\n")}\n`;
         this.emitFile({
           fileName: entry.import.node.slice("./dist/".length),
-          source: `${imports}${exports.join("\n")}\n`,
+          source,
           type: "asset",
         });
       }
@@ -67,15 +81,32 @@ function includeUmdLicenses(packageRoot, manifest, outDir) {
   );
 }
 
-// 保留经过中文 Windows 路径验证的逐项清理；符号链接只删链接，绝不递归目标。
+/**
+ * 清理构建输出目录；保留经过中文 Windows 路径验证的逐项清理，符号链接只删链接本身，绝不递归目标。
+ * @param {string} directory 待清理目录路径。
+ */
 function removeDirectory(directory) {
-  if (!existsSync(directory)) return;
-  if (lstatSync(directory).isSymbolicLink()) throw new Error(`dist 不能是符号链接：${directory}`);
+  // 使用 lstatSync 替代 existsSync，防止悬空符号链接被误判为不存在而绕过校验。
+  const rootStat = lstatSync(directory, { throwIfNoEntry: false });
+  if (!rootStat) return;
+  if (rootStat.isSymbolicLink()) throw new Error(`dist 不能是符号链接：${directory}`);
+  if (!rootStat.isDirectory()) throw new Error(`dist 必须是目录：${directory}`);
   for (const name of readdirSync(directory)) {
     const filename = join(directory, name);
     const stat = lstatSync(filename);
-    if (stat.isDirectory() && !stat.isSymbolicLink()) removeDirectory(filename);
-    else unlinkSync(filename);
+    if (stat.isDirectory() && !stat.isSymbolicLink()) {
+      removeDirectory(filename);
+    } else if (stat.isSymbolicLink()) {
+      // Windows 目录符号链接与 junction 在 unlinkSync 返回 EPERM/EISDIR 时回退 rmdirSync，仅移除链接本身。
+      try {
+        unlinkSync(filename);
+      } catch (error) {
+        if (error?.code === "EPERM" || error?.code === "EISDIR") rmdirSync(filename);
+        else throw error;
+      }
+    } else {
+      unlinkSync(filename);
+    }
   }
   rmdirSync(directory);
 }

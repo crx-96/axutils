@@ -32,6 +32,39 @@ describe("rxjs/http 配置", () => {
     expect(context.configs[1]?.url).toBe("https://config.example.test/second");
   });
 
+  it("异步配置工厂返回显式 undefined 字段时保留同步构造选项", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    const client = RxHttpClient.create(
+      () =>
+        of({
+          baseUrl: undefined,
+          cancelOnNoSubscribers: undefined,
+          dedupe: undefined,
+          retryable: undefined,
+          retryCount: undefined,
+          retryDelay: undefined,
+          retryNonIdempotent: undefined,
+          timeout: undefined,
+        } as unknown as Partial<HttpClientConfig>),
+      {
+        axiosInstance: instance,
+        baseUrl: "https://sync.example.test",
+        cancelOnNoSubscribers: true,
+        dedupe: false,
+        retryable: false,
+        retryCount: 2,
+        retryDelay: 15,
+        retryNonIdempotent: true,
+        timeout: 3200,
+      },
+    );
+
+    await firstValueFrom(forkJoin([client.get("/items"), client.get("/items")]));
+    expect(context.calls).toBe(2);
+    expect(context.configs[0]?.url).toBe("https://sync.example.test/items");
+    expect(context.configs[0]?.timeout).toBe(3200);
+  });
+
   it("并发首请求只触发一次配置工厂", async () => {
     let factoryCalls = 0;
     const config = deferred<Partial<HttpClientConfig>>();

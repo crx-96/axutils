@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   isBrowser as isBrowserFromPlatform,
@@ -18,6 +18,23 @@ import {
   isServer,
   isWebWorker,
 } from "../../src/index";
+
+const mutableGlobal = globalThis as Record<string, unknown>;
+const patchedGlobalKeys = ["window", "document", "self", "importScripts"] as const;
+const originalDescriptors = new Map<string, PropertyDescriptor | undefined>(
+  patchedGlobalKeys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
+
+afterEach(() => {
+  for (const key of patchedGlobalKeys) {
+    const descriptor = originalDescriptors.get(key);
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(mutableGlobal, key);
+    } else {
+      Object.defineProperty(globalThis, key, descriptor);
+    }
+  }
+});
 
 describe("platform", () => {
   it("在 Node 环境下判断运行时", () => {
@@ -52,5 +69,34 @@ describe("platform", () => {
     expect(isNode).toBe(isNodeFromPlatform);
     expect(isServer).toBe(isServerFromPlatform);
     expect(isWebWorker).toBe(isWebWorkerFromPlatform);
+  });
+
+  it("全局属性为 null 或非对象伪值时不被误判为浏览器或 Web Worker", () => {
+    for (const invalidValue of [null, false, "", 0]) {
+      mutableGlobal.window = invalidValue;
+      expect(isBrowserLike()).toBe(false);
+      expect(isBrowser()).toBe(false);
+
+      mutableGlobal.window = globalThis;
+      mutableGlobal.document = invalidValue;
+      expect(isBrowser()).toBe(false);
+      expect(isServer()).toBe(true);
+
+      mutableGlobal.self = invalidValue;
+      mutableGlobal.importScripts = () => {};
+      expect(isWebWorker()).toBe(false);
+    }
+
+    mutableGlobal.window = globalThis;
+    mutableGlobal.document = {};
+    expect(isBrowserLike()).toBe(true);
+    expect(isBrowser()).toBe(true);
+    expect(isServer()).toBe(false);
+
+    Reflect.deleteProperty(mutableGlobal, "window");
+    Reflect.deleteProperty(mutableGlobal, "document");
+    mutableGlobal.self = {};
+    mutableGlobal.importScripts = () => {};
+    expect(isWebWorker()).toBe(true);
   });
 });

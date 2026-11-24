@@ -97,6 +97,19 @@ const isStorageLike = (value: unknown): value is WebStorageLike => {
   );
 };
 
+/** 识别主流及旧版浏览器 Web Storage 配额耗尽异常，避免误降级到内存空间。 */
+const isQuotaExceededError = (error: unknown): boolean => {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { code?: unknown; name?: unknown };
+  return (
+    candidate.name === "QuotaExceededError" ||
+    candidate.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    candidate.name === "QUOTA_EXCEEDED_ERR" ||
+    candidate.code === 22 ||
+    candidate.code === 1014
+  );
+};
+
 /** 临时读写覆盖隐私模式、禁用存储和配额异常；探测失败后尽力清理临时键。 */
 const canUseStorage = (storage: WebStorageLike): boolean => {
   storageProbeSequence += 1;
@@ -114,11 +127,7 @@ const canUseStorage = (storage: WebStorageLike): boolean => {
     return true;
   } catch (error) {
     // 配额耗尽时保留可读后端，让后续写入直接报告真实配额错误。
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      (error as { name?: unknown }).name === "QuotaExceededError"
-    ) {
+    if (isQuotaExceededError(error)) {
       const existing = storage.key(0);
       return existing !== null && storage.getItem(existing) !== null;
     }
@@ -136,6 +145,9 @@ const canUseStorage = (storage: WebStorageLike): boolean => {
 
 /** 实例创建时探测 Web Storage；属性访问或读写受限时固定使用对应内存空间。 */
 export const resolveStorage = (type: StorageType): StorageBackend => {
+  if (type !== "local" && type !== "session") {
+    throw new TypeError('type 必须是 "local" 或 "session"');
+  }
   const property = type === "session" ? "sessionStorage" : "localStorage";
   try {
     const globals = globalThis as unknown as GlobalStorageObjects;

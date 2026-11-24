@@ -81,3 +81,77 @@ test("workspace 按依赖顺序验证多包，并拒绝缺少检查脚本的发�
     rmSync(directory, { force: true, maxRetries: 3, recursive: true });
   }
 });
+
+test("workspace check 先执行 build，再执行 typecheck、test 与后续产物检查", () => {
+  const directory = mkdtempSync(join(tmpdir(), "axutils-workspace-check-"));
+  try {
+    mkdirSync(join(directory, "scripts"));
+    copyFileSync(
+      new URL("../workspace.mjs", import.meta.url),
+      join(directory, "scripts/workspace.mjs"),
+    );
+    writeFileSync(
+      join(directory, "package.json"),
+      JSON.stringify({
+        private: true,
+        scripts: {
+          lint: "node record.cjs root:lint",
+          "test:tooling": "node record.cjs root:test:tooling",
+        },
+      }),
+    );
+    writeFileSync(join(directory, "pnpm-workspace.yaml"), 'packages:\n  - "packages/*"\n');
+    writeFileSync(
+      join(directory, "record.cjs"),
+      'const fs = require("node:fs"); const path = require("node:path"); fs.appendFileSync(path.join(__dirname, "order.txt"), process.argv[2] + "\\n");',
+    );
+    for (const name of ["a-consumer", "b-dependency"]) {
+      const pkgPath = join(directory, "packages", name);
+      mkdirSync(pkgPath, { recursive: true });
+      const phases = ["build", "typecheck", "test", "test:dist", "test:consumer", "publint"];
+      if (name === "b-dependency") phases.push("test:browser");
+      const scripts = Object.fromEntries(
+        phases.map((phase) => [phase, `node ../../record.cjs ${phase}:${name}`]),
+      );
+      const manifest = {
+        name: `@axutils/${name}`,
+        scripts,
+        version: "1.0.0",
+        ...(name === "a-consumer"
+          ? { dependencies: { "@axutils/b-dependency": "workspace:*" } }
+          : {}),
+      };
+      writeFileSync(join(pkgPath, "package.json"), JSON.stringify(manifest));
+    }
+    const result = spawnSync(
+      process.execPath,
+      [join(directory, "scripts/workspace.mjs"), "check"],
+      {
+        cwd: directory,
+        encoding: "utf8",
+        env: process.env,
+      },
+    );
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    const order = readFileSync(join(directory, "order.txt"), "utf8").trim().split("\n");
+    assert.deepEqual(order, [
+      "root:lint",
+      "root:test:tooling",
+      "build:b-dependency",
+      "build:a-consumer",
+      "typecheck:b-dependency",
+      "typecheck:a-consumer",
+      "test:b-dependency",
+      "test:a-consumer",
+      "test:dist:b-dependency",
+      "test:dist:a-consumer",
+      "test:consumer:b-dependency",
+      "test:consumer:a-consumer",
+      "publint:b-dependency",
+      "publint:a-consumer",
+      "test:browser:b-dependency",
+    ]);
+  } finally {
+    rmSync(directory, { force: true, maxRetries: 3, recursive: true });
+  }
+});

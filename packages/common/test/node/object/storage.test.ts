@@ -243,4 +243,32 @@ describe("node/object/storage", () => {
       storage.clear();
     }
   });
+
+  it("亚毫秒正 TTL 在常规时钟、Date.now() === 0 及负时钟边界下不会立即过期或永久有效", () => {
+    vi.useFakeTimers();
+    const storage = new StorageUtils({ prefix: "sub-ms-node:" });
+    try {
+      vi.setSystemTime(1000);
+      storage.set("regular", "ok", 0.0005);
+      expect(storage.get("regular")).toBe("ok");
+      vi.advanceTimersByTime(1);
+      expect(storage.get("regular")).toBeNull();
+
+      vi.setSystemTime(0);
+      storage.set("epoch", "ok", 0.0005);
+      expect(storage.get("epoch")).toBe("ok");
+      vi.advanceTimersByTime(1);
+      expect(storage.get("epoch")).toBeNull();
+
+      vi.setSystemTime(-500);
+      storage.set("negative", "ok", 0.5);
+      expect(storage.get("negative")).toBe("ok");
+      vi.setSystemTime(0);
+      expect(storage.get("negative")).toBe("ok");
+      vi.setSystemTime(1);
+      expect(storage.get("negative")).toBeNull();
+    } finally {
+      storage.clear();
+    }
+  });
 });

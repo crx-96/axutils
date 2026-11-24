@@ -1,11 +1,30 @@
 import { resolveComparator } from "./sort-keys.js";
 import type { JsonParseOptions } from "./types.js";
 
+/** 显式栈中的待处理容器任务，用于迭代构建后处理结果。 */
+type PostProcessTask =
+  | {
+      /** 数组容器任务标识。 */
+      kind: "array";
+      /** 原始数组节点。 */
+      source: unknown[];
+      /** 待填充的目标数组副本。 */
+      target: unknown[];
+    }
+  | {
+      /** 普通对象容器任务标识。 */
+      kind: "object";
+      /** 原始对象节点。 */
+      source: Record<string, unknown>;
+      /** 待按序定义属性的目标对象副本。 */
+      target: Record<string, unknown>;
+    };
+
 /**
- * 递归后处理解析结果。
+ * 使用显式栈迭代后处理解析结果。
  *
- * 对 `JSON.parse` 的结果做 key 排序和 null 字段过滤。
- * 排序会创建新的对象/数组，不修改原始结构。
+ * 对 `JSON.parse` 的结果做 key 排序和 null 字段过滤，避免深层嵌套数组或对象触发调用栈溢出。
+ * 后处理会创建新的对象/数组，不修改原始结构。
  * 这是文件内部辅助函数，不对外导出。
  */
 const postProcess = <T>(
@@ -13,36 +32,63 @@ const postProcess = <T>(
   comparator: ((a: string, b: string) => number) | null,
   filterNullish: boolean,
 ): T => {
-  // 原始值不需要重新组织；数组只递归处理元素并保持原顺序及 null 占位。
+  // 原始值不需要重新组织，直接原样返回。
   if (typeof value !== "object" || value === null) {
     return value;
   }
 
-  if (Array.isArray(value)) {
-    return value.map((item) => postProcess(item, comparator, filterNullish)) as T;
+  const stack: PostProcessTask[] = [];
+
+  /** 为容器节点创建空目标副本并压入待处理栈；原始值直接返回。 */
+  const enqueue = (node: unknown): unknown => {
+    if (typeof node !== "object" || node === null) {
+      return node;
+    }
+    if (Array.isArray(node)) {
+      const target = new Array<unknown>(node.length);
+      stack.push({ kind: "array", source: node, target });
+      return target;
+    }
+    const target: Record<string, unknown> = {};
+    stack.push({ kind: "object", source: node as Record<string, unknown>, target });
+    return target;
+  };
+
+  const root = enqueue(value);
+
+  while (stack.length > 0) {
+    const task = stack.pop();
+    if (task === undefined) break;
+
+    if (task.kind === "array") {
+      // 数组保持元素原序与 null 占位，逐项映射子节点。
+      for (let index = 0; index < task.source.length; index += 1) {
+        task.target[index] = enqueue(task.source[index]);
+      }
+      continue;
+    }
+
+    // 值来自 JSON.parse，对象只含可枚举数据字段；按选项排列键并移除 null 字段。
+    let keys = Object.keys(task.source);
+    if (comparator !== null) {
+      keys.sort(comparator);
+    }
+    if (filterNullish) {
+      keys = keys.filter((key) => task.source[key] !== null);
+    }
+
+    for (const key of keys) {
+      // 使用数据属性定义，避免 `__proto__` 触发 Object.prototype 上的访问器并改变结果原型。
+      Object.defineProperty(task.target, key, {
+        configurable: true,
+        enumerable: true,
+        value: enqueue(task.source[key]),
+        writable: true,
+      });
+    }
   }
 
-  // 值来自 JSON.parse，对象只含可枚举数据字段；按选项排列键并移除 null 字段。
-  const obj = value as Record<string, unknown>;
-  let keys = Object.keys(obj);
-  if (comparator !== null) {
-    keys = [...keys].sort(comparator);
-  }
-  if (filterNullish) {
-    keys = keys.filter((key) => obj[key] !== null);
-  }
-
-  const result: Record<string, unknown> = {};
-  for (const key of keys) {
-    // 使用数据属性定义，避免 `__proto__` 触发 Object.prototype 上的访问器并改变结果原型。
-    Object.defineProperty(result, key, {
-      configurable: true,
-      enumerable: true,
-      value: postProcess(obj[key], comparator, filterNullish),
-      writable: true,
-    });
-  }
-  return result as T;
+  return root as T;
 };
 
 /**

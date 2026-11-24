@@ -385,4 +385,46 @@ describe("object/object", () => {
     expect(Object.getOwnPropertyDescriptor(clone, "__proto__")?.value).toBe(clone[1]);
     expect(Object.getPrototypeOf(clone)).toBe(Array.prototype);
   });
+
+  it("原样保留 class extends null 实例与继承空原型的自定义对象", () => {
+    class NullClass extends null {
+      constructor() {
+        // biome-ignore lint/correctness/noConstructorReturn: extends null 的类需显式返回继承新原型链的对象
+        return Object.create(new.target.prototype);
+      }
+
+      greet() {
+        return "hi";
+      }
+    }
+
+    const instance = new NullClass();
+    const clonedInstance = deepClone(instance);
+    expect(clonedInstance).toBe(instance);
+    expect(clonedInstance).toBeInstanceOf(NullClass);
+    expect(clonedInstance.greet()).toBe("hi");
+
+    const base = Object.create(null) as { greet: () => string };
+    base.greet = () => "hi";
+    const child = Object.create(base) as { greet: () => string };
+    const clonedChild = deepClone(child);
+    expect(clonedChild).toBe(child);
+    expect(Object.getPrototypeOf(clonedChild)).toBe(base);
+    expect(clonedChild.greet()).toBe("hi");
+
+    const dateWithNullProto = new Date(5678);
+    Object.setPrototypeOf(dateWithNullProto, Object.create(null));
+    const clonedDate = deepClone(dateWithNullProto);
+    expect(Object.is(clonedDate, dateWithNullProto)).toBe(false);
+    expect(clonedDate).toBeInstanceOf(Date);
+    expect(clonedDate.getTime()).toBe(5678);
+  });
+
+  it("不把 RegExp.prototype 误克隆为 RegExp 实例", () => {
+    const cloned = deepClone(RegExp.prototype);
+    expect(cloned).not.toBe(RegExp.prototype);
+    expect(cloned instanceof RegExp).toBe(false);
+    expect(Object.getPrototypeOf(cloned)).toBe(Object.prototype);
+    expect(Reflect.has(cloned, "lastIndex")).toBe(false);
+  });
 });

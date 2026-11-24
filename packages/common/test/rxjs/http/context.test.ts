@@ -494,4 +494,46 @@ describe("rxjs/http 上下文初始化、失败和取消", () => {
     expect(transformError).not.toHaveBeenCalled();
     expect(transformResponse).not.toHaveBeenCalled();
   });
+
+  it("自定义精简 axiosInstance 缺省 response.config 时回退到请求头快照", async () => {
+    let seenHeaders: HttpRequestContext<undefined>["headers"];
+    const minimalInstance = {
+      request: vi.fn(async () => ({ data: "ok", status: 200 })),
+    };
+    const client = new RxHttpClient({
+      axiosInstance: minimalInstance as never,
+      transformHeaders: () => ({ Authorization: "Bearer minimal" }),
+      transformResponse: (result, request) => {
+        seenHeaders = request.headers;
+        return result.data;
+      },
+    });
+
+    await expect(firstValueFrom(client.get("/minimal"))).resolves.toBe("ok");
+    expect(seenHeaders).toEqual({ Authorization: "Bearer minimal" });
+  });
+
+  it("错误对象携带无 headers 的 config 时保留此前捕获的请求头快照", async () => {
+    let seenHeaders: HttpRequestContext<undefined>["headers"];
+    const cause = new AxiosError("network down", AxiosError.ERR_NETWORK, {
+      url: "/no-headers",
+    } as never);
+    const minimalInstance = {
+      request: vi.fn(async () => {
+        throw cause;
+      }),
+    };
+    const client = new RxHttpClient({
+      axiosInstance: minimalInstance as never,
+      retryCount: 1,
+      transformError: (error, request) => {
+        seenHeaders = request.headers;
+        return error.error.kind;
+      },
+      transformHeaders: () => ({ Authorization: "Bearer preserved" }),
+    });
+
+    await expect(firstValueFrom(client.get("/no-headers"))).resolves.toBe("network");
+    expect(seenHeaders).toEqual({ Authorization: "Bearer preserved" });
+  });
 });

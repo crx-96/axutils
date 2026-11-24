@@ -585,4 +585,123 @@ describe("object/storage", () => {
     storage.remove("saved");
     expect(backend.length).toBe(0);
   });
+
+  it.each([
+    ["Firefox NS_ERROR_DOM_QUOTA_REACHED", { code: 1014, name: "NS_ERROR_DOM_QUOTA_REACHED" }],
+    ["旧 WebKit QUOTA_EXCEEDED_ERR", { code: 22, name: "QUOTA_EXCEEDED_ERR" }],
+    ["仅 code 22", { code: 22, name: "Error" }],
+    ["仅 code 1014", { code: 1014, name: "Error" }],
+  ])("配额耗尽抛出 %s 且已有数据可读时保留 Web Storage 后端", (_label, errorProps) => {
+    const backend = new TestStorage();
+    vi.stubGlobal("localStorage", backend);
+    new StorageUtils().set("saved", "persisted");
+    const error = Object.assign(new Error("quota full"), errorProps);
+    vi.spyOn(backend, "setItem").mockImplementation(() => {
+      throw error;
+    });
+
+    const storage = new StorageUtils();
+    expect(storage.get("saved")).toBe("persisted");
+    expect(() => storage.set("saved", "next")).toThrow(error);
+    expect(storage.setSafe("saved", "next")).toBe(false);
+    storage.remove("saved");
+    expect(backend.length).toBe(0);
+  });
+
+  it.each([
+    "Session",
+    "memory",
+    "toString",
+    null,
+    123,
+  ])("构造时传入非法 type (%s) 立即抛出 TypeError", (invalidType) => {
+    expect(() => new StorageUtils({ type: invalidType as unknown as "local" })).toThrow(
+      new TypeError('type 必须是 "local" 或 "session"'),
+    );
+  });
+
+  it("亚毫秒正 TTL 在常规时钟、Date.now() === 0 及负时钟边界下不会立即过期或永久有效", () => {
+    vi.useFakeTimers();
+    const backend = new TestStorage();
+    vi.stubGlobal("localStorage", backend);
+    const storage = new StorageUtils({ prefix: "sub-ms:" });
+
+    // 常规时间戳下的亚毫秒正 TTL
+    vi.setSystemTime(1000);
+    storage.set("regular", "ok", 0.0005);
+    expect(storage.get("regular")).toBe("ok");
+    vi.advanceTimersByTime(1);
+    expect(storage.get("regular")).toBeNull();
+
+    // Date.now() === 0 时不得碰撞永不过期哨兵 0
+    vi.setSystemTime(0);
+    storage.set("epoch", "ok", 0.0005);
+    expect(storage.get("epoch")).toBe("ok");
+    vi.advanceTimersByTime(1);
+    expect(storage.get("epoch")).toBeNull();
+
+    // 负时钟 + 正 TTL 恰好算得 0 时顺延为 1，不得变为永不过期
+    vi.setSystemTime(-500);
+    storage.set("negative", "ok", 0.5);
+    expect(storage.get("negative")).toBe("ok");
+    vi.setSystemTime(0);
+    expect(storage.get("negative")).toBe("ok");
+    vi.setSystemTime(1);
+    expect(storage.get("negative")).toBeNull();
+  });
+
+  it.each([
+    '{"marker":"@axutils/common/storage/v2","prefix":"app:"',
+    "corrupted-raw-text",
+    '{"marker":"@axutils/common/storage/v2","prefix":"app:","expiresAt":0}',
+    '{"marker":"@axutils/common/storage/v2","prefix":"app:","expiresAt":1.5,"data":"v"}',
+  ])("v2 私有物理键内容损坏 (%s) 时允许 set 覆盖恢复，并支持 remove 与 clear 清理", (corrupted) => {
+    const backend = new TestStorage();
+    vi.stubGlobal("localStorage", backend);
+    const storage = new StorageUtils({ prefix: "app:" });
+    const other = new StorageUtils({ prefix: "other:" });
+    const v2Key = `@axutils/common/storage/v2/${JSON.stringify(["app:", "app:item"])}`;
+    const otherV2Key = `@axutils/common/storage/v2/${JSON.stringify(["other:", "other:item"])}`;
+
+    // set 覆盖损坏记录
+    backend.setItem(v2Key, corrupted);
+    expect(storage.get("item")).toBeNull();
+    storage.set("item", "recovered");
+    expect(storage.get("item")).toBe("recovered");
+
+    // remove 清理损坏记录
+    backend.setItem(v2Key, corrupted);
+    storage.remove("item");
+    expect(backend.getItem(v2Key)).toBeNull();
+
+    // clear 只清理当前命名空间的损坏 v2 记录，保留其他命名空间与业务键
+    backend.setItem(v2Key, corrupted);
+    backend.setItem(otherV2Key, corrupted);
+    backend.setItem("app:business", "plain");
+    storage.clear();
+    expect(backend.getItem(v2Key)).toBeNull();
+    expect(backend.getItem(otherV2Key)).toBe(corrupted);
+    expect(backend.getItem("app:business")).toBe("plain");
+    expect(other.get("item")).toBeNull();
+  });
+
+  it("v2 物理键被其他命名空间或旧版的合法记录占用时拒绝覆写且不误删", () => {
+    const backend = new TestStorage();
+    vi.stubGlobal("localStorage", backend);
+    const storage = new StorageUtils({ prefix: "app:" });
+    const v2Key = `@axutils/common/storage/v2/${JSON.stringify(["app:", "app:item"])}`;
+    const foreignValid = JSON.stringify({
+      data: "foreign",
+      expiresAt: 0,
+      marker: "@axutils/common/storage/v2",
+      prefix: "other:",
+    });
+
+    backend.setItem(v2Key, foreignValid);
+    expect(() => storage.set("item", "mine")).toThrow("缓存键已被其他数据占用");
+    expect(storage.setSafe("item", "mine")).toBe(false);
+    storage.remove("item");
+    storage.clear();
+    expect(backend.getItem(v2Key)).toBe(foreignValid);
+  });
 });

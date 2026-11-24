@@ -39,7 +39,7 @@ pnpm check
 | `pnpm publint` | 发布清单与打包检查 |
 | `pnpm test:browser` | 浏览器消费类型检查与 Playwright 真实浏览器测试 |
 | `pnpm test:runtime` | 使用 `AXUTILS_TEST_NODE` 指定的 Node 执行产物冒烟 |
-| `pnpm check` | lint → 工具测试 → typecheck → 单元测试 → build → dist → consumer → publint → browser |
+| `pnpm check` | lint → 工具测试 → build → typecheck → 单元测试 → dist → consumer → publint → browser |
 | `pnpm release` | 发布未发布的本地包版本并创建 Git 标签；见[发布流程](./releasing.md) |
 
 包目录可以单独运行包脚本；common 的 `pnpm check:dist` 组合构建与产物检查。依赖安装、完整 workspace 检查仍在根目录执行。

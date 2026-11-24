@@ -16,7 +16,7 @@
  * 可能存在但不在本仓库 `lib`（仅 `ES2020`，未包含 `DOM`）中的全局对象集合。
  *
  * 这里集中声明一次，避免每个函数各自书写交叉类型，保持实现简洁。
- * 全部为可选属性：存在性由运行时决定，函数内统一用 `typeof x !== "undefined"` 守卫。
+ * 全部为可选属性：存在性由运行时决定，函数内统一做存在性与对象守卫，排除 `null` 和非对象伪值。
  */
 type PlatformGlobals = typeof globalThis & {
   window?: unknown;
@@ -32,6 +32,12 @@ type PlatformGlobals = typeof globalThis & {
  * 读取可能存在的全局对象，统一入口，避免散落的交叉类型断言。
  */
 const globals = globalThis as PlatformGlobals;
+
+/**
+ * 判断全局属性是否为非 `null` 的对象，避免显式置空或原始值伪装成宿主对象。
+ */
+const isObjectValue = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
 /**
  * 判断当前运行时是否为浏览器主线程环境。
@@ -51,9 +57,7 @@ const globals = globalThis as PlatformGlobals;
  * 另外，iframe 内部的文档也会返回 `true`，因为 iframe 拥有独立的 `window`/`document`。
  */
 export const isBrowser = (): boolean =>
-  typeof globals.window !== "undefined" &&
-  typeof globals.document !== "undefined" &&
-  globals.window === globals;
+  isObjectValue(globals.window) && isObjectValue(globals.document) && globals.window === globals;
 
 /**
  * 判断当前运行时是否为 Node.js 环境。
@@ -87,8 +91,8 @@ export const isNode = (): boolean =>
  * 此处对它们返回 `false`。如需覆盖 Service Worker，请另行实现。
  */
 export const isWebWorker = (): boolean =>
-  typeof globals.self !== "undefined" &&
-  typeof globals.self?.window === "undefined" &&
+  isObjectValue(globals.self) &&
+  typeof globals.self.window === "undefined" &&
   typeof globals.importScripts === "function";
 
 /**
@@ -102,7 +106,7 @@ export const isWebWorker = (): boolean =>
  * 注意：本函数语义宽松，适合用于「是否可使用浏览器 API」的快速预判，
  * 不适合用于需要严格区分浏览器主线程的场景。
  */
-export const isBrowserLike = (): boolean => typeof globals.window !== "undefined";
+export const isBrowserLike = (): boolean => isObjectValue(globals.window);
 
 /**
  * 判断当前运行时是否为服务端环境。

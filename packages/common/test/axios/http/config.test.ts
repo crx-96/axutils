@@ -34,6 +34,37 @@ describe("axios/http 配置", () => {
     ]);
   });
 
+  it("异步配置工厂返回显式 undefined 字段时保留同步构造选项", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    const client = PromiseHttpClient.create(
+      () =>
+        Promise.resolve({
+          baseUrl: undefined,
+          dedupe: undefined,
+          retryable: undefined,
+          retryCount: undefined,
+          retryDelay: undefined,
+          retryNonIdempotent: undefined,
+          timeout: undefined,
+        } as unknown as Partial<PromiseHttpClientConfig>),
+      {
+        axiosInstance: instance,
+        baseUrl: "https://sync.example.test",
+        dedupe: false,
+        retryable: false,
+        retryCount: 2,
+        retryDelay: 15,
+        retryNonIdempotent: true,
+        timeout: 3200,
+      },
+    );
+
+    await Promise.all([client.get("/items"), client.get("/items")]);
+    expect(context.calls).toBe(2);
+    expect(context.configs[0]?.url).toBe("https://sync.example.test/items");
+    expect(context.configs[0]?.timeout).toBe(3200);
+  });
+
   it("工厂同步 abort 时，监听器重入与后续请求共享第一次初始化", async () => {
     const controller = new AbortController();
     const gate = deferred<Partial<PromiseHttpClientConfig>>();

@@ -93,4 +93,41 @@ describe("date/Duration", () => {
     expect(Duration.negated({ days: 1, hours: -2 })).toEqual({ days: -1, hours: 2 });
     expect(Duration.abs({ days: -1, hours: -2 })).toEqual({ days: 1, hours: 2 });
   });
+
+  it("负数拆解与取反不产生 -0", () => {
+    const fromNeg = Duration.fromMilliseconds(-1_000);
+    expect(fromNeg).toEqual({
+      days: 0,
+      hours: 0,
+      milliseconds: 0,
+      minutes: 0,
+      months: 0,
+      seconds: -1,
+      years: 0,
+    });
+    for (const unit of ["years", "months", "days", "hours", "minutes", "milliseconds"] as const) {
+      expect(Object.is(fromNeg[unit], -0)).toBe(false);
+    }
+
+    const negated = Duration.negated({ days: 0, hours: 1 });
+    expect(negated).toEqual({ days: 0, hours: -1 });
+    expect(Object.is(negated.days, -0)).toBe(false);
+  });
+
+  it("拒绝溢出结果并对大安全整数抵消精确求和", () => {
+    expect(() => Duration.totalMilliseconds({ days: Number.MAX_VALUE })).toThrow(RangeError);
+    expect(() => Duration.add({ days: Number.MAX_VALUE }, { days: Number.MAX_VALUE })).toThrow(
+      RangeError,
+    );
+    expect(() =>
+      Duration.subtract({ days: Number.MAX_VALUE }, { days: -Number.MAX_VALUE }),
+    ).toThrow(RangeError);
+    expect(
+      Duration.totalMilliseconds({
+        days: 104_249_991_374,
+        hours: -2_501_999_792_975,
+        minutes: -59,
+      }),
+    ).toBe(60_000);
+  });
 });

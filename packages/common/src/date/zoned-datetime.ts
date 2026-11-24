@@ -2,21 +2,23 @@ import { MS_PER_MINUTE } from "./constant.js";
 import type { DateFormatPattern, Timezone } from "./format.js";
 import {
   MAX_ISO_OFFSET_MINUTES,
+  assertDurationObject,
   assertTimezone,
   createUtcDate,
   dateTimeToUtcDate,
   dateToZonedDate,
   durationMilliseconds,
   durationValue,
+  epochDifferenceToDuration,
   formatZonedDate,
   getTimezone,
   invalid,
   isDateObject,
   isoDateTimeString,
-  millisecondsToDuration,
   parseDateTimeString,
   toEpochMilliseconds,
   zonedWallDate,
+  zonedWallFields,
 } from "./internal.js";
 import type {
   DateFormatOptions,
@@ -71,8 +73,9 @@ function compareEpoch(first: ZonedDateTimeValue, second: ZonedDateTimeValue): -1
   return difference < 0 ? -1 : difference > 0 ? 1 : 0;
 }
 
-/** 校验此命名空间不支持的年月字段，再将日及以下整数时长换算为毫秒。 */
+/** 校验时长容器与此命名空间不支持的年月字段，再将日及以下整数时长换算为毫秒。 */
 function addMilliseconds(duration: DurationFields): number {
+  assertDurationObject(duration);
   if (durationValue(duration, "years") !== 0 || durationValue(duration, "months") !== 0) {
     invalid(
       "ZonedDateTime 的加法不支持 years 或 months；如需日历计算请先通过 toPlainDateTime 转为无时区值",
@@ -101,24 +104,16 @@ export const ZonedDateTime = {
     return toEpochMilliseconds(zdt.epochMs);
   },
 
-  /** 按关联时区提取纯日期。 */
+  /** 按关联时区提取纯日期；直接从墙上字段构造，避免极限时刻的时间部分触发越界。 */
   toPlainDate(zdt: ZonedDateTimeValue): Date {
-    const local = toLocalDate(zdt);
-    return createUtcDate(local.getUTCFullYear(), local.getUTCMonth() + 1, local.getUTCDate());
+    const fields = zonedWallFields(new Date(toEpochMilliseconds(zdt.epochMs)), zdt.timezone);
+    return createUtcDate(fields.year, fields.month, fields.day);
   },
 
-  /** 按关联时区提取纯时间。 */
+  /** 按关联时区提取纯时间；直接从墙上字段构造，避免极限时刻的日期部分触发越界。 */
   toPlainTime(zdt: ZonedDateTimeValue): Date {
-    const local = toLocalDate(zdt);
-    return createUtcDate(
-      1970,
-      1,
-      1,
-      local.getUTCHours(),
-      local.getUTCMinutes(),
-      local.getUTCSeconds(),
-      local.getUTCMilliseconds(),
-    );
+    const fields = zonedWallFields(new Date(toEpochMilliseconds(zdt.epochMs)), zdt.timezone);
+    return createUtcDate(1970, 1, 1, fields.hour, fields.minute, fields.second, fields.millisecond);
   },
 
   /** 按关联时区提取无时区日期时间。 */
@@ -128,7 +123,7 @@ export const ZonedDateTime = {
 
   /** 切换时区但保持同一个绝对时间点。 */
   withTimeZone(zdt: ZonedDateTimeValue, timezone: Timezone): ZonedDateTimeValue {
-    return { epochMs: toEpochMilliseconds(zdt.epochMs), timezone: getTimezone(timezone) };
+    return { epochMs: toEpochMilliseconds(zdt.epochMs), timezone: assertTimezone(timezone) };
   },
 
   /** 按实际经过的毫秒数加法；跨 DST 时不会强行保持相同挂钟时间。 */
@@ -136,7 +131,7 @@ export const ZonedDateTime = {
     // 结果仍必须能表示为 Date，避免产生之后无法格式化的带时区值。
     return {
       epochMs: toEpochMilliseconds(toEpochMilliseconds(zdt.epochMs) + addMilliseconds(duration)),
-      timezone: getTimezone(zdt.timezone),
+      timezone: assertTimezone(zdt.timezone),
     };
   },
 
@@ -144,14 +139,15 @@ export const ZonedDateTime = {
   subtract(zdt: ZonedDateTimeValue, duration: DurationFields): ZonedDateTimeValue {
     return {
       epochMs: toEpochMilliseconds(toEpochMilliseconds(zdt.epochMs) - addMilliseconds(duration)),
-      timezone: getTimezone(zdt.timezone),
+      timezone: assertTimezone(zdt.timezone),
     };
   },
 
-  /** 返回 zdt - other 的实际时长差。 */
+  /** 返回 zdt - other 的精确实际时长差，大跨度不丢失毫秒精度。 */
   since(zdt: ZonedDateTimeValue, other: ZonedDateTimeValue): DurationFields {
-    return millisecondsToDuration(
-      toEpochMilliseconds(zdt.epochMs) - toEpochMilliseconds(other.epochMs),
+    return epochDifferenceToDuration(
+      toEpochMilliseconds(zdt.epochMs),
+      toEpochMilliseconds(other.epochMs),
     );
   },
 

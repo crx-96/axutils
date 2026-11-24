@@ -31,8 +31,9 @@ export const toExpiresAt = (expired: number | undefined): number => {
   const normalized = normalizeExpired(expired);
   // 非正数保留永久缓存语义，不读取当前时间。
   if (normalized <= 0) return 0;
-  // 将秒数变为绝对毫秒时间戳，再校验序列化后仍可精确比较。
-  const expiresAt = Math.floor(Date.now() + normalized * 1000);
+  // 向上取整避免亚毫秒正 TTL 落回当前毫秒而立即过期；若结果恰好为 0 则顺延为 1，避免碰撞永不过期哨兵值 0。
+  const computed = Math.ceil(Date.now() + normalized * 1000);
+  const expiresAt = computed === 0 ? 1 : computed;
   if (!Number.isFinite(expiresAt) || !Number.isSafeInteger(expiresAt)) {
     throw new RangeError("expired 计算结果超出安全时间范围");
   }

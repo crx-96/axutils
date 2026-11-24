@@ -9,8 +9,10 @@ export {
   isoDateTimeString,
 } from "./internal/calendar.js";
 export {
+  assertDurationObject,
   durationMilliseconds,
   durationValue,
+  epochDifferenceToDuration,
   millisecondsToDuration,
 } from "./internal/duration.js";
 export type { ParsedDateTime } from "./internal/parse.js";
@@ -28,10 +30,12 @@ export {
   formatZonedDate,
   getTimezone,
   zonedWallDate,
+  zonedWallFields,
 } from "./internal/timezone.js";
 export {
   assertFinite,
   assertInteger,
+  assertSafeInteger,
   invalid,
   toEpochMilliseconds,
 } from "./internal/validation.js";

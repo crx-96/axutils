@@ -1,8 +1,11 @@
-import { MS_PER_DAY } from "./constant.js";
+import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "./constant.js";
 import {
+  assertDurationObject,
+  assertSafeInteger,
   createUtcDate,
+  dateTimeToUtcDate,
   dateToUtcFields,
-  durationMilliseconds,
+  durationValue,
   invalid,
   isDateObject,
   millisecondsToDuration,
@@ -17,19 +20,17 @@ function fromInput(input: PlainTimeInput): Date {
     return createUtcDate(1970, 1, 1, fields.hour, fields.minute, fields.second, fields.millisecond);
   }
   if (typeof input === "string") {
-    // 兼容接口和表单中常见的 `YYYY-MM-DD HH:mm:ss` 写法；纯时间仍走更严格的 HH:mm:ss 校验。
-    const dateTime = /^\d{4}[-/]\d{2}[-/]\d{2}[Tt ]/u.test(input)
-      ? parseDateTimeString(input)
-      : null;
-    if (dateTime) {
+    // 兼容接口和表单中常见的日期时间文本；要求日期分隔符一致，并按偏移归一化为 UTC。
+    if (/^(\d{4})([-/])(\d{2})\2(\d{2})[Tt ]/u.test(input)) {
+      const utc = dateTimeToUtcDate(parseDateTimeString(input));
       return createUtcDate(
         1970,
         1,
         1,
-        dateTime.hour,
-        dateTime.minute,
-        dateTime.second,
-        dateTime.millisecond,
+        utc.getUTCHours(),
+        utc.getUTCMinutes(),
+        utc.getUTCSeconds(),
+        utc.getUTCMilliseconds(),
       );
     }
     const match = /^(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?$/u.exec(input);
@@ -59,18 +60,23 @@ function compareTimes(first: PlainTimeInput, second: PlainTimeInput): -1 | 0 | 1
   return difference < 0 ? -1 : difference > 0 ? 1 : 0;
 }
 
-/** 只读取时间单位，先校验再按方向加减，一天内取模。 */
+/** 校验时长容器与安全整数时间单位，用 BigInt 汇总并按一天毫秒取模，避免大数丢精度。 */
 function addTime(time: Date, duration: DurationFields, direction = 1): Date {
-  // biome-ignore assist/source/useSortedKeys: 按时间字段顺序读取并校验，保留首个错误的语义。
-  const milliseconds = durationMilliseconds({
-    hours: duration.hours,
-    minutes: duration.minutes,
-    seconds: duration.seconds,
-    milliseconds: duration.milliseconds,
-  });
-  // 输入已对齐 epoch 当天，对正负结果统一取模后即可作为该日的毫秒数。
-  const elapsed = time.getTime() + direction * milliseconds;
-  return new Date(((elapsed % MS_PER_DAY) + MS_PER_DAY) % MS_PER_DAY);
+  assertDurationObject(duration);
+  // 按时分秒毫秒顺序读取一次并校验安全整数范围，保留首个错误语义。
+  const hours = assertSafeInteger(durationValue(duration, "hours"), "hours");
+  const minutes = assertSafeInteger(durationValue(duration, "minutes"), "minutes");
+  const seconds = assertSafeInteger(durationValue(duration, "seconds"), "seconds");
+  const milliseconds = assertSafeInteger(durationValue(duration, "milliseconds"), "milliseconds");
+  const offset =
+    BigInt(hours) * BigInt(MS_PER_HOUR) +
+    BigInt(minutes) * BigInt(MS_PER_MINUTE) +
+    BigInt(seconds) * BigInt(MS_PER_SECOND) +
+    BigInt(milliseconds);
+  const dayMs = BigInt(MS_PER_DAY);
+  // 输入已对齐 epoch 当天，用 BigInt 对正负结果统一取模后再转回 Number。
+  const elapsed = BigInt(time.getTime()) + BigInt(direction) * offset;
+  return new Date(Number(((elapsed % dayMs) + dayMs) % dayMs));
 }
 
 /** 纯时间命名空间；时间加减不跨日，超出 24 小时按周期取模。 */

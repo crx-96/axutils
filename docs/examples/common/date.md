@@ -98,7 +98,7 @@ console.log(AxutilsCommon.DATE_FORMAT.DATE, AxutilsCommon.TIMEZONE.UTC);
 - `ZonedDateTimeValue`：`{ epochMs: number; timezone: Timezone }`，epochMs 为 Date 可表示范围内的整数毫秒（包含 ±8,640,000,000,000,000 边界）。
 - `Timezone`：允许 `TIMEZONE` 中的常用值，也允许自定义 IANA 时区字符串；不要使用 `CST`、`IST` 等歧义缩写。
 
-纯日期、纯时间和无时区日期时间从 `Date` 提取 UTC 字段，也接受来自 iframe 或 Node `vm` 的 `Date`。纯时间和日期时间的字段对象必须提供 `hour`、`minute`，仅 `second`、`millisecond` 可省略。字符串日期时间支持 `T`、`t` 或空格作为分隔符。所有无效输入统一抛 `RangeError`。
+纯日期、纯时间和无时区日期时间从 `Date` 提取 UTC 字段，也接受来自 iframe 或 Node `vm` 的 `Date`。纯时间和日期时间的字段对象必须提供 `hour`、`minute`，仅 `second`、`millisecond` 可省略。字符串日期支持 `-` 或 `/` 作为分隔符，但同一日期内必须一致，不能混用（如 `2024-06/15`）。字符串日期时间支持 `T`、`t` 或空格作为分隔符；当携带 `Z` 或数值 UTC 偏移（如 `+08:00`）时，`PlainDate.from`、`PlainTime.from` 和 `PlainDateTime.from` 统一先按偏移归一化为 UTC，再提取各自字段；若附带 `[IANA]` 时区后缀，会校验其为有效 IANA 时区，无效时区抛 `RangeError`。所有无效输入统一抛 `RangeError`。
 
 文本解析的年份为四位数字；负年份与超过 9999 的年份请通过字段对象或 `Date` 输入。`PlainDate.toString` 和 `PlainDateTime.toString` 对这些年份输出带符号的六位 ISO 扩展年份，例如 `-000001` 和 `+010000`。
 
@@ -135,6 +135,8 @@ console.log(DATE_FORMAT.ISO_UTC); // yyyy-MM-dd'T'HH:mm:ss.SSS'Z'
 ### `TIMEZONE`
 
 提供 `UTC`、`ASIA_SHANGHAI`/`CHINA`、东京、首尔、新加坡、伦敦、巴黎、柏林、纽约、芝加哥、洛杉矶、开罗、悉尼、奥克兰等常用 IANA 城市标识，以及源码中列出的其他亚洲、欧洲、美洲、非洲和大洋洲时区。完整对象可通过 IDE 的 `TIMEZONE.` 补全查看；`CHINA` 是 `Asia/Shanghai` 的语义别名。
+
+> 兼容提示：`TIMEZONE.EUROPE_KYIV`（`Europe/Kyiv`）需要运行环境提供 `tzdata >= 2022b`；Node 14.18.0 内置 ICU 为 `tzdata 2021a`，在该运行时下传入该值会由 `Intl` 校验并抛 `RangeError`。
 
 ```ts
 import { TIMEZONE, ZonedDateTime } from "@axutils/common/date";
@@ -391,7 +393,7 @@ console.log(Now.instant() === Date.now()); // 通常为 false/true，取决于�
 
 ### `PlainDate.from(input)`
 
-接受 ISO 日期字符串、`Date` 或 `{ year, month, day }` 字段对象；无效输入抛 `RangeError`。
+接受 ISO 日期字符串（或完整日期时间字符串）、`Date` 或 `{ year, month, day }` 字段对象；带 UTC 偏移的日期时间字符串会先按偏移归一化为 UTC 再取日期，附带 `[IANA]` 后缀时会校验时区合法性，无效输入抛 `RangeError`。
 
 ```ts
 import { PlainDate } from "@axutils/common/date";
@@ -612,7 +614,7 @@ console.log(PlainDate.format("2024-01-02", DATE_FORMAT.CN_DATE)); // 2024年1月
 
 ### `PlainTime.from(input)`
 
-接受 `HH:mm:ss` 或带毫秒的时间字符串，也接受完整日期时间字符串、`Date` 或字段对象。
+接受 `HH:mm:ss` 或带毫秒的时间字符串，也接受完整日期时间字符串、`Date` 或字段对象；带 UTC 偏移的日期时间字符串会先按偏移归一化为 UTC 再取时间，附带 `[IANA]` 后缀时会校验时区合法性。
 
 ```ts
 import { PlainTime } from "@axutils/common/date";
@@ -760,7 +762,7 @@ console.log(PlainTime.toString("08:05:02.003")); // 08:05:02.003
 
 ### `PlainDateTime.from(input)`
 
-接受完整日期时间字符串、`Date` 或字段对象；秒和毫秒在字段对象中可省略并默认为 `0`。
+接受完整日期时间字符串、`Date` 或字段对象；带 UTC 偏移的文本会先归一化为 UTC，附带 `[IANA]` 后缀时会校验时区合法性，秒和毫秒在字段对象中可省略并默认为 `0`。
 
 ```ts
 import { PlainDateTime } from "@axutils/common/date";

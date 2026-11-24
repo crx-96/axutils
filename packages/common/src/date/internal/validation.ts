@@ -12,6 +12,15 @@ export function assertInteger(value: number, name: string): number {
   return value;
 }
 
+/** 校验字段为安全整数，避免大整数在中间运算阶段丢失精度，并将 -0 归一化为 +0。 */
+export function assertSafeInteger(value: number, name: string): number {
+  assertInteger(value, name);
+  if (!Number.isSafeInteger(value)) {
+    invalid(`${name} 超出安全整数范围`);
+  }
+  return value === 0 ? 0 : value;
+}
+
 /** 校验字段为有限数字；允许小数的内部数值边界可以使用此检查。 */
 export function assertFinite(value: number, name: string): number {
   if (!Number.isFinite(value)) {
@@ -20,7 +29,7 @@ export function assertFinite(value: number, name: string): number {
   return value;
 }
 
-/** 校验绝对时间点的整数毫秒及 Date 范围；构造和运算结果使用同一边界。 */
+/** 校验绝对时间点的整数毫秒及 Date 范围；构造和运算结果使用同一边界，并将 -0 归一化为 +0。 */
 export function toEpochMilliseconds(value: number): number {
   // 保留 Instant 原有的整数校验错误文本，多个时间点入口共用同一失败通道。
   if (!Number.isFinite(value) || !Number.isInteger(value)) {
@@ -30,5 +39,5 @@ export function toEpochMilliseconds(value: number): number {
   if (!Number.isFinite(new Date(value).getTime())) {
     invalid("epoch 毫秒超出 Date 可表示范围");
   }
-  return value;
+  return value === 0 ? 0 : value;
 }

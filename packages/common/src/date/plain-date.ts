@@ -2,6 +2,7 @@ import { MS_PER_DAY } from "./constant.js";
 import type { DateFormatPattern, Timezone } from "./format.js";
 import {
   addYearMonths,
+  assertDurationObject,
   createUtcDate,
   dateToUtcFields,
   dateToZonedDate,
@@ -38,8 +39,9 @@ function fromInput(input: PlainDateInput): Date {
   return createUtcDate(input.year, input.month, input.day);
 }
 
-/** 先进行年月夹紧，再增加整日；最终构造再次检查 Date 范围。 */
+/** 先校验时长容器再执行年月夹紧与整日偏移；最终构造再次检查 Date 范围。 */
 function addDate(date: Date, duration: DurationFields, direction = 1): Date {
+  assertDurationObject(duration);
   const years = durationValue(duration, "years");
   const months = durationValue(duration, "months");
   const days = durationValue(duration, "days");
@@ -128,9 +130,12 @@ export const PlainDate = {
     return compareDates(fromInput(first), fromInput(second)) > 0;
   },
 
-  /** 判断日期是否位于闭区间 [start, end]；不自动交换边界。 */
+  /** 判断日期是否位于闭区间 [start, end]；先统一校验三个输入，不自动交换边界。 */
   isBetween(date: PlainDateInput, start: PlainDateInput, end: PlainDateInput): boolean {
-    return !PlainDate.isBefore(date, start) && !PlainDate.isAfter(date, end);
+    const target = fromInput(date).getTime();
+    const min = fromInput(start).getTime();
+    const max = fromInput(end).getTime();
+    return target >= min && target <= max;
   },
 
   /** 获取 UTC 年份。 */

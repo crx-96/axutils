@@ -1,6 +1,6 @@
 {
   "name": "@axutils/common",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "axutils 的公共工具子包",
   "homepage": "https://github.com/crx-96/axutils/tree/main/packages/common#readme",
   "bugs": {
@@ -161,7 +161,6 @@
     "./rxjs/http": {
       "import": {
         "types": "./dist/rxjs/http.d.ts",
-        "node": "./dist/rxjs/http.node.mjs",
         "default": "./dist/rxjs/http.js"
       },
       "require": {
@@ -172,7 +171,6 @@
     "./axios/http": {
       "import": {
         "types": "./dist/axios/http.d.ts",
-        "node": "./dist/axios/http.node.mjs",
         "default": "./dist/axios/http.js"
       },
       "require": {

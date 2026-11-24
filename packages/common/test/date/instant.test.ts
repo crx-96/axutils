@@ -79,4 +79,38 @@ describe("date/Instant", () => {
     expect(() => Instant[method](0, hidden)).toThrow(RangeError);
     expect(() => Instant[method](0, inherited)).toThrow(RangeError);
   });
+
+  it("toZonedDateTime 拒绝缺省或非法时区且不回退到本地时区", () => {
+    expect(() => Instant.toZonedDateTime(0, undefined as never)).toThrow(RangeError);
+    expect(() => Instant.toZonedDateTime(0, "" as never)).toThrow(RangeError);
+  });
+
+  it("消除 -0 且拒绝混用日期分隔符", () => {
+    expect(Object.is(Instant.fromEpochMilliseconds(-0), -0)).toBe(false);
+    const diff = Instant.since(0, 1_000);
+    expect(diff).toEqual({ days: 0, hours: 0, milliseconds: 0, minutes: 0, seconds: -1 });
+    expect(Object.is(diff.days, -0)).toBe(false);
+    expect(Object.is(diff.hours, -0)).toBe(false);
+    expect(Object.is(diff.minutes, -0)).toBe(false);
+    expect(Object.is(diff.milliseconds, -0)).toBe(false);
+    expect(() => Instant.from("2024-06/15T10:00:00Z")).toThrow(RangeError);
+    expect(() => Instant.from("2024/06-15T10:00:00Z")).toThrow(RangeError);
+  });
+
+  it("大跨度 since 使用 BigInt 保持毫秒级精度", () => {
+    expect(Instant.since(8_640_000_000_000_000, -8_639_999_999_999_999)).toEqual({
+      days: 199_999_999,
+      hours: 23,
+      milliseconds: 999,
+      minutes: 59,
+      seconds: 59,
+    });
+    expect(Instant.since(-8_639_999_999_999_999, 8_640_000_000_000_000)).toEqual({
+      days: -199_999_999,
+      hours: -23,
+      milliseconds: -999,
+      minutes: -59,
+      seconds: -59,
+    });
+  });
 });

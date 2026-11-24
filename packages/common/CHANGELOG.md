@@ -1,5 +1,16 @@
 # @axutils/common
 
+## 2.3.0
+
+### Minor Changes
+
+- 完善跨运行时兼容、边界校验与构建声明工具链：
+  
+  - **HTTP 客户端**：移除 `./axios/http` 与 `./rxjs/http` 的 `import.node` 门面以统一模块格式与 `axios` 实例；支持跨包/跨 Realm `AxiosHeaders` 识别与分组头大小写归一化、屏蔽及合并；修复异步配置合并 `undefined` 覆盖、`PromiseHttpClient` 响应前微任务取消窗口、`RxHttpClient` 缺省配置防护及 `transformResponse` 异常分类。
+  - **日期与时间**：统一带偏移字符串在 `PlainDate`/`PlainTime`/`PlainDateTime` 的 UTC 归一化语义，严格校验 `[IANA]` 时区与日期分隔符；必填时区参数统一由 `assertTimezone` 校验并修复极限日期转换边界；补齐 `Duration` 容器校验、消除 `-0`、优化 `PlainDate.isBetween` 与大整数 `BigInt` 精确计算及溢出防护，并补充 `Europe/Kyiv` 兼容说明。
+  - **缓存、JSON、校验与对象**：修复 v2 损坏缓存记录锁死、亚毫秒 TTL 与时间戳哨兵碰撞、非法存储类型校验及 Firefox/旧 WebKit 配额异常识别；校验 `jsonStringify` 非法 `onCycle` 与原生一致的 `space` 归一化，并将 `jsonParse` 后处理改为显式栈迭代以防深层嵌套栈溢出；完善函数源码词法扫描、`deepClone` 跨 Realm/`null` 原型判定及平台全局对象守卫。
+  - **构建与工作区**：修复声明词法扫描的模板边界与 Unicode 标识符处理，支持 `declare module`、`import = require` 与 `.json` 校验并拒绝裸目录导入；完善 `nodeFacades` 纯默认导出与去重、`removeDirectory` 符号链接安全清理，并将 `pnpm check` 调整为先构建再执行类型检查、测试与产物消费校验。
+
 ## 2.2.0
 
 ### Minor Changes

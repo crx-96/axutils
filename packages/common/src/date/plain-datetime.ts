@@ -1,17 +1,18 @@
 import type { DateFormatPattern, Timezone } from "./format.js";
 import {
   addYearMonths,
+  assertDurationObject,
   createUtcDate,
   dateTimeToUtcDate,
   dateToUtcFields,
   dateToZonedDate,
   durationMilliseconds,
   durationValue,
+  epochDifferenceToDuration,
   formatZonedDate,
   invalid,
   isDateObject,
   isoDateTimeString,
-  millisecondsToDuration,
   parseDateTimeString,
   toEpochMilliseconds,
 } from "./internal.js";
@@ -55,8 +56,9 @@ function fromInput(input: PlainDateTimeInput): Date {
   );
 }
 
-/** 先执行年月日历夹紧，再增加日及以下的整数毫秒，最后校验结果可表示。 */
+/** 先校验时长容器，再执行年月日历夹紧与日及以下整数毫秒偏移，最后校验结果可表示。 */
 function addDateTime(date: Date, duration: DurationFields, direction = 1): Date {
+  assertDurationObject(duration);
   // 先校验输入值再施加方向，避免一元负号把字符串转换为有效整数。
   const years = durationValue(duration, "years");
   const months = durationValue(duration, "months");
@@ -105,9 +107,9 @@ export const PlainDateTime = {
     return addDateTime(fromInput(dateTime), duration, -1);
   },
 
-  /** 返回 dateTime - other 的天、时、分、秒、毫秒差，不拆分年月。 */
+  /** 返回 dateTime - other 的精确天、时、分、秒、毫秒差，不拆分年月。 */
   since(dateTime: PlainDateTimeInput, other: PlainDateTimeInput): DurationFields {
-    return millisecondsToDuration(fromInput(dateTime).getTime() - fromInput(other).getTime());
+    return epochDifferenceToDuration(fromInput(dateTime).getTime(), fromInput(other).getTime());
   },
 
   /** 判断两个日期时间是否相等。 */

@@ -46,11 +46,30 @@ const applyToJSON = (value: unknown, key: string): unknown => {
   return value;
 };
 
+/** 原生 JSON.stringify 运行时接受任意类型的 space；用独立声明避免调用处双重断言。 */
+const stringifyWithAnySpace = JSON.stringify as (
+  value: unknown,
+  replacer: null,
+  space: unknown,
+) => string;
+
+/** 按原生 JSON.stringify 规则归一化缩进片段，兼容包装数字/字符串与任意非法类型。 */
+const resolveSpaceGap = (space: unknown): string => {
+  if (typeof space === "string") return space.slice(0, 10);
+  if (typeof space === "number") {
+    return " ".repeat(Math.max(0, Math.min(10, Math.trunc(space) || 0)));
+  }
+  if (typeof space !== "object" || space === null) return "";
+  // 委托原生 JSON.stringify 按内部槽拆箱 Number/String 包装对象，非空缩进输出固定为 "[\n<gap>0\n]"。
+  const formatted = stringifyWithAnySpace([0], null, space);
+  return formatted.length > 3 ? formatted.slice(2, -3) : "";
+};
+
 /**
  * JSON 序列化。排序、过滤或显式 onCycle 启用配置化遍历，仅设置 space 时沿用原生行为。
  * @returns JSON 文本。根值经 toJSON 转换后仍为函数、undefined 或 Symbol 时返回 undefined。
  * @throws {JsonCircularReferenceError} 配置化遍历发现当前祖先引用且未启用 skip。
- * @throws {TypeError} 原生路径遇到循环或无法表示的 BigInt。用户钩子和比较器异常原样传播。
+ * @throws {TypeError} 配置项非法，或原生路径遇到循环、无法表示的 BigInt。用户钩子和比较器异常原样传播。
  */
 export const jsonStringify = (
   value: unknown,
@@ -59,15 +78,15 @@ export const jsonStringify = (
   if (options === undefined) return JSON.stringify(value);
   const { filterNullish, onCycle, sortKeys, space } = options;
   const comparator = resolveComparator(sortKeys);
+  if (onCycle !== undefined && onCycle !== "throw" && onCycle !== "skip") {
+    throw new TypeError('onCycle 必须是 "throw" 或 "skip"');
+  }
   if (!comparator && !filterNullish && onCycle === undefined) {
     return JSON.stringify(value, null, space);
   }
 
   // 与原生一致，每层缩进最多十个空格或十个 UTF-16 码元。
-  const gap =
-    typeof space === "number"
-      ? " ".repeat(Math.max(0, Math.min(10, space)))
-      : (space ?? "").slice(0, 10);
+  const gap = resolveSpaceGap(space);
   /** 仅追踪当前分支中经过 toJSON 后实际展开的容器。 */
   const ancestors = new WeakSet<object>();
 

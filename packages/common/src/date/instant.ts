@@ -1,10 +1,10 @@
 import type { Timezone } from "./format.js";
 import {
+  assertTimezone,
   dateTimeToUtcDate,
   durationMilliseconds,
-  getTimezone,
+  epochDifferenceToDuration,
   invalid,
-  millisecondsToDuration,
   parseDateTimeString,
   toEpochMilliseconds,
 } from "./internal.js";
@@ -37,7 +37,7 @@ export const Instant = {
 
   /** 将绝对时间点关联到指定 IANA 时区。 */
   toZonedDateTime(epochMs: number, timezone: Timezone): ZonedDateTimeValue {
-    return { epochMs: toEpochMilliseconds(epochMs), timezone: getTimezone(timezone) };
+    return { epochMs: toEpochMilliseconds(epochMs), timezone: assertTimezone(timezone) };
   },
 
   /** 读取绝对时间点的 epoch 毫秒。 */
@@ -56,9 +56,9 @@ export const Instant = {
     return toEpochMilliseconds(toEpochMilliseconds(instant) - durationMilliseconds(duration));
   },
 
-  /** 返回 instant - other 的分解结果。 */
+  /** 返回 instant - other 的精确分解结果，大跨度不丢失毫秒精度。 */
   since(instant: number, other: number): DurationFields {
-    return millisecondsToDuration(toEpochMilliseconds(instant) - toEpochMilliseconds(other));
+    return epochDifferenceToDuration(toEpochMilliseconds(instant), toEpochMilliseconds(other));
   },
 
   /** 判断两个绝对时间点是否相等。 */

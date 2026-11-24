@@ -16,6 +16,17 @@ const headerGroupNames = [
   ...Array.from(HTTP_METHODS, (name) => name.toLowerCase()),
 ];
 
+/** 识别当前实例及跨包/跨 Realm 构造的 AxiosHeaders，避免混合加载时误抛 TypeError。 */
+function isAxiosHeadersLike(value: unknown): value is AxiosHeaders {
+  if (value instanceof AxiosHeaders) return true;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.prototype.toString.call(value) === "[object AxiosHeaders]" &&
+    typeof (value as { toJSON?: unknown }).toJSON === "function"
+  );
+}
+
 /** 保留 false/null/undefined 的屏蔽语义，且不共享调用方的多值数组。 */
 function copyHeaders(headers: AxiosHeaders): RawAxiosRequestHeaders {
   return Object.fromEntries(
@@ -26,12 +37,37 @@ function copyHeaders(headers: AxiosHeaders): RawAxiosRequestHeaders {
   );
 }
 
-/** 逐项 set 兼容 Axios 请求头允许 undefined、AxiosHeaders 构造声明却不接受它的差异。 */
-function setHeaders(target: AxiosHeaders, headers: RawAxiosRequestHeaders | undefined): void {
-  for (const [name, value] of Object.entries(headers ?? {})) target.set(name, value, true);
+/** 判断值是否为可展开的请求头分组对象，排除 null、原始值与数组。 */
+function isHeaderGroupObject(value: unknown): value is RawAxiosRequestHeaders {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** 快照自有扁平头，并保留按属性访问可见的 common 和当前方法组，供展开和屏蔽判断复用。 */
+/** 合并同一规范化分组名的多个值：双对象按顺序合并为新副本，屏蔽值覆盖前者，忽略非屏蔽原始值覆盖已有对象。 */
+function mergeHeaderGroupValue(existing: unknown, incoming: unknown): unknown {
+  if (isHeaderGroupObject(existing) && isHeaderGroupObject(incoming)) {
+    const merged = new AxiosHeaders();
+    setHeaders(merged, existing);
+    setHeaders(merged, incoming);
+    return merged;
+  }
+  if (
+    isHeaderGroupObject(existing) &&
+    incoming !== null &&
+    incoming !== undefined &&
+    incoming !== false
+  ) {
+    return existing;
+  }
+  return incoming;
+}
+
+/** 逐项 set 兼容 Axios 请求头允许 undefined、AxiosHeaders 构造声明却不接受它的差异；忽略非对象输入，避免字符串被拆成数字索引头。 */
+function setHeaders(target: AxiosHeaders, headers: RawAxiosRequestHeaders | undefined): void {
+  if (headers === null || typeof headers !== "object" || Array.isArray(headers)) return;
+  for (const [name, value] of Object.entries(headers)) target.set(name, value, true);
+}
+
+/** 快照自有扁平头，并保留按属性访问可见的 common 和当前方法组（含大小写变体），供展开和屏蔽判断复用。 */
 function snapshotHeaderGroups(
   headers: AxiosRequestConfig["headers"] | AxiosInstance["defaults"]["headers"],
   method: string,
@@ -39,13 +75,23 @@ function snapshotHeaderGroups(
   if (headers == null) return undefined;
   const snapshot: RawAxiosRequestHeaders = Object.create(null);
   const methodGroup = method.toLowerCase();
-  // 按原有顺序读取两个分组，缺失与显式 undefined 分别表示继承与屏蔽。
+  // 先读取原型继承或不可枚举的分组，缺失与显式 undefined 分别表示继承与屏蔽，且不重复触发自有可枚举 getter。
   for (const group of ["common", methodGroup]) {
-    if (group in headers) snapshot[group] = headers[group];
+    if (group in headers && !Object.prototype.propertyIsEnumerable.call(headers, group)) {
+      snapshot[group] = headers[group];
+    }
   }
-  // 扁平头只取自有可枚举字段，其值最后覆盖分组，跳过已读取的组 getter。
+  // 自有可枚举字段按原顺序处理：大小写等价于 common 或当前方法组的键归并到小写组，其余作为扁平头保留。
   for (const name of Object.keys(headers)) {
-    if (name !== "common" && name !== methodGroup) snapshot[name] = headers[name];
+    const normalized = name.trim().toLowerCase();
+    if (normalized === "common" || normalized === methodGroup) {
+      snapshot[normalized] =
+        normalized in snapshot
+          ? mergeHeaderGroupValue(snapshot[normalized], headers[name])
+          : headers[name];
+    } else {
+      snapshot[name] = headers[name];
+    }
   }
   return snapshot;
 }
@@ -69,11 +115,7 @@ export function transformRequestHeaders(
   const transformed = transform(copyHeaders(requested));
   assertObject(transformed, "transformHeaders 必须同步返回 headers 对象");
   const prototype: unknown = Object.getPrototypeOf(transformed);
-  if (
-    !(transformed instanceof AxiosHeaders) &&
-    prototype !== Object.prototype &&
-    prototype !== null
-  ) {
+  if (!isAxiosHeadersLike(transformed) && prototype !== Object.prototype && prototype !== null) {
     throw new TypeError("transformHeaders 必须同步返回 headers 对象");
   }
   const result = new AxiosHeaders();

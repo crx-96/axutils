@@ -33,6 +33,9 @@ export interface StorageOptions {
   type?: StorageType;
 }
 
+/** v2 私有物理键的固定前缀，用于区分受本库管理的命名空间键与普通业务键。 */
+const CURRENT_STORAGE_KEY_PREFIX = `${CURRENT_STORAGE_MARKER}/`;
+
 /**
  * 通用缓存工具。
  *
@@ -52,7 +55,7 @@ export class StorageUtils<Key extends string = string> {
     this.expired = normalizeExpired(options.expired);
     this.prefix = options.prefix ?? "";
     this.keyHandler = options.key;
-    this.storage = resolveStorage(options.type ?? "local");
+    this.storage = resolveStorage(options.type === undefined ? "local" : options.type);
     this.keyCache = this.keyHandler === undefined ? undefined : new Map();
   }
 
@@ -73,10 +76,16 @@ export class StorageUtils<Key extends string = string> {
 
     const [current, legacy] = this.getKeys(key);
     const serialized = serializeStorageRecord(record);
-    // 同源 Web Storage 也可能被业务直接写入，已有内容必须能证明属于当前记录。
+    // v2 私有物理键上的损坏内容允许直接覆盖恢复；若已被其他合法记录占用则拒绝覆写。
     const previous = this.storage.getItem(current);
-    if (previous !== null && !this.ownedRecord(previous, CURRENT_STORAGE_MARKER)) {
-      throw new Error("缓存键已被其他数据占用");
+    if (previous !== null) {
+      const existing = parseStorageRecord(previous);
+      if (
+        existing !== null &&
+        (existing.marker !== CURRENT_STORAGE_MARKER || existing.prefix !== this.prefix)
+      ) {
+        throw new Error("缓存键已被其他数据占用");
+      }
     }
     // 新键写入成功即提交。若写入失败，原有的新旧记录都仍在原位。
     this.storage.setItem(current, serialized);
@@ -90,7 +99,23 @@ export class StorageUtils<Key extends string = string> {
   /** 将命名空间与转换后的键分别编码，保留同一前缀内的自定义键别名。 */
   private getKeys(key: Key): [string, string] {
     const legacy = this.getStorageKey(key);
-    return [`${CURRENT_STORAGE_MARKER}/${JSON.stringify([this.prefix, legacy])}`, legacy];
+    return [`${CURRENT_STORAGE_KEY_PREFIX}${JSON.stringify([this.prefix, legacy])}`, legacy];
+  }
+
+  /** 判断物理键是否为当前命名空间的 v2 私有键，用于在记录损坏时仍能按归属清理。 */
+  private isOwnedCurrentKey(storageKey: string): boolean {
+    if (!storageKey.startsWith(CURRENT_STORAGE_KEY_PREFIX)) return false;
+    try {
+      const parsed: unknown = JSON.parse(storageKey.slice(CURRENT_STORAGE_KEY_PREFIX.length));
+      return (
+        Array.isArray(parsed) &&
+        parsed.length === 2 &&
+        parsed[0] === this.prefix &&
+        typeof parsed[1] === "string"
+      );
+    } catch {
+      return false;
+    }
   }
 
   /** 识别给定版本与命名空间的有效记录，其他格式按未命中处理。 */
@@ -102,6 +127,19 @@ export class StorageUtils<Key extends string = string> {
   /** 删除前重新检查所有权，保留占用同一物理键的业务数据。 */
   private removeOwned(key: string, marker: StorageRecord["marker"]): void {
     if (this.ownedRecord(this.storage.getItem(key), marker)) this.storage.removeItem(key);
+  }
+
+  /** 删除当前业务键的 v2 私有键：允许清理本命名空间记录与损坏内容，保留其他合法记录。 */
+  private removeCurrent(key: string): void {
+    const value = this.storage.getItem(key);
+    if (value === null) return;
+    const record = parseStorageRecord(value);
+    if (
+      record === null ||
+      (record.marker === CURRENT_STORAGE_MARKER && record.prefix === this.prefix)
+    ) {
+      this.storage.removeItem(key);
+    }
   }
 
   /** 优先读取新键，再兼容所属旧记录；过期时同时清理两种格式。 */
@@ -122,7 +160,7 @@ export class StorageUtils<Key extends string = string> {
   remove(key: Key): void {
     const [current, legacy] = this.getKeys(key);
     this.removeOwned(legacy, STORAGE_RECORD_MARKER);
-    this.removeOwned(current, CURRENT_STORAGE_MARKER);
+    this.removeCurrent(current);
   }
 
   /**
@@ -139,7 +177,8 @@ export class StorageUtils<Key extends string = string> {
       }
 
       const record = parseStorageRecord(value);
-      if (record?.prefix === this.prefix) {
+      // 合法记录按 prefix 归属清理；损坏内容仅在属于当前命名空间的 v2 私有键时清理。
+      if (record !== null ? record.prefix === this.prefix : this.isOwnedCurrentKey(key)) {
         this.storage.removeItem(key);
       }
     }

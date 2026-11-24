@@ -73,4 +73,48 @@ describe("date/PlainDateTime", () => {
       PlainDateTime.toString({ day: 1, hour: 1, millisecond: 3, minute: 2, month: 1, year: 10000 }),
     ).toBe("+010000-01-01T01:02:00.003");
   });
+
+  it("拒绝非法 IANA 后缀和混用日期分隔符", () => {
+    expect(PlainDateTime.toString("2024-06-15T01:30:00+08:00[Asia/Shanghai]")).toBe(
+      "2024-06-14T17:30:00",
+    );
+    expect(() => PlainDateTime.from("2024-06-15T10:30:00Z[Mars/Phobos]")).toThrow(RangeError);
+    expect(() => PlainDateTime.from("2024/06-15T10:00:00")).toThrow(RangeError);
+    expect(() => PlainDateTime.from("2024-06/15T10:00:00Z")).toThrow(RangeError);
+  });
+
+  it("add 与 subtract 拒绝非对象或数组 duration 容器", () => {
+    const value = "2024-06-15T10:30:00";
+    for (const invalidDuration of [null, undefined, "1", 123, []]) {
+      expect(() => PlainDateTime.add(value, invalidDuration as never)).toThrow(RangeError);
+      expect(() => PlainDateTime.subtract(value, invalidDuration as never)).toThrow(RangeError);
+    }
+  });
+
+  it("大跨度 since 保持毫秒级精度且年月大安全整数抵消不丢位", () => {
+    const max = new Date(8_640_000_000_000_000);
+    const almostMin = new Date(-8_639_999_999_999_999);
+    expect(PlainDateTime.since(max, almostMin)).toEqual({
+      days: 199_999_999,
+      hours: 23,
+      milliseconds: 999,
+      minutes: 59,
+      seconds: 59,
+    });
+    expect(PlainDateTime.since(almostMin, max)).toEqual({
+      days: -199_999_999,
+      hours: -23,
+      milliseconds: -999,
+      minutes: -59,
+      seconds: -59,
+    });
+    expect(
+      PlainDateTime.toString(
+        PlainDateTime.add("2024-02-01T12:00:00", {
+          months: -9_007_199_254_740_984,
+          years: 750_599_937_895_082,
+        }),
+      ),
+    ).toBe("2024-02-01T12:00:00");
+  });
 });

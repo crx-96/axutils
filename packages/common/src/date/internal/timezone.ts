@@ -3,7 +3,7 @@ import { enUS } from "date-fns/locale/en-US";
 import { fromZonedTime } from "date-fns-tz";
 import { MS_PER_MINUTE } from "../constant.js";
 import { DATE_FORMAT, type Timezone } from "../format.js";
-import { createUtcDate } from "./calendar.js";
+import { type UtcDateFields, createUtcDate, dateToUtcFields } from "./calendar.js";
 import { invalid, toEpochMilliseconds } from "./validation.js";
 
 /** 模块加载时捕获的宿主默认 IANA 时区。 */
@@ -57,9 +57,9 @@ export function getTimezone(timezone?: string): Timezone {
   return assertTimezone(timezone ?? LOCAL_TIMEZONE);
 }
 
-/** 把绝对时间点投影为 UTC 对齐的墙上字段，毫秒直接取自原时刻。 */
-export function zonedWallDate(date: Date, timezone: string): Date {
-  if (timezone === "UTC") return new Date(date.getTime());
+/** 提取绝对时间点在目标时区的墙上日历与时间字段，不构造合并 Date 以兼容极限边界。 */
+export function zonedWallFields(date: Date, timezone: string): UtcDateFields {
+  if (timezone === "UTC") return dateToUtcFields(date);
   // 直接从目标时区读取，避免经宿主本地 Date 构造而跨越 DST 空档或跳日。
   const parts = Object.fromEntries(
     zonedFormatter(timezone)
@@ -67,14 +67,29 @@ export function zonedWallDate(date: Date, timezone: string): Date {
       .map(({ type, value }) => [type, value]),
   );
   const year = Number(parts.year);
+  return {
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    millisecond: date.getUTCMilliseconds(),
+    minute: Number(parts.minute),
+    month: Number(parts.month),
+    second: Number(parts.second),
+    year: parts.era === "BC" ? 1 - year : year,
+  };
+}
+
+/** 把绝对时间点投影为 UTC 对齐的墙上字段，毫秒直接取自原时刻。 */
+export function zonedWallDate(date: Date, timezone: string): Date {
+  if (timezone === "UTC") return new Date(date.getTime());
+  const fields = zonedWallFields(date, timezone);
   return createUtcDate(
-    parts.era === "BC" ? 1 - year : year,
-    Number(parts.month),
-    Number(parts.day),
-    Number(parts.hour),
-    Number(parts.minute),
-    Number(parts.second),
-    date.getUTCMilliseconds(),
+    fields.year,
+    fields.month,
+    fields.day,
+    fields.hour,
+    fields.minute,
+    fields.second,
+    fields.millisecond,
   );
 }
 

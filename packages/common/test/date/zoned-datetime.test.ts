@@ -154,4 +154,66 @@ describe("date/ZonedDateTime", () => {
     expect(() => ZonedDateTime.equals(value, valid)).toThrow(RangeError);
     expect(() => ZonedDateTime.withTimeZone(value, "Asia/Shanghai")).toThrow(RangeError);
   });
+
+  it("必填时区方法拒绝 undefined 而不回退本地时区，且拒绝混用分隔符", () => {
+    const valid = { epochMs: 0, timezone: "UTC" };
+    const missingTz = { epochMs: 0, timezone: undefined as never };
+    expect(() => ZonedDateTime.withTimeZone(valid, undefined as never)).toThrow(RangeError);
+    expect(() => ZonedDateTime.add(missingTz, { hours: 1 })).toThrow(RangeError);
+    expect(() => ZonedDateTime.subtract(missingTz, { hours: 1 })).toThrow(RangeError);
+    expect(() => ZonedDateTime.from("2024/06-15T10:00:00")).toThrow(RangeError);
+    expect(() => ZonedDateTime.from("2024-06/15T10:00:00Z")).toThrow(RangeError);
+  });
+
+  it("add 与 subtract 拒绝非对象或数组 duration 容器", () => {
+    const valid = { epochMs: 0, timezone: "UTC" };
+    for (const invalidDuration of [null, undefined, "1", 123, []]) {
+      expect(() => ZonedDateTime.add(valid, invalidDuration as never)).toThrow(RangeError);
+      expect(() => ZonedDateTime.subtract(valid, invalidDuration as never)).toThrow(RangeError);
+    }
+  });
+
+  it("大跨度 since 保持毫秒级精度且无 -0", () => {
+    const max = { epochMs: 8_640_000_000_000_000, timezone: "UTC" };
+    const almostMin = { epochMs: -8_639_999_999_999_999, timezone: "UTC" };
+    expect(ZonedDateTime.since(max, almostMin)).toEqual({
+      days: 199_999_999,
+      hours: 23,
+      milliseconds: 999,
+      minutes: 59,
+      seconds: 59,
+    });
+    expect(ZonedDateTime.since(almostMin, max)).toEqual({
+      days: -199_999_999,
+      hours: -23,
+      milliseconds: -999,
+      minutes: -59,
+      seconds: -59,
+    });
+  });
+
+  it("极限 epoch 在非 UTC 时区下正确提取 toPlainDate 与 toPlainTime", () => {
+    const maxTokyo = { epochMs: 8_640_000_000_000_000, timezone: "Asia/Tokyo" };
+    expect(ZonedDateTime.toPlainDate(maxTokyo).toISOString()).toBe("+275760-09-13T00:00:00.000Z");
+    expect(ZonedDateTime.toPlainTime(maxTokyo).toISOString()).toBe("1970-01-01T09:00:00.000Z");
+
+    const maxNewYork = { epochMs: 8_640_000_000_000_000, timezone: "America/New_York" };
+    expect(ZonedDateTime.toPlainDate(maxNewYork).toISOString()).toBe("+275760-09-12T00:00:00.000Z");
+    expect(ZonedDateTime.toPlainTime(maxNewYork).toISOString()).toMatch(
+      /^1970-01-01T\d{2}:\d{2}:\d{2}\.000Z$/u,
+    );
+
+    const minTokyo = { epochMs: -8_640_000_000_000_000, timezone: "Asia/Tokyo" };
+    expect(ZonedDateTime.toPlainDate(minTokyo).toISOString()).toBe("-271821-04-20T00:00:00.000Z");
+    expect(ZonedDateTime.toPlainTime(minTokyo).toISOString()).toMatch(
+      /^1970-01-01T\d{2}:\d{2}:\d{2}\.000Z$/u,
+    );
+
+    const minNewYork = { epochMs: -8_640_000_000_000_000, timezone: "America/New_York" };
+    // -271821-04-19 早于 JS Date 最小可表示日期，但纯时间落在 1970-01-01 应正常提取。
+    expect(() => ZonedDateTime.toPlainDate(minNewYork)).toThrow(RangeError);
+    expect(ZonedDateTime.toPlainTime(minNewYork).toISOString()).toMatch(
+      /^1970-01-01T\d{2}:\d{2}:\d{2}\.000Z$/u,
+    );
+  });
 });

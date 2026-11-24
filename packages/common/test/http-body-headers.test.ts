@@ -145,6 +145,69 @@ describe.each(["Promise", "RxJS"])("%s HTTP 请求体重试与请求头快照", 
     expect(suppress).toHaveBeenCalledOnce();
     expect(method).toHaveBeenCalledTimes(2);
   });
+
+  it("展开 Common/GET/POST 等大小写分组并合并同类变体，同时保留屏蔽语义", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    instance.defaults.headers.common.Authorization = "default-token";
+    const http = client({ axiosInstance: instance });
+
+    const commonLower = { "X-Lower": "lower", "X-Shared": "lower" };
+    const commonUpper = { "X-Shared": "upper", "X-Upper": "upper" };
+    await resultOf(
+      http.get("/mixed-case", {
+        headers: {
+          Common: commonUpper,
+          common: commonLower,
+          GET: { "X-Get": "from-get" },
+          POST: { "X-Post": "from-post" },
+        } as never,
+      }),
+    );
+
+    const getSent = context.configs[0]?.headers;
+    expect(getSent?.get("X-Lower")).toBe("lower");
+    expect(getSent?.get("X-Upper")).toBe("upper");
+    expect(getSent?.get("X-Shared")).toBe("lower");
+    expect(getSent?.get("X-Get")).toBe("from-get");
+    expect(getSent?.get("X-Post")).toBeUndefined();
+    expect(getSent?.get("Authorization")).toBe("default-token");
+    expect(commonLower).toEqual({ "X-Lower": "lower", "X-Shared": "lower" });
+    expect(commonUpper).toEqual({ "X-Shared": "upper", "X-Upper": "upper" });
+
+    await resultOf(
+      http.post("/post-case", undefined, {
+        headers: {
+          Common: false,
+          GET: { "X-Get": "from-get" },
+          POST: { "X-Post": "from-post" },
+        } as never,
+      }),
+    );
+
+    const postSent = context.configs[1]?.headers;
+    expect(postSent?.get("Authorization")).toBeUndefined();
+    expect(postSent?.get("X-Post")).toBe("from-post");
+    expect(postSent?.get("X-Get")).toBeUndefined();
+  });
+
+  it("非对象分组值（如字符串）不会污染请求头产生数字索引字段", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    instance.defaults.headers.common["X-Default"] = "keep";
+    const http = client({ axiosInstance: instance });
+
+    await resultOf(
+      http.get("/primitive-group", {
+        headers: { common: "abc", "X-Flat": "ok" } as never,
+      }),
+    );
+
+    const sent = context.configs[0]?.headers;
+    expect(sent?.get("X-Flat")).toBe("ok");
+    expect(sent?.get("X-Default")).toBe("keep");
+    expect(sent?.get("0")).toBeUndefined();
+    expect(sent?.get("1")).toBeUndefined();
+    expect(sent?.get("2")).toBeUndefined();
+  });
 });
 
 it("仅检查可枚举数据及协议描述符，遇到可能产生流的 getter 时保留传输失败", () => {

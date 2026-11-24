@@ -11,15 +11,24 @@ export function commonJsDeclaration(source, filename) {
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     const value = token.value;
-    if (!/^["']\.{1,2}\//u.test(value)) continue;
+    // 纳入 "./"、"../" 及裸目录引用 "."、".."，避免相对目录导入静默漏检。
+    if (!/^["'](?:\.{1,2}\/|\.{1,2}["'])/u.test(value)) continue;
     const previous = tokens[index - 1]?.value;
+    const beforePrevious = tokens[index - 2]?.value;
+    // 识别 ESM 导入导出、动态 import 类型、declare module 声明扩展及 import = require 语法。
     const isModule =
       previous === "from" ||
       previous === "import" ||
-      (previous === "(" && tokens[index - 2]?.value === "import");
+      (previous === "module" && beforePrevious === "declare") ||
+      (previous === "(" && (beforePrevious === "import" || beforePrevious === "require"));
     if (!isModule) continue;
-    // 相对引用必须能解析到同批声明，不能生成消费时才报错的 .d.cts 文件。
+    // 相对引用必须能解析到同批产物或声明，不能生成消费时才报错的 .d.cts 文件。
     const specifier = value.slice(1, -1);
+    if (specifier.endsWith(".json")) {
+      const asset = resolve(dirname(filename), specifier);
+      if (!existsSync(asset)) throw new Error(`声明依赖不存在：${asset}`);
+      continue;
+    }
     if (!specifier.endsWith(".js")) {
       throw new Error(`${filename}: 声明的相对模块引用须显式使用 .js：${specifier}`);
     }

@@ -215,6 +215,34 @@ describe.each<ClientKind>(["Promise", "RxJS"])("%s HTTP 自定义转换", (kind)
     expect(headers.has("x-added")).toBe(false);
   });
 
+  it("支持跨包或跨 Realm 的 AxiosHeaders 返回值", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    class ForeignAxiosHeaders {
+      [key: string]: unknown;
+      constructor(entries: RawAxiosRequestHeaders) {
+        Object.assign(this, entries);
+      }
+      get [Symbol.toStringTag]() {
+        return "AxiosHeaders";
+      }
+      toJSON() {
+        return { ...this };
+      }
+    }
+    const client = createClient(kind, {
+      axiosInstance: instance,
+      transformHeaders: (input) =>
+        new ForeignAxiosHeaders({
+          ...input,
+          "X-Foreign": "ok",
+        }) as unknown as RawAxiosRequestHeaders,
+    });
+
+    await resultOf(client.get("/foreign-axios-headers", { headers: { "X-Origin": "req" } }));
+    expect(context.configs[0]?.headers.get("X-Foreign")).toBe("ok");
+    expect(context.configs[0]?.headers.get("X-Origin")).toBe("req");
+  });
+
   it.each([
     undefined,
     "same",

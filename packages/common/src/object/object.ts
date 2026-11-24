@@ -53,7 +53,8 @@ const isDateValue = (value: object): value is Date => {
 const regexpSourceGetter = Object.getOwnPropertyDescriptor(RegExp.prototype, "source")?.get;
 
 const isRegExpValue = (value: object): value is RegExp => {
-  if (typeof regexpSourceGetter !== "function") {
+  // ECMA-262 规定 RegExp.prototype 读取 source 返回 "(?:)" 而非抛错，需显式排除。
+  if (value === RegExp.prototype || typeof regexpSourceGetter !== "function") {
     return false;
   }
 
@@ -83,6 +84,32 @@ const isSetValue = (value: object): value is Set<unknown> => {
   }
 };
 
+/** 匹配跨 Realm 原生 `Object` 构造器源码，避免依赖易被修改的 `name` 或标签。 */
+const nativeObjectConstructorPattern =
+  /^\s*function\s+Object\s*\(\s*\)\s*\{\s*\[native code\]\s*\}\s*$/u;
+
+/**
+ * 识别其他 Realm 的内建 `Object.prototype`。
+ *
+ * `class extends null` 与 `Object.create(Object.create(null))` 的原型链同样以 `null` 终止，
+ * 不能仅凭 `parent === null` 判定为跨 Realm 普通对象；这里通过只读描述符与原生构造器源码
+ * 特征区分真正的跨 Realm `Object.prototype`，且不触发属性 getter。
+ */
+const isForeignObjectPrototype = (prototype: object): boolean => {
+  const ctor: unknown = Object.getOwnPropertyDescriptor(prototype, "constructor")?.value;
+  if (typeof ctor !== "function") {
+    return false;
+  }
+  if (Object.getOwnPropertyDescriptor(ctor, "prototype")?.value !== prototype) {
+    return false;
+  }
+  try {
+    return nativeObjectConstructorPattern.test(Function.prototype.toString.call(ctor));
+  } catch {
+    return false;
+  }
+};
+
 /**
  * 按原型链确定复制策略：普通根原型允许复制字面量，其他原型需要内部槽确认，
  * 具备派生构造器的实例则原样保留。分类只检查原型及描述符，不读取源对象的标签。
@@ -91,7 +118,9 @@ const classifyPrototype = (prototype: object | null): "plain" | "checkSlots" | "
   if (prototype === null || prototype === Object.prototype) return "plain";
   let current = prototype;
   let parent: object | null = Object.getPrototypeOf(current);
-  if (parent === null) return "plain"; // 其他 Realm 的字面量也直接继承链根。
+  if (parent === null) {
+    return isForeignObjectPrototype(prototype) ? "plain" : "checkSlots";
+  }
 
   let visited: Set<object> | undefined;
   while (parent !== Object.prototype) {

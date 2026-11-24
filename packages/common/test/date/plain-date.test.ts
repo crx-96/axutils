@@ -94,4 +94,53 @@ describe("date/PlainDate", () => {
     expect(PlainDate.toString({ day: 1, month: 1, year: -1 })).toBe("-000001-01-01");
     expect(PlainDate.toString({ day: 1, month: 1, year: 10000 })).toBe("+010000-01-01");
   });
+
+  it("带偏移日期时间按 UTC 归一化并校验 IANA 后缀与分隔符一致性", () => {
+    expect(PlainDate.toString("2024-06-15T01:00:00+08:00")).toBe("2024-06-14");
+    expect(PlainDate.toString("2024-06-15T23:00:00-05:00")).toBe("2024-06-16");
+    expect(PlainDate.toString("2024-06-15T01:00:00+08:00[Asia/Shanghai]")).toBe("2024-06-14");
+    expect(() => PlainDate.from("2024-06-15T10:00:00Z[Mars/Phobos]")).toThrow(RangeError);
+    expect(() => PlainDate.from("2024-06-15T10:00:00[Mars/Phobos]")).toThrow(RangeError);
+    expect(() => PlainDate.from("2024-06/15")).toThrow(RangeError);
+    expect(() => PlainDate.from("2024/06-15")).toThrow(RangeError);
+    expect(() => PlainDate.from("2024/06-15T10:00:00")).toThrow(RangeError);
+    expect(() => PlainDate.from("2024-06/15T10:00:00Z")).toThrow(RangeError);
+  });
+
+  it("add 与 subtract 拒绝非对象或数组 duration 容器", () => {
+    for (const invalidDuration of [null, undefined, "1", 123, []]) {
+      expect(() => PlainDate.add("2024-06-15", invalidDuration as never)).toThrow(RangeError);
+      expect(() => PlainDate.subtract("2024-06-15", invalidDuration as never)).toThrow(RangeError);
+    }
+  });
+
+  it("isBetween 始终校验全部三个输入且对对象 getter 仅读取一次", () => {
+    expect(() => PlainDate.isBetween("2024-01-01", "2024-06-01", "invalid")).toThrow(RangeError);
+    let reads = 0;
+    const target = {
+      day: 15,
+      month: 6,
+      get year() {
+        reads += 1;
+        return 2024;
+      },
+    };
+    expect(PlainDate.isBetween(target, "2024-06-01", "2024-06-30")).toBe(true);
+    expect(reads).toBe(1);
+  });
+
+  it("年月大安全整数抵消不丢精度并拒绝非安全超大整数", () => {
+    expect(
+      PlainDate.toString(
+        PlainDate.add("2024-02-01", {
+          months: -9_007_199_254_740_984,
+          years: 750_599_937_895_082,
+        }),
+      ),
+    ).toBe("2024-02-01");
+    expect(() => PlainDate.add("2024-02-01", { years: Number.MAX_VALUE })).toThrow(RangeError);
+    expect(() => PlainDate.add("2024-02-01", { months: Number.MAX_SAFE_INTEGER + 1 })).toThrow(
+      RangeError,
+    );
+  });
 });

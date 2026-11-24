@@ -139,7 +139,7 @@ const skipQuotedLiteral = (source: string, start: number): number => {
 
 /** 参数默认值中允许开始正则字面量的常见标点与关键字。 */
 const regexpPrefixes = new Set([
-  ..."=([{,:;!&|?~*%^<>",
+  ..."=([{,:;!&|?~*%^<>+-/",
   "...",
   "return",
   "throw",
@@ -147,14 +147,29 @@ const regexpPrefixes = new Set([
   "delete",
   "void",
   "typeof",
-  "yield",
-  "await",
+  "in",
+  "instanceof",
+  "of",
+  "else",
+  "do",
+  "new",
 ]);
 
+/** 判断前驱词法单元之后出现的 `/` 是否应按正则字面量起点尝试扫描。 */
+const canStartRegexpAfter = (
+  previousToken: string,
+  allowAwait: boolean,
+  allowYield: boolean,
+): boolean =>
+  regexpPrefixes.has(previousToken) ||
+  (allowAwait && previousToken === "await") ||
+  (allowYield && previousToken === "yield");
+
 /**
- * 跳过正则字面量及其字符类；调用方先保证当前位置确实是正则起始斜杠。
+ * 跳过正则字面量及其字符类；调用方先保证当前位置可能是正则起始斜杠。
+ * 遇到未闭合字面量或行终结符时返回 `undefined`，让调用方回退为除法运算符。
  */
-const skipRegularExpressionLiteral = (source: string, start: number): number => {
+const skipRegularExpressionLiteral = (source: string, start: number): number | undefined => {
   let index = start + 1;
   /** 字符类中的斜杠不会结束正则字面量。 */
   let inCharacterClass = false;
@@ -162,10 +177,17 @@ const skipRegularExpressionLiteral = (source: string, start: number): number => 
   while (index < source.length) {
     const char = source[index];
 
-    // 转义字符整体跳过，不能让转义的方括号或斜杠改变扫描状态。
+    // 正则字面量及反斜杠转义均不允许跨行；到达末尾或换行说明不是合法正则。
     if (char === "\\") {
+      const escaped = source[index + 1];
+      if (escaped === undefined || /[\n\r\u2028\u2029]/u.test(escaped)) {
+        return undefined;
+      }
       index += 2;
       continue;
+    }
+    if (/[\n\r\u2028\u2029]/u.test(char ?? "")) {
+      return undefined;
     }
     // 离开字符类后遇到斜杠才结束模式，并继续消耗其 ASCII 修饰符。
     if (char === "[") {
@@ -182,64 +204,299 @@ const skipRegularExpressionLiteral = (source: string, start: number): number => 
     index += 1;
   }
 
-  return index;
+  return undefined;
 };
+
+/** 嵌套函数或方法体的 `await`/`yield` 运算符作用域权限。 */
+interface FunctionBodyScope {
+  /** 是否处于允许 `await` 作为前缀运算符的异步函数体内。 */
+  allowAwait: boolean;
+  /** 是否处于允许 `yield` 作为前缀运算符的生成器函数体内。 */
+  allowYield: boolean;
+}
+
+/** 括号或简写箭头作用域的嵌套状态，用于判断嵌套函数体内的 `await`/`yield` 语义。 */
+interface ScanScope {
+  /** 当前作用域内 `await` 是否作为前缀运算符（顶层箭头参数为 `false`）。 */
+  allowAwait: boolean;
+  /** 当前作用域内 `yield` 是否作为前缀运算符（顶层箭头参数为 `false`）。 */
+  allowYield: boolean;
+  /** 若本作用域为 `(`，记录其是否带有前置 `async` 修饰符。 */
+  arrowAsyncForParens: boolean;
+  /** 刚读取到独立 `async` 标识符，等待后续 `function`、`*`、`(` 或参数名。 */
+  asyncCandidate: boolean;
+  /** 刚读取到 `async <ident>`，等待 `=>` 或方法 `(`。 */
+  asyncIdentifierPending: boolean;
+  /** 若本作用域为 `(`，记录其闭合后紧随 `{` 函数体应使用的权限。 */
+  bodyScopeForCall: FunctionBodyScope | undefined;
+  /** 已读取 `function` 或对象生成器方法 `*` 头部，等待参数列表 `(`。 */
+  functionHeader: FunctionBodyScope | undefined;
+  /** 当前作用域分隔符；`"arrow"` 表示无花括号的简写箭头体。 */
+  kind: "(" | "[" | "{" | "arrow";
+  /** 刚闭合的箭头参数 `(...)` 是否带有 `async` 前缀。 */
+  pendingAsyncArrow: boolean;
+  /** 函数参数列表或 `=>` 之后等待进入 `{` 函数体的作用域权限。 */
+  pendingBodyScope: FunctionBodyScope | undefined;
+  /** 对象/类字面量内刚读取到同步方法名，等待 `(`。 */
+  syncMethodCandidate: boolean;
+}
+
+/** 创建作用域扫描帧。 */
+const createScope = (
+  kind: ScanScope["kind"],
+  allowAwait: boolean,
+  allowYield: boolean,
+): ScanScope => ({
+  allowAwait,
+  allowYield,
+  arrowAsyncForParens: false,
+  asyncCandidate: false,
+  asyncIdentifierPending: false,
+  bodyScopeForCall: undefined,
+  functionHeader: undefined,
+  kind,
+  pendingAsyncArrow: false,
+  pendingBodyScope: undefined,
+  syncMethodCandidate: false,
+});
+
+/** 清除当前作用域上尚未消费的函数/箭头头部候选标记。 */
+const clearPendingHeaders = (scope: ScanScope): void => {
+  scope.asyncCandidate = false;
+  scope.asyncIdentifierPending = false;
+  scope.functionHeader = undefined;
+  scope.pendingAsyncArrow = false;
+  scope.pendingBodyScope = undefined;
+  scope.syncMethodCandidate = false;
+};
+
+/** 不能作为对象/类方法头部的带括号语句关键字，避免把 `if (...) { ... }` 误判为同步方法。 */
+const statementHeaderKeywords = new Set(["if", "for", "while", "with", "switch", "catch"]);
+
+/** 判定括号作用域内当前标识符之前是否位于对象/类成员声明起点。 */
+const canStartMethodMember = (scope: ScanScope, previousToken: string, word: string): boolean =>
+  scope.kind === "{" &&
+  !statementHeaderKeywords.has(word) &&
+  (previousToken === "{" ||
+    previousToken === "," ||
+    previousToken === ";" ||
+    previousToken === "static" ||
+    previousToken === "get" ||
+    previousToken === "set");
 
 /**
  * 从参数列表的 ( 或模板插值的 { 开始，返回配对结束符之后的下标。
  * 空白和注释保留前一词法单元的含义，字面量内部的括号不参与计数。未闭合时返回源码末尾。
  */
-const skipBalancedExpression = (source: string, start: number, open: "(" | "{"): number => {
+const skipBalancedExpression = (
+  source: string,
+  start: number,
+  open: "(" | "{",
+  initialAllowAwait = false,
+  initialAllowYield = false,
+): number => {
   const close = open === "(" ? ")" : "}";
   let index = start + 1;
-  let depth = 1;
+  let openDepth = 1;
   // 空字符串代表已经读完的值（包括成员名），随后的斜杠是除法。
   let previousToken: string = open;
+  const scopes: ScanScope[] = [createScope(open, initialAllowAwait, initialAllowYield)];
 
   while (index < source.length) {
     index = skipWhitespaceAndComments(source, index);
     const char = source[index];
     if (char === undefined) break;
 
+    const top = scopes[scopes.length - 1] ?? createScope(open, false, false);
+
     // 跳过完整字面量，包括嵌套的模板插值。
     if (char === "'" || char === '"') {
+      clearPendingHeaders(top);
       index = skipQuotedLiteral(source, index);
       previousToken = "";
       continue;
     }
     if (char === "`") {
-      index = skipTemplateLiteral(source, index);
+      clearPendingHeaders(top);
+      index = skipTemplateLiteral(source, index, top.allowAwait, top.allowYield);
       previousToken = "";
       continue;
     }
-    if (char === "/" && regexpPrefixes.has(previousToken)) {
-      index = skipRegularExpressionLiteral(source, index);
-      previousToken = "";
+    if (char === "/" && canStartRegexpAfter(previousToken, top.allowAwait, top.allowYield)) {
+      const regexpEnd = skipRegularExpressionLiteral(source, index);
+      if (regexpEnd !== undefined) {
+        clearPendingHeaders(top);
+        index = regexpEnd;
+        previousToken = "";
+        continue;
+      }
+    }
+
+    // 区分自增/自减与一元/二元 +/-，避免把 x++ / 2 误判为正则起点。
+    if ((char === "+" || char === "-") && source[index + 1] === char) {
+      clearPendingHeaders(top);
+      previousToken = `${char}${char}`;
+      index += 2;
+      continue;
+    }
+
+    // 箭头运算符会切入嵌套箭头函数体；同步箭头重置 await/yield，异步箭头仅启用 await。
+    if (char === "=" && source[index + 1] === ">") {
+      const isAsyncArrow = top.pendingAsyncArrow || top.asyncIdentifierPending;
+      clearPendingHeaders(top);
+      const afterArrow = skipWhitespaceAndComments(source, index + 2);
+      if (source[afterArrow] === "{") {
+        top.pendingBodyScope = { allowAwait: isAsyncArrow, allowYield: false };
+      } else {
+        scopes.push(createScope("arrow", isAsyncArrow, false));
+      }
+      previousToken = ">";
+      index += 2;
       continue;
     }
 
     // 点号（包括可选链）和私有字段前缀后的标识符是成员名，即使拼写与关键字相同。
     const end = readIdentifierEnd(source, index);
     if (end !== undefined) {
-      previousToken =
-        previousToken === "." || previousToken === "#" ? "" : source.slice(index, end);
+      if (previousToken === "." || previousToken === "#") {
+        clearPendingHeaders(top);
+        previousToken = "";
+        index = end;
+        continue;
+      }
+
+      const word = source.slice(index, end);
+      if (word === "async") {
+        clearPendingHeaders(top);
+        top.asyncCandidate = true;
+      } else if (word === "function") {
+        const allowAwait = top.asyncCandidate;
+        clearPendingHeaders(top);
+        top.functionHeader = { allowAwait, allowYield: false };
+      } else if (top.functionHeader !== undefined) {
+        // 函数名或生成器方法名位于头部与参数列表之间，保留函数体权限等待 `(`。
+        top.asyncCandidate = false;
+        top.asyncIdentifierPending = false;
+        top.pendingAsyncArrow = false;
+        top.pendingBodyScope = undefined;
+        top.syncMethodCandidate = false;
+      } else if (top.asyncCandidate) {
+        clearPendingHeaders(top);
+        top.asyncIdentifierPending = true;
+      } else {
+        const isSyncMethod = canStartMethodMember(top, previousToken, word);
+        clearPendingHeaders(top);
+        top.syncMethodCandidate = isSyncMethod;
+      }
+      previousToken = word;
       index = end;
       continue;
     }
+
+    // 生成器 `*` 可能出现在 `function*` 或对象/类方法 `*name()`/`async *name()` 头部。
+    if (char === "*") {
+      if (top.functionHeader !== undefined) {
+        top.functionHeader.allowYield = true;
+      } else if (top.asyncCandidate || canStartMethodMember(top, previousToken, "*")) {
+        const allowAwait = top.asyncCandidate;
+        clearPendingHeaders(top);
+        top.functionHeader = { allowAwait, allowYield: true };
+      } else {
+        clearPendingHeaders(top);
+      }
+      previousToken = "*";
+      index += 1;
+      continue;
+    }
+
     // 展开运算符由三个点组成，其后仍是表达式的起始位置。
     if (char === "." && source.startsWith("...", index)) {
+      clearPendingHeaders(top);
       previousToken = "...";
       index += 3;
       continue;
     }
 
-    // 仅累计所需的分隔符，遇到与起点配对的结束符就交还外层。
-    if (char === open) {
-      depth += 1;
-    } else if (char === close) {
-      depth -= 1;
-      if (depth === 0) return index + 1;
+    if (char === "(" || char === "[" || char === "{") {
+      if (char === "(") {
+        const bodyScope =
+          top.functionHeader ??
+          (top.asyncIdentifierPending
+            ? { allowAwait: true, allowYield: false }
+            : top.syncMethodCandidate
+              ? { allowAwait: false, allowYield: false }
+              : undefined);
+        const arrowAsync = top.asyncCandidate;
+        clearPendingHeaders(top);
+        const child = createScope("(", top.allowAwait, top.allowYield);
+        child.bodyScopeForCall = bodyScope;
+        child.arrowAsyncForParens = arrowAsync;
+        scopes.push(child);
+      } else if (char === "[") {
+        clearPendingHeaders(top);
+        scopes.push(createScope("[", top.allowAwait, top.allowYield));
+      } else {
+        const bodyScope = top.pendingBodyScope;
+        clearPendingHeaders(top);
+        scopes.push(
+          createScope(
+            "{",
+            bodyScope ? bodyScope.allowAwait : top.allowAwait,
+            bodyScope ? bodyScope.allowYield : top.allowYield,
+          ),
+        );
+      }
+      if (char === open) {
+        openDepth += 1;
+      }
+      previousToken = char;
+      index += 1;
+      continue;
     }
+
+    // 逗号与分号会结束当前简写箭头表达式体。
+    if (char === "," || char === ";") {
+      while (scopes.length > 1 && scopes[scopes.length - 1]?.kind === "arrow") {
+        scopes.pop();
+      }
+      const active = scopes[scopes.length - 1];
+      if (active !== undefined) {
+        clearPendingHeaders(active);
+      }
+      previousToken = char;
+      index += 1;
+      continue;
+    }
+
+    if (char === ")" || char === "]" || char === "}") {
+      while (scopes.length > 1 && scopes[scopes.length - 1]?.kind === "arrow") {
+        scopes.pop();
+      }
+      if (char === close) {
+        openDepth -= 1;
+        if (openDepth === 0) return index + 1;
+      }
+      const expectedOpen = char === ")" ? "(" : char === "]" ? "[" : "{";
+      const current = scopes[scopes.length - 1];
+      if (scopes.length > 1 && current?.kind === expectedOpen) {
+        const closed = scopes.pop();
+        const parent = scopes[scopes.length - 1];
+        if (parent !== undefined) {
+          clearPendingHeaders(parent);
+          if (char === ")" && closed !== undefined) {
+            parent.pendingBodyScope = closed.bodyScopeForCall;
+            parent.pendingAsyncArrow = closed.arrowAsyncForParens;
+          }
+        }
+      } else if (current !== undefined) {
+        clearPendingHeaders(current);
+      }
+      previousToken = char;
+      index += 1;
+      continue;
+    }
+
+    clearPendingHeaders(top);
     previousToken = char;
     index += 1;
   }
@@ -249,7 +506,12 @@ const skipBalancedExpression = (source: string, start: number, open: "(" | "{"):
 /**
  * 跳过模板字面量及其插值；模板中的字符不会参与外层参数括号计数。
  */
-const skipTemplateLiteral = (source: string, start: number): number => {
+const skipTemplateLiteral = (
+  source: string,
+  start: number,
+  allowAwait = false,
+  allowYield = false,
+): number => {
   let index = start + 1;
 
   while (index < source.length) {
@@ -265,7 +527,7 @@ const skipTemplateLiteral = (source: string, start: number): number => {
       return index + 1;
     }
     if (char === "$" && source[index + 1] === "{") {
-      index = skipBalancedExpression(source, index + 1, "{");
+      index = skipBalancedExpression(source, index + 1, "{", allowAwait, allowYield);
       continue;
     }
     index += 1;

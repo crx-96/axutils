@@ -247,6 +247,34 @@ describe("type", () => {
     "\\u{00000061} => \\u{00000061}",
     "async值 => async值",
     "async𐐀 => async𐐀",
+    "(x = 1 + /[)]/.source.length) => x",
+    "(x = 1 - /[)]/.source.length) => x",
+    "(x = +/[)]/.test(')')) => x",
+    "(x = 1 / /[)]/.source.length) => x",
+    "(x = 1, y = x++ / 2) => y",
+    "(x = 1, y = x-- / 2) => y",
+    "(x = 'source' in /[)]/) => x",
+    "(x = {} instanceof /[)]/.constructor) => x",
+    "(x = (() => { for (const c of /[)]/.source) return c; })()) => x",
+    "(x = (() => { if (false) ; else /[)]/.test(')'); })()) => x",
+    "(x = (() => { do /[)]/.test(')'); while (false); })()) => x",
+    "(x = new /[)]/.constructor('a')) => x",
+    "(await, x = await / 2) => x",
+    "(yield, x = yield / 2) => x",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 保留待识别源码中的模板插值。
+    "(await, x = `${await / 2}`) => x",
+    "(await, a = (await / 2), b = await / 3) => a + b",
+    "(yield, a = (yield / 2), b = yield / 3) => a + b",
+    "(of, x = of / 2) => x",
+    "(of, x = of / 2\n) => x",
+    "(x = async () => await /[)]/.test(')')) => x",
+    "(x = async () => { if (true) return await /[)]/.test(')'); }) => x",
+    "(x = async function () { return await /[)]/.test(')'); }) => x",
+    "(x = function* () { yield /[)]/.test(')'); }) => x",
+    "(x = { *m() { yield /[)]/.test(')'); } }) => x",
+    "(x = { async m() { await /[)]/.test(')'); } }) => x",
+    "(await, x = async () => { return () => await / 2; }) => x",
+    "(await, x = async () => ({ m() { return await / 2; } })) => x",
   ])("识别原始同步箭头源码 %s", (source) => {
     const candidate: unknown = new Function(`return (${source});`)();
 
@@ -260,6 +288,8 @@ describe("type", () => {
     "async 值 => 值",
     "async 𐐀 => 𐐀",
     "async \\u503c => \\u503c",
+    "async (x = 1 + /[)]/.source.length) => x",
+    "async (x = 1 / /[)]/.source.length) => x",
   ])("识别原始 Unicode 异步箭头源码 %s", (source) => {
     const candidate: unknown = new Function(`return (${source});`)();
 

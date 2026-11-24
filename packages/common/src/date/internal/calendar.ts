@@ -1,7 +1,7 @@
-import { assertInteger, invalid } from "./validation.js";
+import { assertInteger, assertSafeInteger, invalid } from "./validation.js";
 
 /** UTC 对齐日期的完整字段；用于在纯值转换和日历运算间传递已校验的值。 */
-interface UtcDateFields {
+export interface UtcDateFields {
   /** ISO 年份，保留公元 0 年及负年份。 */
   year: number;
   /** 月份，范围 1–12。 */
@@ -112,15 +112,20 @@ export function daysInGregorianMonth(year: number, month: number): number {
   return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
 }
 
-/** 合并年月偏移后计算目标月份；月末夹紧到目标月最后一天，保留所有时间字段。 */
+/** 合并年月偏移后计算目标月份；用 BigInt 避免大安全整数中间态丢位，月末夹紧到目标月最后一天。 */
 export function addYearMonths(date: Date, years = 0, months = 0): Date {
-  assertInteger(years, "years");
-  assertInteger(months, "months");
+  assertSafeInteger(years, "years");
+  assertSafeInteger(months, "months");
   const fields = dateToUtcFields(date);
-  // 以连续月份索引处理跨年和负偏移，再还原为一基月份。
-  const monthIndex = fields.year * 12 + (fields.month - 1) + years * 12 + months;
-  const targetYear = Math.floor(monthIndex / 12);
-  const targetMonth = (((monthIndex % 12) + 12) % 12) + 1;
+  // 以连续月份索引在 BigInt 下处理跨年、负偏移与大数抵消，再按欧几里得除法还原为一基月份。
+  const monthIndex =
+    BigInt(fields.year) * 12n + BigInt(fields.month - 1) + BigInt(years) * 12n + BigInt(months);
+  const remainder = ((monthIndex % 12n) + 12n) % 12n;
+  const targetYear = Number((monthIndex - remainder) / 12n);
+  if (!Number.isSafeInteger(targetYear)) {
+    invalid("日期字段超出范围");
+  }
+  const targetMonth = Number(remainder) + 1;
   const lastDay = daysInGregorianMonth(targetYear, targetMonth);
   return createUtcDate(
     targetYear,

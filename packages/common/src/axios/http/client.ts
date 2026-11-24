@@ -158,8 +158,14 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
     });
 
     const transform = this.transformResponse;
-    // 转换属于当前调用方，并且位于网络重试之外；Promise 返回值按标准规则展开。
-    const transformed = transform === undefined ? operation : operation.then(transform);
+    // 转换属于当前调用方，并且位于网络重试之外；进入转换前再次检查取消，避免响应解析后的微任务窗口仍执行回调。
+    const transformed =
+      transform === undefined
+        ? operation
+        : operation.then((result) => {
+            throwIfAborted(input.signal);
+            return transform(result);
+          });
     // O 保留构造时处理函数是否存在及其返回类型，运行时分支与该条件类型一致。
     return raceWithSignal(transformed, input.signal).catch((error: unknown) => {
       throw error instanceof PromiseHttpRequestError ? error : toPromiseHttpRequestError(error);
@@ -265,7 +271,8 @@ export class PromiseHttpClient<O extends PromiseHttpClientOptions | undefined = 
       try {
         const partial = await Promise.resolve(this.configFactory?.());
         assertObject(partial, "异步 HTTP 配置必须是对象");
-        return normalizeConfig({ ...this.baseConfig, ...partial });
+        // 过滤显式 undefined 键与无关字段，避免覆盖构造期已传入的同步选项。
+        return normalizeConfig({ ...this.baseConfig, ...getConfigOptions(partial) });
       } catch (error) {
         // 配置初始化属于整个客户端，等待间隔不绑定任何单次请求的 signal。
         if (isCancellationError(error)) throw error;
