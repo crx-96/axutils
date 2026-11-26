@@ -192,6 +192,71 @@ describe.each(["Promise", "RxJS"])("%s HTTP 请求体重试与请求头快照", 
     expect(postSent?.get("X-Get")).toBeUndefined();
   });
 
+  it("扩展方法分组不遮盖同名请求头，显式值仍可覆盖或屏蔽默认头", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    instance.defaults.headers.common.Link = "</default>";
+    const http = client({ axiosInstance: instance });
+
+    await resultOf(
+      http.get("/group", { headers: { LINK: new AxiosHeaders({ "X-Link": "group" }) } }),
+    );
+    await resultOf(
+      http.get("/literal", { headers: { Link: false, Purge: ["a", "b"], Unlink: "</old>" } }),
+    );
+
+    const [group, literal] = context.configs;
+    expect(group?.headers.get("Link")).toBe("</default>");
+    expect(group?.headers.has("X-Link")).toBe(false);
+    expect(literal?.headers.toJSON()).not.toHaveProperty("link");
+    expect(literal?.headers.get("Link")).toBe(false);
+    expect(literal?.headers.get("Purge")).toEqual(["a", "b"]);
+    expect(literal?.headers.get("Unlink")).toBe("</old>");
+  });
+
+  it("转换回调返回的方法分组不会覆盖默认 Link，字面值仍可发送", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    instance.defaults.headers.common.Link = "</default>";
+    const http = client({
+      axiosInstance: instance,
+      transformHeaders: () => ({
+        LINK: new AxiosHeaders({ "X-Member": "group" }),
+        Purge: Object.create(null),
+        Unlink: "</old>",
+      }),
+    });
+    await resultOf(http.get("/transformed"));
+    const sent = context.configs[0]?.headers;
+    expect(sent?.get("Link")).toBe("</default>");
+    expect(sent?.has("Purge")).toBe(false);
+    expect(sent?.get("Unlink")).toBe("</old>");
+  });
+
+  it("扩展方法同名的 URL 对象沿用 Axios 字符串化", async () => {
+    const { context, instance } = createAxiosInstance((config) => response(config));
+    const url = new URL("/asset", "https://example.test");
+    await resultOf(
+      client({ axiosInstance: instance }).get("/literal", { headers: { Link: url } as never }),
+    );
+    expect(context.configs[0]?.headers.get("Link")).toBe(url.href);
+  });
+
+  it("重试期间增加不同大小写的默认分组仍保留首次请求头", async () => {
+    const { context, instance } = createAxiosInstance((config, attempt) => {
+      if (attempt.calls === 1) {
+        instance.defaults.headers.Link = new AxiosHeaders();
+        instance.defaults.headers.LINK = new AxiosHeaders();
+        return response(config, null, 503);
+      }
+      return response(config);
+    });
+    const http = client({ axiosInstance: instance, retryCount: 2, retryDelay: 0 });
+    await resultOf(http.get("/retry", { headers: new AxiosHeaders({ link: "</fixed>" }) }));
+    expect(context.configs.map(({ headers }) => headers.get("Link"))).toEqual([
+      "</fixed>",
+      "</fixed>",
+    ]);
+  });
+
   it("非对象分组值（如字符串）不会污染请求头产生数字索引字段", async () => {
     const { context, instance } = createAxiosInstance((config) => response(config));
     instance.defaults.headers.common["X-Default"] = "keep";

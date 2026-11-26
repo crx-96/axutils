@@ -7,6 +7,9 @@ interface Echo {
   query: Record<string, string>;
   body: string;
   header?: string;
+  link?: string;
+  purge?: string;
+  unlink?: string;
 }
 
 // 两种产物使用相同行为断言，但通过独立 HTML 加载 ESM bundle / UMD 全局。
@@ -118,12 +121,13 @@ for (const format of ["esm", "umd"] as const) {
       await page.waitForFunction(() => typeof window.AxutilsTest !== "undefined");
       const readStorage = () => {
         const { StorageUtils } = window.AxutilsTest;
+        const local = new StorageUtils({ prefix: "browser:", type: "local" });
+        const session = new StorageUtils({ prefix: "browser:", type: "session" });
         return {
-          local: new StorageUtils({ prefix: "browser:", type: "local" }).get("value"),
-          // 直接读取 Web Storage，避免内存降级路径意外通过浏览器测试。
-          localKey: localStorage.length > 0,
-          session: new StorageUtils({ prefix: "browser:", type: "session" }).get("value"),
-          sessionKey: sessionStorage.length > 0,
+          local: local.get("value"),
+          localKey: localStorage.getItem(local.getPhysicalKeys("value")[0]) !== null,
+          session: session.get("value"),
+          sessionKey: sessionStorage.getItem(session.getPhysicalKeys("value")[0]) !== null,
         };
       };
       expect(await page.evaluate(readStorage)).toEqual({
@@ -262,11 +266,15 @@ for (const format of ["esm", "umd"] as const) {
           promise.post<Echo>(
             "echo",
             { kind: "promise" },
-            { headers: { "X-Axutils-Test": "promise" } },
+            { headers: { Link: "</logo>; rel=icon", "X-Axutils-Test": "promise" } },
           ),
           fromObservable(rx.get<Echo>("echo", { params: { kind: "rxjs", text: "中文" } })),
           fromObservable(
-            rx.post<Echo>("echo", { kind: "rxjs" }, { headers: { "X-Axutils-Test": "rxjs" } }),
+            rx.post<Echo>(
+              "echo",
+              { kind: "rxjs" },
+              { headers: { Link: "</logo>; rel=icon", "X-Axutils-Test": "rxjs" } },
+            ),
           ),
         ]);
       });
@@ -279,7 +287,13 @@ for (const format of ["esm", "umd"] as const) {
         },
         {
           code: 200,
-          data: { body: '{"kind":"promise"}', header: "promise", method: "POST", query: {} },
+          data: {
+            body: '{"kind":"promise"}',
+            header: "promise",
+            link: "</logo>; rel=icon",
+            method: "POST",
+            query: {},
+          },
           error: null,
           success: true,
         },
@@ -291,7 +305,13 @@ for (const format of ["esm", "umd"] as const) {
         },
         {
           code: 200,
-          data: { body: '{"kind":"rxjs"}', header: "rxjs", method: "POST", query: {} },
+          data: {
+            body: '{"kind":"rxjs"}',
+            header: "rxjs",
+            link: "</logo>; rel=icon",
+            method: "POST",
+            query: {},
+          },
           error: null,
           success: true,
         },

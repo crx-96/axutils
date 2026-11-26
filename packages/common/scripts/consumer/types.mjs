@@ -86,6 +86,16 @@ export function consumerTypes(manifest, subpaths, format) {
         "// @ts-expect-error 显式值泛型仍约束写入值",
         'store.set<number>("token", "abc");',
       );
+      if (key === "." || key === "./object/storage") {
+        statements.push(
+          'const physical = store.getPhysicalKeys("user");',
+          "const pair: readonly [string, string] = physical; void pair;",
+          "// @ts-expect-error 物理键查询同样受业务 key 类型约束",
+          "store.getPhysicalKeys(dynamicKey);",
+          "// @ts-expect-error 物理键元组只读",
+          'physical[0] = "changed";',
+        );
+      }
       for (const method of ["set", "get", "remove", "setSafe", "getSafe", "removeSafe"]) {
         statements.push(
           `// @ts-expect-error ${method} 不接受未声明的 key`,

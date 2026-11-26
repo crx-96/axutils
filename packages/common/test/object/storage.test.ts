@@ -1,5 +1,5 @@
 import { runInNewContext } from "node:vm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as CommonEntry from "../../src/index";
 import { StorageUtils as StorageUtilsFromEntry } from "../../src/index";
 import { StorageUtils } from "../../src/object/storage";
@@ -140,6 +140,54 @@ describe("object/storage", () => {
     expect(store.length).toBe(1);
     expect(storage.get("user")).toEqual({ id: 1 });
     expect(handledKeys).toEqual(["storage-key-user"]);
+  });
+
+  it("getPhysicalKeys 返回实际写入键和旧记录键，与读写共用有状态处理函数的结果", () => {
+    const backend = new TestStorage();
+    vi.stubGlobal("localStorage", backend);
+    let sequence = 0;
+    const handler = vi.fn((key: string) => `${++sequence}/${key}`);
+    const storage = new StorageUtils({ key: handler, prefix: "app:" });
+    const [current, legacy] = storage.getPhysicalKeys("user");
+
+    expect(legacy).toBe("1/app:user");
+    backend.setItem(
+      legacy,
+      JSON.stringify({
+        data: "旧值",
+        expiresAt: 0,
+        marker: "@axutils/common/storage",
+        prefix: "app:",
+      }),
+    );
+    expect(storage.get("user")).toBe("旧值");
+    storage.set("user", "新值");
+    expect(backend.getItem(legacy)).toBeNull();
+    expect(backend.key(0)).toBe(current);
+    expect(storage.get("user")).toBe("新值");
+    storage.remove("user");
+    expect(backend.getItem(current)).toBeNull();
+    expect(storage.getPhysicalKeys("user")).toEqual([current, legacy]);
+    expect(handler.mock.calls).toEqual([["app:user"]]);
+  });
+
+  it("getPhysicalKeys 接受实例的业务键，返回只读元组且不访问底层存储", () => {
+    const backend = new TestStorage();
+    vi.stubGlobal("localStorage", backend);
+    const storage = new StorageUtils<"user" | "token">();
+    const operations = [
+      vi.spyOn(backend, "getItem"),
+      vi.spyOn(backend, "setItem"),
+      vi.spyOn(backend, "removeItem"),
+      vi.spyOn(backend, "key"),
+      vi.spyOn(backend, "length", "get"),
+    ];
+
+    expectTypeOf(storage.getPhysicalKeys).toEqualTypeOf<
+      (key: "user" | "token") => readonly [string, string]
+    >();
+    expect(storage.getPhysicalKeys("user")[1]).toBe("user");
+    for (const operation of operations) expect(operation).not.toHaveBeenCalled();
   });
 
   it("clear 只删除当前 prefix 的条目，即使 key 已被处理函数转换", () => {

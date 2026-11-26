@@ -149,6 +149,7 @@ client
 ### 请求头优先级与执行时机
 
 - `transformHeaders` 收到当前请求 headers 的副本；未传 headers 时为空对象，`common` 和当前方法分组会展开。可以返回普通 headers 对象或 `AxiosHeaders`。
+- 在实例默认头、请求级头或回调返回值中，顶层 `link`、`unlink`、`purge` 的普通映射或 `AxiosHeaders` 值按方法分组处理，名称不区分大小写。显式传入 `headers: { Link: "</logo>; rel=icon" }` 会发送该 `Link` 头，传入 `false` 可屏蔽默认值。
 - 回调在每次订阅时、配置解析完成后执行，网络重试沿用本次处理结果。构造客户端和仅创建 Observable 都不会执行回调。
 - 合并顺序为 Axios 实例默认 headers → 回调结果 → 请求级 headers。同名 header 不区分大小写，请求级 `false`、`null` 等屏蔽值也保留。
 - 回调输入不包含 Axios 实例默认 headers；库在本次解析时补齐实例默认头，再计算去重身份。要屏蔽默认字段，可在返回值中将它设为 `false` 或 `null`。

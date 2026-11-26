@@ -447,7 +447,7 @@ storage.set("User", { id: 1 });
 console.log(storage.get<{ id: number }>("User"));
 ```
 
-创建时可用字符串联合类型限定业务 key，`set`、`get`、`remove` 及对应的 `Safe` 方法都会提供补全并检查 key。省略 `Key` 时仍接受任意字符串；方法上的值类型泛型 `T` 保持独立。泛型只提供静态约束，不会校验运行时数据，也不改变 `prefix` 与 `key` 回调的处理方式。
+创建时可用字符串联合类型限定业务 key。`getPhysicalKeys` 与读写、删除方法（含对应的 `Safe` 方法）都会提供补全并检查传入的 key。省略 `Key` 时仍接受任意字符串；方法上的值类型泛型 `T` 保持独立。泛型只提供静态约束，不会校验运行时数据，也不改变 `prefix` 与 `key` 回调的处理方式。
 
 ```ts
 import { StorageUtils } from "@axutils/common/object/storage";
@@ -462,6 +462,25 @@ storage.remove("user");
 storage.removeSafe("token");
 console.log(user?.id, token);
 // storage.get("missing"); // 类型错误：key 必须是 "token" 或 "user"
+```
+
+### `storage.getPhysicalKeys(key)`
+
+返回只读元组 `readonly [current: string, legacy: string]`。`current` 是 `set` 实际写入的 v2 键，`legacy` 是 `get` 回退读取、`set` 和 `remove` 按归属清理旧记录时使用的键。查询只计算键名，不读取、写入或删除存储记录。配置了 `key` 回调时，同一实例对每个业务键复用首次成功转换的结果。回调抛出的异常会同步传给调用方。
+
+实例使用 `localStorage` 后端时，可用 `localStorage.getItem(current)` 检查原始持久化记录。监听共享同一 `localStorage` 的其他页面变更时，可用两个物理键匹配 `storage` 事件，再用业务键读取有效值。各页面须使用相同的 `prefix`；如自定义了 `key` 回调，同一业务键在各页面也须得到相同的转换结果。原生 `localStorage.clear()` 触发的事件中 `key` 为 `null`，需要一并处理。参见 [MDN 的 storage 事件说明](https://developer.mozilla.org/en-US/docs/Web/API/Window/storage_event)。
+
+```ts
+import { StorageUtils } from "@axutils/common/object/storage";
+
+const storage = new StorageUtils({ prefix: "app:" });
+const [current, legacy] = storage.getPhysicalKeys("user");
+window.addEventListener("storage", (event) => {
+  if (event.storageArea !== localStorage) return;
+  if (event.key === current || event.key === legacy || event.key === null) {
+    console.log(storage.get("user"));
+  }
+});
 ```
 
 ### `storage.set<T>(key, value, expired?)`

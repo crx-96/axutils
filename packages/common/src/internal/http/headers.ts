@@ -16,6 +16,9 @@ const headerGroupNames = [
   ...Array.from(HTTP_METHODS, (name) => name.toLowerCase()),
 ];
 
+/** 这些 Axios 扩展方法只在顶层值为分组对象时保留名称；Link 等同名头仍可发送。 */
+const extendedMethodGroups = new Set(["link", "purge", "unlink"]);
+
 /** 识别当前实例及跨包/跨 Realm 构造的 AxiosHeaders，避免混合加载时误抛 TypeError。 */
 function isAxiosHeadersLike(value: unknown): value is AxiosHeaders {
   if (value instanceof AxiosHeaders) return true;
@@ -67,6 +70,29 @@ function setHeaders(target: AxiosHeaders, headers: RawAxiosRequestHeaders | unde
   for (const [name, value] of Object.entries(headers)) target.set(name, value, true);
 }
 
+/** 扩展方法的同名头只有普通映射或 AxiosHeaders 是分组，URL 等字面值仍交给 Axios 序列化。 */
+function isExtendedHeaderGroup(value: unknown): boolean {
+  if (!isHeaderGroupObject(value)) return false;
+  const prototype: object | null = Object.getPrototypeOf(value);
+  if (prototype === null || Object.getPrototypeOf(prototype) === null) {
+    return (
+      Object.getOwnPropertyDescriptor(value, Symbol.toStringTag) === undefined &&
+      Object.getOwnPropertyDescriptor(value, Symbol.iterator) === undefined
+    );
+  }
+  return isAxiosHeadersLike(value);
+}
+
+/** 在 Axios 将值转成字符串前，从顶层配置中排除方法分组。 */
+function setFlatHeaders(target: AxiosHeaders, headers: RawAxiosRequestHeaders | undefined): void {
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    const normalized = name.trim().toLowerCase();
+    if (headerGroupNames.includes(normalized)) continue;
+    if (extendedMethodGroups.has(normalized) && isExtendedHeaderGroup(value)) continue;
+    target.set(name, value, true);
+  }
+}
+
 /** 快照自有扁平头，并保留按属性访问可见的 common 和当前方法组（含大小写变体），供展开和屏蔽判断复用。 */
 function snapshotHeaderGroups(
   headers: AxiosRequestConfig["headers"] | AxiosInstance["defaults"]["headers"],
@@ -109,9 +135,7 @@ export function transformRequestHeaders(
   setHeaders(requested, headers?.[method.toLowerCase()]);
   // 分组内的保留名同样不发送。顶层只写入真正的扁平字段，避免 Axios 将组对象强制转为字符串。
   requested.delete(headerGroupNames);
-  for (const [name, value] of Object.entries(headers ?? {})) {
-    if (!headerGroupNames.includes(name.trim().toLowerCase())) requested.set(name, value, true);
-  }
+  setFlatHeaders(requested, headers);
   const transformed = transform(copyHeaders(requested));
   assertObject(transformed, "transformHeaders 必须同步返回 headers 对象");
   const prototype: unknown = Object.getPrototypeOf(transformed);
@@ -119,7 +143,7 @@ export function transformRequestHeaders(
     throw new TypeError("transformHeaders 必须同步返回 headers 对象");
   }
   const result = new AxiosHeaders();
-  setHeaders(result, transformed);
+  setFlatHeaders(result, transformed);
   // rewrite=true 确保请求级值也能覆盖回调中的 false；原始请求头从未交给回调修改。
   result.set(requested, true);
   return copyHeaders(result.normalize(formatNames));
@@ -182,9 +206,12 @@ export function createAttemptHeaders(
   defaults: AxiosInstance["defaults"]["headers"] | undefined,
   resolved: AxiosRequestConfig["headers"],
 ): RawAxiosRequestHeaders {
-  // common/方法分组及顶层字段都以 undefined 遮蔽，避免默认 false 锁住请求级覆盖。
+  // 只遮蔽快照以外的默认头，避免不同大小写的 undefined 在 Axios 合并时覆盖快照。
+  const resolvedNames = new Set(Object.keys(resolved ?? {}).map((name) => name.toLowerCase()));
   const suppressed: RawAxiosRequestHeaders = Object.fromEntries(
-    Object.keys(defaults ?? {}).map((name) => [name, undefined]),
+    Object.keys(defaults ?? {})
+      .filter((name) => !resolvedNames.has(name.toLowerCase()))
+      .map((name) => [name, undefined]),
   );
   return { ...suppressed, ...resolved };
 }

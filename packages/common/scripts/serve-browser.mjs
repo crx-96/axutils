@@ -36,8 +36,11 @@ export async function startBrowserServer(bundlePath, umdPath) {
           JSON.stringify({
             body: Buffer.concat(chunks).toString("utf8"),
             header: request.headers["x-axutils-test"],
+            link: request.headers.link,
             method: request.method,
+            purge: request.headers.purge,
             query: Object.fromEntries(url.searchParams),
+            unlink: request.headers.unlink,
           }),
         );
       });

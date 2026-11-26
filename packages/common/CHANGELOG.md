@@ -1,5 +1,12 @@
 # @axutils/common
 
+## 3.1.0
+
+### Minor Changes
+
+- 新增 `StorageUtils.getPhysicalKeys(key)`，可查询当前写入键和旧格式兼容键，用于检查原始存储记录或匹配浏览器的 `storage` 事件。
+- 修复 Promise 和 RxJS HTTP 客户端对 Axios `link`、`purge`、`unlink` 方法分组的处理，保留显式设置的同名请求头，避免重试时大小写不同的默认头覆盖首次请求的值。
+
 ## 3.0.0
 
 ### Major Changes

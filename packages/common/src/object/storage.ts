@@ -74,7 +74,7 @@ export class StorageUtils<Key extends string = string> {
       prefix: this.prefix,
     };
 
-    const [current, legacy] = this.getKeys(key);
+    const [current, legacy] = this.getPhysicalKeys(key);
     const serialized = serializeStorageRecord(record);
     // v2 私有物理键上的损坏内容允许直接覆盖恢复；若已被其他合法记录占用则拒绝覆写。
     const previous = this.storage.getItem(current);
@@ -96,8 +96,11 @@ export class StorageUtils<Key extends string = string> {
     }
   }
 
-  /** 将命名空间与转换后的键分别编码，保留同一前缀内的自定义键别名。 */
-  private getKeys(key: Key): [string, string] {
+  /**
+   * 返回业务键对应的 v2 写入键和旧格式兼容键，不读写底层存储。
+   * 同一实例按业务键缓存自定义 key 处理函数的结果，查询与读写共用该映射。
+   */
+  public getPhysicalKeys(key: Key): readonly [current: string, legacy: string] {
     const legacy = this.getStorageKey(key);
     return [`${CURRENT_STORAGE_KEY_PREFIX}${JSON.stringify([this.prefix, legacy])}`, legacy];
   }
@@ -144,7 +147,7 @@ export class StorageUtils<Key extends string = string> {
 
   /** 优先读取新键，再兼容所属旧记录；过期时同时清理两种格式。 */
   get<T = unknown>(key: Key): T | null {
-    const [current, legacy] = this.getKeys(key);
+    const [current, legacy] = this.getPhysicalKeys(key);
     const record =
       this.ownedRecord(this.storage.getItem(current), CURRENT_STORAGE_MARKER) ??
       this.ownedRecord(this.storage.getItem(legacy), STORAGE_RECORD_MARKER);
@@ -158,7 +161,7 @@ export class StorageUtils<Key extends string = string> {
 
   /** 删除当前业务键所属的新旧记录；先处理旧键以免旧值重新可见。 */
   remove(key: Key): void {
-    const [current, legacy] = this.getKeys(key);
+    const [current, legacy] = this.getPhysicalKeys(key);
     this.removeOwned(legacy, STORAGE_RECORD_MARKER);
     this.removeCurrent(current);
   }
